@@ -94,11 +94,11 @@ class KineticCameraRigDirector:
 
     def design_camera_keyframes(self):
         sync_triggers = self._load_upstream_sync_data()
-        print(f"[{self.agent_name}] Rig Director active. Creating frame-perfect camera movement keyframes...")
+        print(f"[{self.agent_name}] Rig Director active. Creating frame-perfect camera movement keyframes with dynamic DoF tracking...")
 
         system_prompt = (
-            "You are an elite cinematic action director and Blender 3D camera layout expert.\n"
-            "Your job is to generate precise procedural camera keyframes compatible with Blender's animation curves.\n"
+            "You are an elite cinematic action director, depth-of-field specialist, and Blender 3D camera layout expert.\n"
+            "Your job is to generate precise procedural camera keyframes with integrated dynamic focal tracking (Depth of Field) parameters compatible with Blender's animation curves.\n"
             "For each sync trigger, output exactly 1 camera movement block inside a list named 'camera_keyframe_data' with these properties:\n"
             "- 'timestamp_sec': float matching the sync trigger time.\n"
             "- 'shot_type': string representing dynamic framing (choose from: 'dolly-zoom', 'orbital-spin', 'whip-pan-transition', 'extreme-close-up', 'dramatic-tilt').\n"
@@ -107,6 +107,10 @@ class KineticCameraRigDirector:
             "- 'camera_rotation_euler': array of 3 floats [x, y, z] representing angles in degrees.\n"
             "- 'screen_shake_amplitude': float (scale from 0.0 to 1.5; high values like 1.2-1.5 should be assigned only to 'beat_drop_impact' or 'extreme' intensity).\n"
             "- 'interpolation_type': string for motion curve smoothness (choose from: 'BEZIER', 'LINEAR', 'SINE').\n"
+            "- 'dof_focal_tracking_enabled': boolean (true to lock camera focus on a moving target, false for manual distance focus).\n"
+            "- 'dof_focal_target_name': string (choose from: 'char_head_focus_empty' to prioritize face detail/eyes, 'combat_impact_point_empty' for action collisions, 'none' if tracking is disabled).\n"
+            "- 'dof_aperture_fstop': float (simulates cinematic background bokeh blur; range 1.2 for extremely blurry background/shallow depth, to 11.0 for deep landscape sharpness).\n"
+            "- 'dof_manual_focus_distance_meters': float (manual focus distance in meters when tracking is disabled; range 1.0 to 15.0).\n"
             "Format your output STRICTLY as a raw JSON object containing only the list key 'camera_keyframe_data'. "
             "Do not output markdown code blocks, backticks, or any conversational text. Return valid JSON only."
         )
@@ -169,7 +173,7 @@ class KineticCameraRigDirector:
             return self._execute_procedural_fallback(sync_triggers)
 
     def _execute_procedural_fallback(self, sync_triggers):
-        # High-action procedural mathematical model to calculate keyframes automatically when offline
+        # High-action procedural mathematical model to calculate keyframes and depth parameters automatically
         keyframes = []
         for trigger in sync_triggers:
             ts = float(trigger.get("timestamp_sec", 0.0))
@@ -183,6 +187,11 @@ class KineticCameraRigDirector:
                 rot = [15.0, 0.0, 0.0]
                 shake = 1.4
                 interp = "SINE"
+                # DoF Focal Settings Integration
+                dof_enabled = True
+                dof_target = "char_head_focus_empty"
+                fstop = 1.2  # Dynamic high-blur cinematic bokeh
+                manual_dist = 2.5
             elif "high" in intensity or "cut" in event:
                 shot = "orbital-spin"
                 focal = 35.0
@@ -190,6 +199,11 @@ class KineticCameraRigDirector:
                 rot = [10.0, 0.0, 45.0]
                 shake = 0.4
                 interp = "BEZIER"
+                # DoF Focal Settings Integration
+                dof_enabled = True
+                dof_target = "char_head_focus_empty"
+                fstop = 1.8  # Soft cinematic portrait background blur
+                manual_dist = 3.2
             else:
                 shot = "dramatic-tilt"
                 focal = 50.0
@@ -197,6 +211,11 @@ class KineticCameraRigDirector:
                 rot = [-5.0, 0.0, 0.0]
                 shake = 0.0
                 interp = "LINEAR"
+                # DoF Focal Settings Integration
+                dof_enabled = False
+                dof_target = "none"
+                fstop = 5.6  # Standard focal depth for wide narrative angles
+                manual_dist = 5.0
 
             keyframes.append({
                 "timestamp_sec": ts,
@@ -205,11 +224,15 @@ class KineticCameraRigDirector:
                 "camera_location_offset": loc,
                 "camera_rotation_euler": rot,
                 "screen_shake_amplitude": shake,
-                "interpolation_type": interp
+                "interpolation_type": interp,
+                "dof_focal_tracking_enabled": dof_enabled,
+                "dof_focal_target_name": dof_target,
+                "dof_aperture_fstop": fstop,
+                "dof_manual_focus_distance_meters": manual_dist
             })
 
         fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Camera Fallback)",
+            "agent_executed": f"{self.agent_name} (Procedural Camera Fallback with DoF)",
             "camera_keyframe_data": keyframes
         }
         self._save_to_workspace(fallback_output)
@@ -224,4 +247,5 @@ if __name__ == "__main__":
     if output["camera_keyframe_data"]:
         sample = output["camera_keyframe_data"][0]
         print(f"First Cue at {sample['timestamp_sec']}s | Shot: '{sample['shot_type']}' | Shake-Force: {sample['screen_shake_amplitude']} | Focal: {sample['focal_length_mm']}mm")
+        print(f"  DoF Active: {sample['dof_focal_tracking_enabled']} | Focus Target: '{sample['dof_focal_target_name']}' | F-Stop: f/{sample['dof_aperture_fstop']}")
     print("----------------------------------------------------------")
