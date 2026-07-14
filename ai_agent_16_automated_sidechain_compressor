@@ -1,0 +1,216 @@
+import os
+import re
+import sys
+import json
+import urllib.request
+import urllib.error
+
+class AutomatedSidechainCompressor:
+    def __init__(self, workspace_dir="znet_workspace"):
+        self.agent_name = "Ai Agent 16: automated_sidechain_compressor"
+        self.workspace_dir = workspace_dir
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.openai_url = "https://api.openai.com/v1/chat/completions"
+        self.model_local = "llama3"
+        self.model_cloud = "gpt-4o-mini"
+        
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+
+        if not os.path.exists(self.workspace_dir):
+            os.makedirs(self.workspace_dir)
+
+    def _load_previous_stage(self):
+        # Loads sub-bass design from Stage 15
+        input_path = os.path.join(self.workspace_dir, "15_low_frequency_sub_design.json")
+        if os.path.exists(input_path):
+            try:
+                with open(input_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                print(f"[{self.agent_name}] Success: Stage 15 sub-bass profiles loaded from '{input_path}'")
+                return data
+            except Exception as e:
+                print(f"[{self.agent_name}] Warning: File read error ({str(e)}). Switching to manual fallback.")
+
+        print(f"[{self.agent_name}] Workspace Alert: Upstream sub-bass design is missing. Constructing dummy peaks.")
+        return {
+            "target_bpm": 130,
+            "sub_profiles": [
+                {
+                    "timestamp_sec": 0.0,
+                    "start_frequency_hz": 75,
+                    "end_frequency_hz": 28,
+                    "sweep_duration_seconds": 1.2,
+                    "waveform_type": "saturated-triangle",
+                    "target_gain_db": -1.0,
+                    "rumble_reverb_decay": 0.40
+                }
+            ]
+        }
+
+    def _clean_json_response(self, raw_text):
+        # Strips backticks and extracts raw JSON from LLM string output
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx + 1]
+            
+        return cleaned
+
+    def _save_to_workspace(self, data, filename="16_sidechain_compression_blueprint.json"):
+        # Saves compressor parameters to workspace JSON
+        file_path = os.path.join(self.workspace_dir, filename)
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            print(f"[{self.agent_name}] Success: Sidechain compression blueprint written to '{file_path}'")
+            return file_path
+        except Exception as e:
+            print(f"[{self.agent_name}] Critical Error: Unable to save state files: {str(e)}")
+            return None
+
+    def design_sidechain_compression(self):
+        # Processes timing events and builds high-speed gain ducking blueprints
+        input_data = self._load_previous_stage()
+        bpm = input_data.get("target_bpm", 130)
+        sub_profiles = input_data.get("sub_profiles", [])
+
+        print(f"[{self.agent_name}] Sidechain engine active. Designing compressor response timelines matching: {bpm} BPM")
+
+        system_prompt = (
+            "You are an expert audio mixing and mastering engineer specialized in electronic music and voiceover priority sidechain compression.\n"
+            "Your task is to analyze the sub-bass/bass-drop events and design sidechain compression triggers. "
+            "When the bass hits, the voiceover must duck out of the way dynamically.\n"
+            "For each sub-bass sweep event, generate exactly 1 compressor routing trigger inside a list named 'compression_triggers' with these parameters:\n"
+            "- 'timestamp_sec': float matching the trigger timestamp.\n"
+            "- 'threshold_db': float representing threshold level (scale from -45.0 to -25.0 dB based on sub impact intensity).\n"
+            "- 'ratio': string setting compression strength (choose from: '4:1', '8:1', '12:1', 'infinite:1' for hard limiting dynamic ducking).\n"
+            "- 'attack_time_ms': float representing compressor activation speed (keep it ultra-fast, between 1.0 and 10.0 ms for instant vocal ducking).\n"
+            "- 'release_time_ms': float representing recovery speed (duration the vocal takes to fade back in, choose between 80.0 and 350.0 ms matching sweep duration).\n"
+            "- 'ducking_depth_db': float representing estimated overall vocal level reduction (scale from -4.0 to -18.0 dB based on target_gain_db).\n"
+            "- 'routing_target': string specifying signal to duck (set only to: 'vocal_voiceover').\n"
+            "Format your output STRICTLY as a raw JSON object containing the list key 'compression_triggers'. "
+            "Do not write explanations, greetings, backticks, or markdowns. Return ONLY valid JSON."
+        )
+
+        user_prompt = (
+            f"Target Track Tempo: {bpm} BPM\n"
+            f"Active Sub-Bass Triggers:\n{json.dumps(sub_profiles, indent=2)}"
+        )
+
+        if self.openai_api_key:
+            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
+            url = self.openai_url
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.openai_api_key}"
+            }
+            payload = {
+                "model": self.model_cloud,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+        else:
+            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
+            url = self.ollama_url
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "model": self.model_local,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "stream": False,
+                "format": "json"
+            }
+
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=50) as response:
+                result = response.read().decode("utf-8")
+                response_json = json.loads(result)
+                
+                if self.openai_api_key:
+                    raw_ai_message = response_json["choices"][0]["message"]["content"]
+                else:
+                    raw_ai_message = response_json["message"]["content"]
+                
+                cleaned_message = self._clean_json_response(raw_ai_message)
+                structured_output = json.loads(cleaned_message)
+                
+                final_output = {
+                    "target_bpm": bpm,
+                    "agent_executed": self.agent_name,
+                    "compression_triggers": structured_output.get("compression_triggers", [])
+                }
+                
+                self._save_to_workspace(final_output)
+                return final_output
+
+        except Exception as e:
+            print(f"[{self.agent_name}] Connectivity/Parsing Exception: {str(e)}. Triggering procedural compressor fallback.")
+            return self._execute_procedural_fallback(bpm, sub_profiles)
+
+    def _execute_procedural_fallback(self, bpm, sub_profiles):
+        # Calculates compressor settings procedurally using musical release rules matching BPM
+        triggers = []
+        for profile in sub_profiles:
+            ts = float(profile.get("timestamp_sec", 0.0))
+            gain = float(profile.get("target_gain_db", -2.0))
+            sweep_duration = float(profile.get("sweep_duration_seconds", 1.2))
+
+            # Hard ducking on heavy peaks, soft on low rumbles
+            if gain > -2.0:
+                threshold = -40.0
+                ratio = "12:1"
+                attack = 1.5
+                ducking = -12.0
+            else:
+                threshold = -30.0
+                ratio = "6:1"
+                attack = 4.0
+                ducking = -6.0
+
+            # Convert sweep duration to millisecond release with offset
+            release = round((sweep_duration * 1000.0) * 0.75, 1)
+            # Safe boundary checks
+            release = max(80.0, min(release, 350.0))
+
+            triggers.append({
+                "timestamp_sec": ts,
+                "threshold_db": threshold,
+                "ratio": ratio,
+                "attack_time_ms": attack,
+                "release_time_ms": release,
+                "ducking_depth_db": ducking,
+                "routing_target": "vocal_voiceover"
+            })
+
+        fallback_output = {
+            "target_bpm": bpm,
+            "agent_executed": f"{self.agent_name} (Procedural Compressor Fallback)",
+            "compression_triggers": triggers
+        }
+        self._save_to_workspace(fallback_output)
+        return fallback_output
+
+if __name__ == "__main__":
+    compressor = AutomatedSidechainCompressor()
+    output = compressor.design_sidechain_compression()
+    
+    print("\n--- Z-NET AUDIO ENGINE: AGENT 16 COMPRESSION COMPLETED ---")
+    print(f"Track tempo sync: {output['target_bpm']} BPM")
+    print(f"Generated sidechain ducking triggers: {len(output['compression_triggers'])}")
+    if output["compression_triggers"]:
+        sample = output["compression_triggers"][0]
+        print(f"Sample Ducking Point: {sample['timestamp_sec']}s | Vocal priority routing level: {sample['ducking_depth_db']}dB (Ratio: {sample['ratio']})")
+    print("-----------------------------------------------------------")
