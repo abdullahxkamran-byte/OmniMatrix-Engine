@@ -1,0 +1,254 @@
+import os
+import re
+import sys
+import json
+import urllib.request
+import urllib.error
+
+class AutonomousSfxAlchemistSynthesizer:
+    def __init__(self, workspace_dir="znet_workspace"):
+        self.agent_name = "Ai Agent 17: autonomous_sfx_alchemist_synthesizer"
+        self.workspace_dir = workspace_dir
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.openai_url = "https://api.openai.com/v1/chat/completions"
+        self.model_local = "llama3"
+        self.model_cloud = "gpt-4o-mini"
+        
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+
+        if not os.path.exists(self.workspace_dir):
+            os.makedirs(self.workspace_dir)
+
+    def _load_upstream_data(self):
+        # Programmatically loads storyboard triggers to find dynamic action spots
+        storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
+        beat_path = os.path.join(self.workspace_dir, "14_phonk_beat_drop_map.json")
+        
+        action_cues = []
+        target_bpm = 130
+        
+        # 1. Try loading storyboard for action tags
+        if os.path.exists(storyboard_path):
+            try:
+                with open(storyboard_path, "r", encoding="utf-8") as f:
+                    sb_data = json.load(f)
+                # Look for panels with intense actions
+                for i, panel in enumerate(sb_data.get("storyboard_panels", [])):
+                    desc = panel.get("visual_prompt", "").lower()
+                    ts = panel.get("timestamp_sec", float(i * 3.0)) # Fallback spacing
+                    
+                    # Detect dynamic keywords
+                    if any(x in desc for x in ["slash", "cut", "sword", "fight", "hit", "punch", "kick"]):
+                        action_cues.append({"timestamp_sec": ts, "event": "slash_impact", "intensity": 0.9})
+                    elif any(x in desc for x in ["teleport", "dash", "flash", "speed", "zoom"]):
+                        action_cues.append({"timestamp_sec": ts, "event": "speed_swoosh", "intensity": 0.8})
+                    elif any(x in desc for x in ["explode", "shatter", "break", "impact", "blast"]):
+                        action_cues.append({"timestamp_sec": ts, "event": "heavy_explosion", "intensity": 1.0})
+                    else:
+                        action_cues.append({"timestamp_sec": ts, "event": "subtle_transition", "intensity": 0.5})
+            except Exception as e:
+                print(f"[{self.agent_name}] Storyboard parse warning: {str(e)}")
+
+        # 2. Try loading beat map to sync temporal tempo
+        if os.path.exists(beat_path):
+            try:
+                with open(beat_path, "r", encoding="utf-8") as f:
+                    b_data = json.load(f)
+                target_bpm = b_data.get("target_bpm", 130)
+            except Exception:
+                pass
+
+        # Fallback if no actions detected
+        if not action_cues:
+            print(f"[{self.agent_name}] Workspace Alert: No upstream storyboard found. Creating default action SFX cues.")
+            action_cues = [
+                {"timestamp_sec": 1.5, "event": "speed_swoosh", "intensity": 0.85},
+                {"timestamp_sec": 4.2, "event": "slash_impact", "intensity": 0.95},
+                {"timestamp_sec": 8.0, "event": "heavy_explosion", "intensity": 1.0}
+            ]
+
+        return {"target_bpm": target_bpm, "action_cues": action_cues}
+
+    def _clean_json_response(self, raw_text):
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx + 1]
+            
+        return cleaned
+
+    def _save_to_workspace(self, data, filename="17_sfx_alchemist_synthesizer_blueprint.json"):
+        file_path = os.path.join(self.workspace_dir, filename)
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            print(f"[{self.agent_name}] Success: SFX Alchemist blueprints written to '{file_path}'")
+            return file_path
+        except Exception as e:
+            print(f"[{self.agent_name}] Critical Error: Unable to save state files: {str(e)}")
+            return None
+
+    def design_synthesized_sfx(self):
+        input_data = self._load_upstream_data()
+        bpm = input_data.get("target_bpm", 130)
+        cues = input_data.get("action_cues", [])
+
+        print(f"[{self.agent_name}] Alchemist Engine active. Synthesizing custom anime sound designs...")
+
+        system_prompt = (
+            "You are an expert anime sound designer and dynamic synthesizer programmer. "
+            "Your job is to analyze video action cues (explosions, slashes, sweeps) and output precise synthesizer/DSP instructions to programmatically generate these sounds.\n"
+            "For each action cue, output exactly 1 sound design block inside a list named 'synthesized_sfx_parameters' with these exact parameters:\n"
+            "- 'timestamp_sec': float matching the action cue timestamp.\n"
+            "- 'sfx_class': string designating sound style (choose from: 'riser-whoosh', 'impact-blast', 'glitch-static', 'metallic-laser').\n"
+            "- 'oscillator_wave': string (choose from: 'noise-pink', 'sine-mod', 'sawtooth-aggressive', 'square-pulse').\n"
+            "- 'filter_envelope': object containing 'cutoff_start_hz' (integer, 200 to 12000), 'cutoff_end_hz' (integer, 20 to 8000), and 'resonance' (float, 0.1 to 0.9).\n"
+            "- 'duration_seconds': float length of the sound (choose between 0.3 and 3.0 seconds based on intensity).\n"
+            "- 'panning_trajectory': string specifying spatial motion (choose from: 'left-to-right', 'right-to-left', 'center-wide', 'ping-pong').\n"
+            "- 'reverb_room_size': float (scale from 0.0 to 1.0 for space wetness).\n"
+            "- 'vibe_narrative_note': a short stylistic note of what this synthesized sound should mimic (e.g., 'Saber slash slicing air', 'Instant teleport flash sound').\n"
+            "Format your output STRICTLY as a raw JSON object containing the list key 'synthesized_sfx_parameters'. "
+            "No conversational talking, no markdown backticks, no code block packaging. Return only valid JSON."
+        )
+
+        user_prompt = (
+            f"Target Video Pace: {bpm} BPM\n"
+            f"Active Storyboard Action Cues:\n{json.dumps(cues, indent=2)}"
+        )
+
+        if self.openai_api_key:
+            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
+            url = self.openai_url
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.openai_api_key}"
+            }
+            payload = {
+                "model": self.model_cloud,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+        else:
+            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
+            url = self.ollama_url
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "model": self.model_local,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "stream": False,
+                "format": "json"
+            }
+
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=50) as response:
+                result = response.read().decode("utf-8")
+                response_json = json.loads(result)
+                
+                if self.openai_api_key:
+                    raw_ai_message = response_json["choices"][0]["message"]["content"]
+                else:
+                    raw_ai_message = response_json["message"]["content"]
+                
+                cleaned_message = self._clean_json_response(raw_ai_message)
+                structured_output = json.loads(cleaned_message)
+                
+                final_output = {
+                    "target_bpm": bpm,
+                    "agent_executed": self.agent_name,
+                    "synthesized_sfx_parameters": structured_output.get("synthesized_sfx_parameters", [])
+                }
+                
+                self._save_to_workspace(final_output)
+                return final_output
+
+        except Exception as e:
+            print(f"[{self.agent_name}] Connectivity/Parsing Exception: {str(e)}. Triggering procedural synthesizer fallback.")
+            return self._execute_procedural_fallback(bpm, cues)
+
+    def _execute_procedural_fallback(self, bpm, cues):
+        # Generates procedural synthesizer blueprints using strict math rules when LLM is offline
+        sfx_list = []
+        for cue in cues:
+            ts = float(cue.get("timestamp_sec", 1.0))
+            event_type = cue.get("event", "subtle_transition")
+            intensity = float(cue.get("intensity", 0.7))
+
+            if "explosion" in event_type or intensity >= 0.95:
+                sfx_class = "impact-blast"
+                osc = "sawtooth-aggressive"
+                cutoff_start = 8000
+                cutoff_end = 60
+                res = 0.4
+                dur = 2.5
+                pan = "center-wide"
+                room = 0.85
+                note = "Heavy procedural bass drop blast explosion impact."
+            elif "slash" in event_type or "speed" in event_type:
+                sfx_class = "riser-whoosh"
+                osc = "noise-pink"
+                cutoff_start = 200
+                cutoff_end = 10000
+                res = 0.7
+                dur = 0.8
+                pan = "left-to-right"
+                room = 0.35
+                note = "Cinematic white-noise sword swoosh transition."
+            else:
+                sfx_class = "glitch-static"
+                osc = "square-pulse"
+                cutoff_start = 4000
+                cutoff_end = 3000
+                res = 0.5
+                dur = 0.4
+                pan = "ping-pong"
+                room = 0.15
+                note = "Lo-fi synth pop transition glitch."
+
+            sfx_list.append({
+                "timestamp_sec": ts,
+                "sfx_class": sfx_class,
+                "oscillator_wave": osc,
+                "filter_envelope": {
+                    "cutoff_start_hz": cutoff_start,
+                    "cutoff_end_hz": cutoff_end,
+                    "resonance": res
+                },
+                "duration_seconds": dur,
+                "panning_trajectory": pan,
+                "reverb_room_size": room,
+                "vibe_narrative_note": note
+            })
+
+        fallback_output = {
+            "target_bpm": bpm,
+            "agent_executed": f"{self.agent_name} (Procedural Synthesis Fallback)",
+            "synthesized_sfx_parameters": sfx_list
+        }
+        self._save_to_workspace(fallback_output)
+        return fallback_output
+
+if __name__ == "__main__":
+    synthesizer = AutonomousSfxAlchemistSynthesizer()
+    output = synthesizer.design_synthesized_sfx()
+    
+    print("\n--- Z-NET AUDIO ENGINE: AGENT 17 SFX SYNTHESIS COMPLETED ---")
+    print(f"Syncing visuals at: {output['target_bpm']} BPM")
+    print(f"Total Synthesized SFX blueprints designed: {len(output['synthesized_sfx_parameters'])}")
+    if output["synthesized_sfx_parameters"]:
+        sample = output["synthesized_sfx_parameters"][0]
+        print(f"Sample Trigger: {sample['timestamp_sec']}s | Class: {sample['sfx_class']} ({sample['oscillator_wave']}) | Note: {sample['vibe_narrative_note']}")
+    print("-------------------------------------------------------------")
