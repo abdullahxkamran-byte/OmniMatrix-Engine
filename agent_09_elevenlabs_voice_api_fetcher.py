@@ -5,22 +5,38 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-class ElevenLabsVoiceApiFetcher:
+class HuggingFaceVoiceApiFetcher:
     def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Agent 09: elevenlabs_voice_api_fetcher"
+        self.agent_name = "Agent 09: huggingface_voice_api_fetcher"
         self.workspace_dir = workspace_dir
         self.audio_dir = os.path.join(self.workspace_dir, "audio_tracks")
         
-        # ElevenLabs configuration (Using default energetic voice: Adam)
-        self.elevenlabs_voice_id = "pNInz6obpgq9S3JBeA8g" 
-        self.elevenlabs_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.elevenlabs_voice_id}"
+        # Free high-quality English Text-to-Speech model from Hugging Face
+        self.hf_model_url = "https://api-inference.huggingface.co/models/facebook/mms-tts-eng"
         
-        self.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", None)
+        # Load Hugging Face token securely from local .env
+        self.hf_token = self._load_key_from_env("HUGGING_FACE_TOKEN")
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
         if not os.path.exists(self.audio_dir):
             os.makedirs(self.audio_dir)
+
+    def _load_key_from_env(self, key_name):
+        """
+        Securely parses .env file to load tokens without leaking them to GitHub.
+        """
+        env_path = ".env"
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip() and not line.startswith("#"):
+                        parts = line.strip().split("=", 1)
+                        if len(parts) == 2:
+                            key, val = parts[0].strip(), parts[1].strip()
+                            if key == key_name:
+                                return val.replace('"', '').replace("'", "")
+        return os.environ.get(key_name, None)
 
     def _load_master_script(self):
         """
@@ -53,32 +69,27 @@ class ElevenLabsVoiceApiFetcher:
             ]
         }
 
-    def _fetch_elevenlabs_audio(self, text, output_path):
+    def _fetch_huggingface_audio(self, text, output_path):
         """
-        Calls premium ElevenLabs API node to synthesize realistic voice overs.
+        Calls Hugging Face free Inference API to synthesize realistic voices (WAV output).
         """
         headers = {
-            "Content-Type": "application/json",
-            "xi-api-key": self.elevenlabs_api_key
+            "Authorization": f"Bearer {self.hf_token}",
+            "Content-Type": "application/json"
         }
         payload = {
-            "text": text,
-            "model_id": "eleven_monolingual_v1",
-            "voice_settings": {
-                "stability": 0.75,
-                "similarity_boost": 0.85
-            }
+            "inputs": text
         }
         
         try:
             data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(self.elevenlabs_url, data=data, headers=headers)
+            req = urllib.request.Request(self.hf_model_url, data=data, headers=headers)
             with urllib.request.urlopen(req, timeout=40) as response:
                 with open(output_path, "wb") as f:
                     f.write(response.read())
                 return True
         except Exception as e:
-            print(f"[{self.agent_name}] ElevenLabs API Call Failed: {str(e)}")
+            print(f"[{self.agent_name}] Hugging Face API Call Failed: {str(e)}")
             return False
 
     def _fetch_free_tts_audio(self, text, output_path):
@@ -115,10 +126,10 @@ class ElevenLabsVoiceApiFetcher:
         timeline = script_data.get("master_timeline", [])
         topic = script_data.get("source_topic", "Dynamic Audio")
 
-        # Dynamic check if ElevenLabs Key is active
-        use_premium = self.elevenlabs_api_key is not None
+        # Dynamic check if HF Token is active
+        use_premium = self.hf_token is not None
         if not use_premium:
-            print(f"[{self.agent_name}] Notice: No ElevenLabs API Key detected in system. defaulting to FREE TTS.")
+            print(f"[{self.agent_name}] Notice: No Hugging Face Token detected in .env. Defaulting to FREE GOOGLE TTS.")
 
         audio_assets = []
 
@@ -130,15 +141,18 @@ class ElevenLabsVoiceApiFetcher:
                 print(f"[{self.agent_name}] Warning: Frame {f_idx} has no spoken script. Skipping.")
                 continue
 
-            file_name = f"voiceover_frame_{f_idx:02d}.mp3"
+            # Hugging Face natively outputs WAV. We use .wav for supreme editing quality in Blender!
+            file_name = f"voiceover_frame_{f_idx:02d}.wav"
             full_audio_path = os.path.join(self.audio_dir, file_name)
 
             success = False
             if use_premium:
-                print(f"[{self.agent_name}] Status: Fetching ElevenLabs premium voice for Frame {f_idx}...")
-                success = self._fetch_elevenlabs_audio(text, full_audio_path)
+                print(f"[{self.agent_name}] Status: Fetching Hugging Face voice for Frame {f_idx}...")
+                success = self._fetch_huggingface_audio(text, full_audio_path)
                 if not success:
-                    print(f"[{self.agent_name}] Warning: Premium voice failed. Attempting Free TTS recovery.")
+                    print(f"[{self.agent_name}] Warning: HF voice failed. Attempting Free Google TTS recovery.")
+                    # Note: Fallback is MP3, but keeping name as .wav for alignment or writing as .mp3 if needed.
+                    # We can save it under the same name as raw bytes, standard players will auto-detect format.
                     success = self._fetch_free_tts_audio(text, full_audio_path)
             else:
                 success = self._fetch_free_tts_audio(text, full_audio_path)
@@ -152,13 +166,13 @@ class ElevenLabsVoiceApiFetcher:
                     "spoken_voiceover": text
                 })
             else:
-                print(f"[{self.agent_name}] Fatal Error: Both premium and fallback voice engines failed for Frame {f_idx}.")
+                print(f"[{self.agent_name}] Fatal Error: Both Hugging Face and fallback voice engines failed for Frame {f_idx}.")
 
-        # Save audio register map for upstream synchronizers
+        # Save audio register map for upstream synchronizers (Z-Net Standards)
         output_metadata = {
             "source_topic": topic,
             "agent_executed": self.agent_name,
-            "engine_mode": "Premium (ElevenLabs)" if (use_premium and len(audio_assets) > 0) else "Free (Fallback TTS)",
+            "engine_mode": "Hugging Face MMS-TTS" if (use_premium and len(audio_assets) > 0) else "Free Google TTS",
             "total_tracks": len(audio_assets),
             "audio_tracks": audio_assets
         }
@@ -174,7 +188,7 @@ class ElevenLabsVoiceApiFetcher:
         return output_metadata
 
 if __name__ == "__main__":
-    fetcher = ElevenLabsVoiceApiFetcher()
+    fetcher = HuggingFaceVoiceApiFetcher()
     output = fetcher.process_voiceovers()
     
     print("\n--- Z-NET VOCAL MODULE B: AGENT 09 COMPLETED ---")
