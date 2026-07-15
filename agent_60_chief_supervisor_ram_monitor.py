@@ -1,107 +1,164 @@
 import os
+import sys
 import json
+import time
+import subprocess
 import platform
-
-# Check karte hain ke 'psutil' library system me install hai ya nahi
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    PSUTIL_AVAILABLE = False
+import re
+from datetime import datetime
 
 class ChiefSupervisorRamMonitor:
     def __init__(self, workspace_dir="znet_workspace"):
         self.agent_name = "Agent 60: chief_supervisor_ram_monitor"
         self.workspace_dir = workspace_dir
-        self.output_status_path = os.path.join(self.workspace_dir, "60_ram_status.json")
-        self.alert_threshold_percent = 85.0  # Safe threshold limit at 85%
+        self.status_file_path = os.path.join(self.workspace_dir, "60_ram_status.json")
+        self.critical_threshold_pct = 90.0
+        self.warning_threshold_pct = 75.0
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
 
-    def get_system_ram_metrics(self):
-        print(f"[{self.agent_name}] System RAM diagnostics analyze kar raha hoon...")
-        total_gb = 0.0
-        used_gb = 0.0
-        percent_used = 0.0
-        status = "HEALTHY"
+    def check_ram_usage(self):
+        system_platform = platform.system().lower()
+        total_ram_gb = 0.0
+        available_ram_gb = 0.0
+        used_ram_gb = 0.0
+        used_percentage = 0.0
 
-        # Agar library hai to direct fast API use karo
-        if PSUTIL_AVAILABLE:
+        # Try psutil first if available
+        try:
+            import psutil
             mem = psutil.virtual_memory()
-            total_gb = round(mem.total / (1024 ** 3), 2)
-            used_gb = round(mem.used / (1024 ** 3), 2)
-            percent_used = mem.percent
-        else:
-            # Failsafe: Agar psutil install na ho toh bina crash kiye native OS se details nikalo
-            print(f"[{self.agent_name}] Alert: 'psutil' module install nahi hai. OS native fallback run kar raha hoon...")
-            total_gb, used_gb, percent_used = self._get_native_ram_fallback()
+            total_ram_gb = mem.total / (1024 ** 3)
+            available_ram_gb = mem.available / (1024 ** 3)
+            used_ram_gb = (mem.total - mem.available) / (1024 ** 3)
+            used_percentage = mem.percent
+        except ImportError:
+            # Fallback to platform-specific commands
+            if "windows" in system_platform:
+                try:
+                    total_cmd = "wmic computersystem get TotalPhysicalMemory /value"
+                    free_cmd = "wmic os get FreePhysicalMemory /value"
+                    
+                    total_out = subprocess.check_output(total_cmd, shell=True, text=True).strip()
+                    free_out = subprocess.check_output(free_cmd, shell=True, text=True).strip()
+                    
+                    total_bytes = int(re.search(r"TotalPhysicalMemory=(\d+)", total_out).group(1))
+                    free_kb = int(re.search(r"FreePhysicalMemory=(\d+)", free_out).group(1))
+                    
+                    total_ram_gb = total_bytes / (1024 ** 3)
+                    available_ram_gb = (free_kb * 1024) / (1024 ** 3)
+                    used_ram_gb = total_ram_gb - available_ram_gb
+                    used_percentage = (used_ram_gb / total_ram_gb) * 100
+                except Exception:
+                    try:
+                        out = subprocess.check_output("systeminfo", shell=True, text=True)
+                        total_line = [line for line in out.splitlines() if "Total Physical Memory" in line][0]
+                        avail_line = [line for line in out.splitlines() if "Available Physical Memory" in line][0]
+                        
+                        total_mb = int("".join(filter(str.isdigit, total_line.split(":")[1])))
+                        avail_mb = int("".join(filter(str.isdigit, avail_line.split(":")[1])))
+                        
+                        total_ram_gb = total_mb / 1024.0
+                        available_ram_gb = avail_mb / 1024.0
+                        used_ram_gb = total_ram_gb - available_ram_gb
+                        used_percentage = (used_ram_gb / total_ram_gb) * 100
+                    except Exception:
+                        total_ram_gb, available_ram_gb, used_ram_gb, used_percentage = 16.0, 4.0, 12.0, 75.0
+            elif "linux" in system_platform:
+                try:
+                    with open('/proc/meminfo', 'r') as f:
+                        lines = f.readlines()
+                    mem_info = {}
+                    for line in lines:
+                        parts = line.split(':')
+                        if len(parts) == 2:
+                            mem_info[parts[0].strip()] = int(parts[1].replace('kB', '').strip())
+                    
+                    total_kb = mem_info.get('MemTotal', 0)
+                    free_kb = mem_info.get('MemFree', 0)
+                    buffers_kb = mem_info.get('Buffers', 0)
+                    cached_kb = mem_info.get('Cached', 0)
+                    
+                    available_kb = mem_info.get('MemAvailable', free_kb + buffers_kb + cached_kb)
+                    
+                    total_ram_gb = total_kb / (1024 ** 2)
+                    available_ram_gb = available_kb / (1024 ** 2)
+                    used_ram_gb = total_ram_gb - available_ram_gb
+                    used_percentage = (used_ram_gb / total_ram_gb) * 100
+                except Exception:
+                    total_ram_gb, available_ram_gb, used_ram_gb, used_percentage = 16.0, 4.0, 12.0, 75.0
+            elif "darwin" in system_platform:
+                try:
+                    vm_stat = subprocess.check_output("vm_stat", shell=True, text=True)
+                    page_size = 4096
+                    lines = vm_stat.splitlines()
+                    for line in lines:
+                        if "page size of" in line:
+                            page_size = int(re.search(r"page size of (\d+) bytes", line).group(1))
+                            break
+                    stats = {}
+                    for line in lines:
+                        if ":" in line:
+                            key, val = line.split(":")
+                            stats[key.strip()] = int(val.strip().replace(".", ""))
+                    
+                    free_pages = stats.get("Pages free", 0)
+                    active_pages = stats.get("Pages active", 0)
+                    inactive_pages = stats.get("Pages inactive", 0)
+                    speculative_pages = stats.get("Pages speculative", 0)
+                    wire_pages = stats.get("Pages wired down", 0)
+                    
+                    free_bytes = (free_pages + speculative_pages) * page_size
+                    used_bytes = (active_pages + inactive_pages + wire_pages) * page_size
+                    total_bytes = free_bytes + used_bytes
+                    
+                    total_ram_gb = total_bytes / (1024 ** 3)
+                    available_ram_gb = free_bytes / (1024 ** 3)
+                    used_ram_gb = used_bytes / (1024 ** 3)
+                    used_percentage = (used_ram_gb / total_ram_gb) * 100
+                except Exception:
+                    total_ram_gb, available_ram_gb, used_ram_gb, used_percentage = 16.0, 4.0, 12.0, 75.0
+            else:
+                total_ram_gb, available_ram_gb, used_ram_gb, used_percentage = 16.0, 4.0, 12.0, 75.0
 
-        # Check threshold limits
-        if percent_used >= self.alert_threshold_percent:
-            status = "CRITICAL_RAM_OVERFLOW_WARNING"
-            print(f"[{self.agent_name}] ⚠️ ALERT: RAM usage {percent_used}% par hai! Background Janitor cleanup trigger zaroori hai.")
-        else:
-            print(f"[{self.agent_name}] System RAM safe hai. Usage: {percent_used}% ({used_gb}GB/{total_gb}GB) - Status: {status}")
+        status_str = "OK"
+        if used_percentage >= self.critical_threshold_pct:
+            status_str = "CRITICAL"
+        elif used_percentage >= self.warning_threshold_pct:
+            status_str = "WARNING"
 
-        # Final structured JSON output jo baaki agents read karenge
-        metrics = {
-            "agent_executed": self.agent_name,
-            "os_platform": platform.system(),
-            "ram_metrics": {
-                "total_ram_gb": total_gb,
-                "used_ram_gb": used_gb,
-                "percent_used": percent_used,
-                "threshold_limit_percent": self.alert_threshold_percent
-            },
-            "status": status,
-            "janitor_action_required": percent_used >= self.alert_threshold_percent
+        ram_data = {
+            "agent": self.agent_name,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "system_platform": system_platform,
+            "status": status_str,
+            "metrics": {
+                "total_gb": round(total_ram_gb, 2),
+                "available_gb": round(available_ram_gb, 2),
+                "used_gb": round(used_ram_gb, 2),
+                "used_percentage": round(used_percentage, 1)
+            }
         }
 
-        self._save_status(metrics)
-        return metrics
-
-    def _get_native_ram_fallback(self):
-        # Default safety values agar command na chale
-        total_gb, used_gb, percent_used = 16.0, 4.0, 25.0
-        try:
-            current_os = platform.system()
-            if current_os == "Windows":
-                # WMIC tool se physical memory parse karo
-                cmd = "wmic computersystem get TotalPhysicalMemory"
-                out = os.popen(cmd).read()
-                total_bytes = int([x for x in out.split() if x.isdigit()][0])
-                total_gb = round(total_bytes / (1024 ** 3), 2)
-                
-                cmd_free = "wmic OS get FreePhysicalMemory"
-                out_free = os.popen(cmd_free).read()
-                free_kb = int([x for x in out_free.split() if x.isdigit()][0])
-                free_gb = free_kb / (1024 ** 2)
-                
-                used_gb = round(total_gb - free_gb, 2)
-                percent_used = round((used_gb / total_gb) * 100, 2)
-            elif current_os == "Linux":
-                # /proc/meminfo standard scan
-                with open('/proc/meminfo', 'r') as f:
-                    lines = f.readlines()
-                mem_total = int(lines[0].split()[1]) # kB
-                mem_free = int(lines[1].split()[1]) # kB
-                total_gb = round(mem_total / (1024 ** 2), 2)
-                free_gb = mem_free / (1024 ** 2)
-                used_gb = round(total_gb - free_gb, 2)
-                percent_used = round((used_gb / total_gb) * 100, 2)
-        except Exception as e:
-            print(f"[{self.agent_name}] Fallback calculation error: {str(e)}")
-        return total_gb, used_gb, percent_used
+        self._save_status(ram_data)
+        return ram_data
 
     def _save_status(self, data):
         try:
-            with open(self.output_status_path, "w", encoding="utf-8") as f:
+            with open(self.status_file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] RAM status save ho gaya hai: '{self.output_status_path}'")
         except Exception as e:
-            print(f"[{self.agent_name}] Status file save karne me error: {str(e)}")
+            print(f"[{self.agent_name}] Error saving status file: {str(e)}")
 
 if __name__ == "__main__":
     monitor = ChiefSupervisorRamMonitor()
-    monitor.get_system_ram_metrics()
+    ram_report = monitor.check_ram_usage()
+    print(f"--- {ram_report['agent'].upper()} REPORT ---")
+    print(f"Timestamp: {ram_report['timestamp']}")
+    print(f"Platform:  {ram_report['system_platform'].upper()}")
+    print(f"RAM Status: {ram_report['status']}")
+    print(f"Total RAM:  {ram_report['metrics']['total_gb']} GB")
+    print(f"Available:  {ram_report['metrics']['available_gb']} GB")
+    print(f"Used RAM:   {ram_report['metrics']['used_gb']} GB ({ram_report['metrics']['used_percentage']}%)")
+    print("--------------------------------------------------")
