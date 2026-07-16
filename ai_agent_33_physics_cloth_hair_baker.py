@@ -3,24 +3,38 @@ import re
 import sys
 import json
 import urllib.request
+import urllib.parse
 import urllib.error
+
+# Manual .env loader utility
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
 
 class PhysicsClothHairBaker:
     def __init__(self, workspace_dir="znet_workspace"):
         self.agent_name = "Ai Agent 33: physics_cloth_hair_baker"
         self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        # Gemini API Configs
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
+        self.gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent)"
+        
+        # Local model backup
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_local = "llama3"
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
 
     def _load_upstream_movement(self):
-        # Puppeteer engine (Agent 26) se character ki dynamic movement velocities check karta hai
         anim_path = os.path.join(self.workspace_dir, "26_kinetic_rig_puppeteer_blueprint.json")
         movement_velocity_logs = []
 
@@ -38,7 +52,6 @@ class PhysicsClothHairBaker:
             except Exception as e:
                 print(f"[{self.agent_name}] Upstream movement load warning: {str(e)}")
 
-        # Fallback dataset agar positions data available na ho
         if not movement_velocity_logs:
             print(f"[{self.agent_name}] Workspace Alert: No active movement speed data found. Utilizing static aerodynamics preset.")
             movement_velocity_logs = [
@@ -62,6 +75,14 @@ class PhysicsClothHairBaker:
         return cleaned
 
     def _save_to_workspace(self, data, filename="33_physics_bake_blueprint.json"):
+        # SAFEGUARD: Limit maximum baking length to 72 frames (3 seconds at 24fps)
+        for profile in data.get("physics_bake_profiles", []):
+            start = profile.get("bake_start_frame", 1)
+            end = profile.get("bake_end_frame", 73)
+            if (end - start) > 72:
+                print(f"[{self.agent_name}] Safeguard Active: Restricting cloth/hair bake duration to 72 frames max to avoid VRAM leaks!")
+                profile["bake_end_frame"] = start + 72
+                
         file_path = os.path.join(self.workspace_dir, filename)
         try:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -83,33 +104,32 @@ class PhysicsClothHairBaker:
             "- 'timestamp_sec': float matching the movement timeline.\n"
             "- 'character_id': string designating target character mesh.\n"
             "- 'simulation_bake_type': string (choose from: 'cloth_cape_flow', 'stiff_coat_leather', 'anime_spiky_hair_sway', 'soft_ribbon_wind').\n"
-            "- 'wind_force_vector': array of 3 floats [x, y, z] representing global wind force direction and strength acting on the meshes.\n"
-            "- 'cloth_bending_stiffness': float (defines how stiff/soft the fabric fold is; scale from 0.05 for silk capes to 15.0 for heavy leather coat armor).\n"
-            "- 'hair_spring_tension': float (defines how fast the spiky hair bounces back to its original silhouette shape; range 1.0 to 10.0).\n"
-            "- 'collision_friction_coefficient': float (prevents cloth from sliding off shoulders; range 0.1 to 0.95).\n"
+            "- 'wind_force_vector': array of 3 floats [x, y, z] representing global wind force direction.\n"
+            "- 'cloth_bending_stiffness': float (scale from 0.05 for silk capes to 15.0 for heavy leather coat armor).\n"
+            "- 'hair_spring_tension': float (range 1.0 to 10.0).\n"
+            "- 'collision_friction_coefficient': float (range 0.1 to 0.95).\n"
             "- 'bake_start_frame': integer (the Blender timeline frame index where calculations start; usually frame 1 or match the timestamp).\n"
-            "- 'bake_end_frame': integer (end frame index for pre-rendering cache bake).\n"
+            "- 'bake_end_frame': integer (end frame index; target limit is start_frame + 72 max).\n"
             "Format your output STRICTLY as a raw JSON object containing only the list key 'physics_bake_profiles'. "
             "Do not write conversational explanations, markdown code blocks, or backticks. Return valid JSON only."
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
+        if self.gemini_key:
+            print(f"[{self.agent_name}] Status: Querying Google Gemini Cloud AI Node")
+            url = f"{self.gemini_url}?key={self.gemini_key}"
+            headers = {"Content-Type": "application/json"}
             payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Dynamic Kinetic Steps:\n{json.dumps(movements, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
+                "contents": [{
+                    "parts": [{
+                        "text": f"{system_prompt}\n\nMovement logs to process:\n{json.dumps(movements, indent=2)}"
+                    }]
+                }],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
+                }
             }
         else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
+            print(f"[{self.agent_name}] Warning: Gemini API key missing! Trying Local LLM Instance [{self.model_local}]")
             url = self.ollama_url
             headers = {"Content-Type": "application/json"}
             payload = {
@@ -130,8 +150,8 @@ class PhysicsClothHairBaker:
                 result = response.read().decode("utf-8")
                 response_json = json.loads(result)
                 
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
+                if self.gemini_key:
+                    raw_ai_message = response_json["candidates"][0]["content"]["parts"][0]["text"]
                 else:
                     raw_ai_message = response_json["message"]["content"]
                 
@@ -147,36 +167,31 @@ class PhysicsClothHairBaker:
                 return final_output
 
         except Exception as e:
-            print(f"[{self.agent_name}] Network Exception: {str(e)}. Triggering procedural aerodynamics solver.")
+            print(f"[{self.agent_name}] Network/API Exception: {str(e)}. Triggering procedural aerodynamics solver fallback.")
             return self._execute_procedural_fallback(movements)
 
     def _execute_procedural_fallback(self, movements):
-        # Precise algorithmic aerodynamic calculation mapping speed vectors to bending values
         profiles = []
         for mv in movements:
             ts = float(mv.get("timestamp_sec", 0.0))
             cid = mv.get("character_id", "char_generic")
             pose = str(mv.get("action_pose", "")).lower()
 
-            # Dynamic assignment of structural weights based on speed
             if "spin" in pose or "combat" in pose or "aerial" in pose:
-                # Highly dynamic speed forces high stiffness values so clothes don't pass through bodies
                 sim_type = "cloth_cape_flow"
-                wind = [0.0, -15.5, 4.0] # High headwind during rapid spin
-                stiffness = 1.25 # Semi-tight bending
-                tension = 7.5 # Hair springs back rapidly
-                friction = 0.85 # Cloth sticks to skin collision box tightly
+                wind = [0.0, -15.5, 4.0]
+                stiffness = 1.25
+                tension = 7.5
+                friction = 0.85
             else:
-                # Low-speed air resistance
                 sim_type = "anime_spiky_hair_sway"
-                wind = [1.5, 0.0, 0.5] # Mild cross-breeze
+                wind = [1.5, 0.0, 0.5]
                 stiffness = 0.35
                 tension = 3.0
                 friction = 0.3
 
-            # Calculate default 24fps frames
             start_f = max(1, int(ts * 24))
-            end_f = start_f + 72 # Bake in 3-second simulation blocks
+            end_f = start_f + 72 # Constant safety range
 
             profiles.append({
                 "timestamp_sec": ts,
@@ -201,9 +216,4 @@ if __name__ == "__main__":
     baker = PhysicsClothHairBaker()
     output = baker.design_physics_bake_profiles()
     
-    print("\n--- Z-NET PHYSICS SYSTEM: AGENT 33 BAKE PROFILE GENERATION COMPLETE ---")
-    print(f"Active simulation caches mapped for Blender: {len(output['physics_bake_profiles'])}")
-    for profile in output["physics_bake_profiles"]:
-        print(f"Char: '{profile['character_id']}' | Simulation: '{profile['simulation_bake_type']}' | Frames: {profile['bake_start_frame']} -> {profile['bake_end_frame']}")
-        print(f"  Wind Direction: {profile['wind_force_vector']} | Stiffness: {profile['cloth_bending_stiffness']} | Tension: {profile['hair_spring_tension']}")
-    print("------------------------------------------------------------------------")
+    print("\n--- Z-NET PHYSICS SYSTEM COMPLETE ---")
