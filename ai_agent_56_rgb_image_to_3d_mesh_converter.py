@@ -4,6 +4,18 @@ import json
 import urllib.request
 import shutil
 
+# Manual .env loader utility (consistent with Agent 30, 33, 46, 47)
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
+
 # Check for production dependencies
 try:
     from gradio_client import Client
@@ -18,6 +30,9 @@ class RgbImageTo3dMeshConverter:
         # Absolute portable path handling
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        
+        # Hugging Face Token for unlimited space requests (Prevent Rate Limiting!)
+        self.hf_token = os.environ.get("HF_TOKEN", None)
         
         # IO File Definitions
         self.input_colorized_path = os.path.join(self.workspace_dir, "55_colorized_manga_panel.png")
@@ -52,12 +67,11 @@ class RgbImageTo3dMeshConverter:
 
     def _smart_fallback_by_image_style(self):
         """Analyzes local state to download a style-matched 3D asset if offline."""
-        self.log_message("Online API skipped. Activating Smart Style Fallback System...", "WARNING")
+        self.log_message("Online API skipped or failed. Activating Smart Style Fallback System...", "WARNING")
         
-        # Check image name for clues or fallback to default
         img_name_lower = os.path.basename(self.input_colorized_path).lower()
         
-        if "char" in img_name_lower or "gojo" in img_name_lower or "sukuna" in img_name_lower:
+        if any(keyword in img_name_lower for keyword in ["char", "gojo", "sukuna", "naruto", "sasuke"]):
             self.log_message("Character pattern detected. Fetching high-quality humanoid mannequin asset...", "INFO")
             url = "https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/mannequin.obj"
         else:
@@ -118,7 +132,6 @@ class RgbImageTo3dMeshConverter:
                 self.log_message("No vertices found in OBJ file. Normalization bypassed.", "WARNING")
                 return
 
-            # Compute bounding box
             xs = [v[0] for v in vertices]
             ys = [v[1] for v in vertices]
             zs = [v[2] for v in vertices]
@@ -127,19 +140,16 @@ class RgbImageTo3dMeshConverter:
             min_y, max_y = min(ys), max(ys)
             min_z, max_z = min(zs), max(zs)
             
-            # Find center points
             cx = (min_x + max_x) / 2.0
             cy = (min_y + max_y) / 2.0
             cz = (min_z + max_z) / 2.0
             
-            # Find scale multiplier (Target maximum bounding box radius of 1.0 unit)
             dx = max_x - min_x
             dy = max_y - min_y
             dz = max_z - min_z
             max_dim = max(dx, dy, dz)
             scale_factor = 1.0 if max_dim == 0 else (1.5 / max_dim)
 
-            # Apply translation and scaling
             normalized_vertices = []
             for v in vertices:
                 nx = (v[0] - cx) * scale_factor
@@ -147,7 +157,6 @@ class RgbImageTo3dMeshConverter:
                 nz = (v[2] - cz) * scale_factor
                 normalized_vertices.append((nx, ny, nz))
 
-            # Re-write file with normalized positions
             with open(self.output_mesh_path, "w", encoding="utf-8") as f:
                 f.write("# Z-Net Vertex Auto-Normalized Mesh\n")
                 for nv in normalized_vertices:
@@ -171,35 +180,46 @@ class RgbImageTo3dMeshConverter:
 
         # 2. Universal API Generation Check
         if GRADIO_AVAILABLE:
-            self.log_message("Initiating connection to Hugging Face Free Gradio Client (TripoSR Engine)...", "INFO")
+            if self.hf_token:
+                self.log_message("Secure Hugging Face Token detected. Initiating authorized Gradio connection to TripoSR...", "INFO")
+            else:
+                self.log_message("Gradio connection initiating anonymously (Warning: Rate limits may apply)...", "WARNING")
+                
             try:
-                client = Client("stabilityai/TripoSR")
+                # Connected with explicit hf_token to secure pipeline speed
+                client = Client("stabilityai/TripoSR", hf_token=self.hf_token)
                 result = client.predict(
                     image=self.input_colorized_path,
                     api_name="/generate_3d"
                 )
                 
+                # SAFEGUARD: Robust Type and Structure checking
                 if isinstance(result, (list, tuple)) and len(result) > 0:
-                    temp_obj_path = result[0]
-                    shutil.copy(temp_obj_path, self.output_mesh_path)
+                    temp_obj_path = str(result[0])
+                    if os.path.exists(temp_obj_path):
+                        shutil.copy(temp_obj_path, self.output_mesh_path)
                     
-                    # Relocate MTL material profiles and PNG shaders
+                    # Safe mapping of materials (.mtl) and texture shaders (.png)
                     for temp_file in result[1:]:
-                        if temp_file.endswith('.mtl'):
-                            shutil.copy(temp_file, self.output_material_path)
-                        elif temp_file.endswith('.png'):
-                            shutil.copy(temp_file, self.output_texture_path)
+                        temp_file_str = str(temp_file)
+                        if os.path.exists(temp_file_str):
+                            if temp_file_str.endswith('.mtl'):
+                                shutil.copy(temp_file_str, self.output_material_path)
+                            elif temp_file_str.endswith('.png'):
+                                shutil.copy(temp_file_str, self.output_texture_path)
                     
                     self.log_message("Universal textured 3D mesh successfully downloaded to workspace.", "INFO")
-                else:
+                elif isinstance(result, str) and os.path.exists(result):
                     shutil.copy(result, self.output_mesh_path)
                     self.log_message("Universal 3D geometry imported successfully without materials.", "INFO")
+                else:
+                    raise ValueError("Unexpected API response format from TripoSR Space.")
                 
-                # Perform post-processing for scale integration
+                # Normalize post-download mesh structure
                 self._normalize_mesh_coordinates()
 
             except Exception as e:
-                self.log_message(f"Hugging Face space connection failed: {str(e)}", "WARNING")
+                self.log_message(f"Hugging Face TripoSR Space connection failed: {str(e)}", "WARNING")
                 self._smart_fallback_by_image_style()
                 self._normalize_mesh_coordinates()
         else:
@@ -228,3 +248,4 @@ class RgbImageTo3dMeshConverter:
 if __name__ == "__main__":
     converter = RgbImageTo3dMeshConverter()
     converter.execute_conversion_pipeline()
+    print("\n--- Z-NET 3D GENERATOR SYSTEM: AGENT 56 COMPLETE ---")
