@@ -363,4 +363,4 @@ class AiSupremeCreativeScriptConductor:
         print("-" * 75)
         
         print("ACTORS LOADED:")
-        for idx, char in enumerate(timeline_d
+        # --- FIXED LINE 366 AND COMPLETED TH
