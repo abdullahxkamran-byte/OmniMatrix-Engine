@@ -363,4 +363,45 @@ class AiSupremeCreativeScriptConductor:
         print("-" * 75)
         
         print("ACTORS LOADED:")
-        # --- FIXED LINE 366 AND COMPLETED TH
+        # --- FIXED LINE 366 AND COMPLETED THE LOOPS PERFECTLY ---
+        for idx, char in enumerate(timeline_data.get("character_set", [])):
+            char_name = char.get("character_name", "Unknown Character")
+            details = char.get("clothing_details", "Default Wardrobe")
+            pose = char.get("initial_pose", "Standing T-Pose")
+            print(f"  [{idx + 1}] {char_name}")
+            print(f"      Outfit: {details}")
+            print(f"      Pose:   {pose}")
+        print("-" * 75)
+
+        print("CHOREOGRAPHY SEQUENCE TIMELINE:")
+        for segment in timeline_data.get("master_directives", []):
+            seg_id = segment.get("segment_id", "?")
+            duration = segment.get("duration_slice", 0.0)
+            choreography = segment.get("action_choreography", "No action specified.")
+            env_state = segment.get("environment_state", "Steady Environment.")
+            cam_behavior = segment.get("camera_rig_behavior", "static_fixed")
+            commands = segment.get("orchestrated_agent_commands", {})
+            
+            print(f"  [Segment #{seg_id}] - Duration: {duration}s")
+            print(f"    Action:     {choreography}")
+            print(f"    VFX Physics: {env_state}")
+            print(f"    Camera Rig: {cam_behavior}")
+            print(f"    Agent Commands: {json.dumps(commands, indent=4)}")
+            print("-" * 50)
+        print("=" * 75)
+
+        # Save approved timeline structure directly to dynamic path
+        try:
+            with open(self.output_directive_path, "w", encoding="utf-8") as out_f:
+                json.dump(timeline_data, out_f, indent=2)
+            self.log_message(f"Master conductor timeline saved to: {self.output_directive_path}", "SUCCESS")
+        except Exception as e:
+            self.log_message(f"Failed to save creative execution map: {str(e)}", "ERROR")
+
+        # 6. Trigger sequential pipeline execution
+        self.trigger_downstream_sequence()
+
+
+if __name__ == "__main__":
+    conductor = AiSupremeCreativeScriptConductor()
+    conductor.run_choreography_pipeline()
