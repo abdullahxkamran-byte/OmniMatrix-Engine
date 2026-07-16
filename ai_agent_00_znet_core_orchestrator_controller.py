@@ -1,213 +1,194 @@
 import os
 import sys
+import re
 import json
 import time
 import subprocess
 from datetime import datetime
 
+# Optional hardware metric trackers
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
+# Import Agent 99 for supreme stability handshakes
+try:
+    from agent_99_supreme_self_healing_git_engine import SupremeSelfHealingGitEngine
+    HEALING_ENGINE_AVAILABLE = True
+except ImportError:
+    HEALING_ENGINE_AVAILABLE = False
+
+try:
+    from agent_63_automated_background_ram_janitor import AutomatedBackgroundRamJanitor
+    RAM_JANITOR_AVAILABLE = True
+except ImportError:
+    RAM_JANITOR_AVAILABLE = False
+
 class ZNetCoreOrchestratorController:
     def __init__(self, workspace_dir="znet_workspace"):
-        self.orchestrator_name = "Ai Agent 00: znet_core_orchestrator_controller"
-        self.workspace_dir = workspace_dir
-        self.state_file = os.path.join(self.workspace_dir, "00_orchestrator_state.json")
-        self.heartbeat_log = os.path.join(self.workspace_dir, "00_znet_heartbeat.json")
+        self.agent_name = "Ai Agent 00: znet_core_orchestrator_controller"
         
-        # Pipelines structure defined as per Z-Net specifications
-        self.pipeline_modules = {
-            "Module A: Core Concept & Scripting": [
-                "ai_agent_01_curiosity_hook_designer.py",
-                "ai_agent_02_hot_take_opinion_generator.py",
-                "ai_agent_03_visual_sync_storyboarder.py",
-                "ai_agent_04_narrative_tension_peaks_analyzer.py",
-                "ai_agent_05_story_arc_structural_architect.py",
-                "agent_06_word_count_guard_utility.py",
-                "ai_agent_07_dark_phonk_vibe_enhancer.py",
-                "agent_08_script_file_formatter.py"
-            ],
-            "Module B: Vocal & Audio Commandos": [
-                "agent_09_elevenlabs_voice_api_fetcher.py",
-                "ai_agent_10_audio_tone_emotion_matcher.py",
-                "agent_11_audio_word_aligner_engine.py",
-                "agent_12_precision_timestamp_generator.py",
-                "agent_13_srt_subtitle_compiler.py",
-                "ai_agent_14_phonk_beat_drop_analyzer.py",
-                "ai_agent_15_low_frequency_impact_sub_designer.py",
-                "ai_agent_16_automated_sidechain_compressor.py",
-                "ai_agent_17_autonomous_sfx_alchemist_synthesizer.py",
-                "ai_agent_18_adaptive_bgm_vibe_matcher.py",
-                "agent_19_audio_mastering_final_mixer.py"
-            ],
-            "Module C: Blender 3D Heavy Infantry": [
-                "ai_agent_20_procedural_text_mesh_builder.py",
-                "ai_agent_21_kinetic_camera_rig_director.py",
-                "ai_agent_22_atmospheric_lighting_shader_baker.py",
-                "ai_agent_23_local_3d_character_asset_selector.py",
-                "ai_agent_24_full_studio_anime_cel_shader.py",
-                "ai_agent_25_mini_real_pbr_fast_shader.py",
-                "ai_agent_26_kinetic_rig_puppeteer_animator.py",
-                "ai_agent_27_dynamic_mesh_collision_sentinel.py",
-                "ai_agent_28_anime_hit_stop_frame_scheduler.py",
-                "ai_agent_29_dynamic_smear_frame_generator.py",
-                "ai_agent_30_procedural_environment_fracture_engine.py",
-                "ai_agent_31_camera_space_debris_instancer.py",
-                "ai_agent_32_audio_driven_lip_sync_deformer.py",
-                "agent_33_physics_cloth_hair_baker.py",
-                "ai_agent_34_procedural_3d_environment_architect.py"
-            ],
-            "Module D: VFX Studio & Advanced Compositing": [
-                "ai_agent_35_autonomous_vfx_procedural_forge.py",
-                "ai_agent_36_volumetric_speed_lines_architect.py",
-                "ai_agent_37_stylized_smoke_fire_fluid_forge.py",
-                "ai_agent_38_vfx_bloom_glare_engine.py",
-                "ai_agent_39_color_grading_lut_mapper.py",
-                "ai_agent_40_motion_blur_velocity_vector_applier.py",
-                "ai_agent_41_beat_to_frame_effects_sync_engine.py"
-            ],
-            "Module E: FFmpeg Video Assembler": [
-                "agent_42_ffmpeg_raw_buffer_collector.py",
-                "agent_43_multi_track_av_merger.py",
-                "agent_44_gpu_hardware_accelerated_encoder.py",
-                "agent_45_bitrate_optimizer_compression_engine.py"
-            ],
-            "Module F: Local AI Smoothness Matrix": [
-                "ai_agent_46_optical_flow_frame_interpolator.py",
-                "ai_agent_47_super_resolution_4k_upscaler.py",
-                "agent_48_temporal_denoise_filter.py"
-            ],
-            "Module G: Asset Management & Presentation": [
-                "ai_agent_49_autonomous_vision_media_scout.py",
-                "agent_50_high_ctr_frame_extractor.py",
-                "agent_51_thumbnail_canvas_compiler.py",
-                "agent_52_local_vfx_asset_manager.py",
-                "agent_53_fonts_system_loader.py",
-                "agent_54_system_path_dependency_validator.py"
-            ],
-            "Module H: Manga-to-3D Generative Matrix": [
-                "ai_agent_55_manga_panel_vision_comprehender_colorizer.py",
-                "ai_agent_56_rgb_image_to_3d_mesh_converter.py",
-                "ai_agent_57_dynamic_2d_panel_to_3d_world_forge.py",
-                "ai_agent_58_autonomous_skeleton_auto_rigger.py",
-                "ai_agent_59_generative_motion_puppeteer_animator.py"
-            ],
-            "Artistic Concept Core": [
-                "ai_agent_64_autonomous_artistic_painter_director.py",
-                "ai_agent_65_supreme_creative_script_conductor.py",
-                "ai_agent_66_dynamic_sakuga_fight_choreographer.py"
-            ]
-        }
-
-        # Guardians Configuration
-        self.ram_monitor = "agent_60_chief_supervisor_ram_monitor.py"
-        self.vibe_logger = "agent_61_live_reporter_vibe_logger.py"
-        self.auto_debugger = "ai_agent_62_auto_debugger_self_healing_engine.py"
-        self.ram_janitor = "agent_63_automated_background_ram_janitor.py"
-
+        # Paths Setup
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        self.log_file_path = os.path.join(self.workspace_dir, "agent_00_orchestrator.log")
+        self.pipeline_state_path = os.path.join(self.workspace_dir, "00_pipeline_state.json")
+        
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
 
-    def _execute_agent(self, agent_script):
-        script_path = os.path.join(self.workspace_dir, agent_script)
-        
-        # Check if agent script is physically available
-        if not os.path.exists(script_path):
-            print(f"[{self.orchestrator_name}] WARNING: '{agent_script}' missing in workspace. Simulating node processing...")
-            time.sleep(0.5)
-            return True
+        # Connect Core Guardian Nodes
+        self.janitor = AutomatedBackgroundRamJanitor(workspace_dir=self.workspace_dir) if RAM_JANITOR_AVAILABLE else None
+        self.healing_engine = SupremeSelfHealingGitEngine(workspace_dir=self.workspace_dir) if HEALING_ENGINE_AVAILABLE else None
 
-        print(f"[{self.orchestrator_name}] Executing node: '{agent_script}'...")
+    def log_status(self, message, level="INFO"):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted_msg = f"[{timestamp}] [{level}] [{self.agent_name}] {message}"
+        print(formatted_msg)
+        try:
+            with open(self.log_file_path, "a", encoding="utf-8") as log_f:
+                log_f.write(formatted_msg + "\n")
+        except Exception:
+            pass
+
+    def discover_and_classify_workspace_agents(self):
+        """Scans the runtime tree, detects all valid Z-Net agent nodes, and auto-assigns operational weights."""
+        discovered_agents = []
+        pattern = re.compile(r"^(ai_)?agent_(\d+)_(.+)\.py$")
+
+        self.log_status("Scanning environment workspace tree for active Z-Net agent deployments...", "INFO")
         
-        # Execute the agent script
-        result = subprocess.run([sys.executable, script_path], capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            print(f"[{self.orchestrator_name}] SUCCESS: '{agent_script}' completed executed.")
-            return True
+        for file in sorted(os.listdir(self.base_dir)):
+            match = pattern.match(file)
+            if match:
+                agent_id_str = match.group(2)
+                agent_id = int(agent_id_str)
+                
+                # CRITICAL SAFETY: Skip self, skipped/removed agent 62, and supervisor engines
+                if agent_id in [0, 62, 99]:
+                    continue
+                
+                # Dynamic Module Weight Allocation Rules
+                if 20 <= agent_id <= 41 or 55 <= agent_id <= 59:
+                    weight = "HEAVY"  # Blender 3D, VFX Engine, Manga World Forger
+                else:
+                    weight = "LIGHT"  # Scripting, Audio, Utilities, Path Validators
+                
+                discovered_agents.append({
+                    "agent_id": agent_id_str,
+                    "file": file,
+                    "weight": weight
+                })
+
+        self.log_status(f"Auto-Discovery Complete! Registered {len(discovered_agents)} pipeline nodes dynamically.", "INFO")
+        return discovered_agents
+
+    def evaluate_hardware_concurrency_throttle(self, next_agent_weight):
+        """Reads hardware matrix allocations in real-time to compute parallel execution capability."""
+        if not PSUTIL_AVAILABLE:
+            self.log_status("psutil metadata missing. Defaulting to serial safety lock (1 thread).", "WARNING")
+            return 1
+
+        ram_usage_pct = psutil.virtual_memory().percent
+        self.log_status(f"Workspace RAM Profile Check: {ram_usage_pct}% saturation.", "INFO")
+
+        # Emergency Threshold Handshakes
+        if ram_usage_pct > 85.0:
+            self.log_status("RAM limit critical! Invoking Agent 63 Janitor node immediately.", "WARNING")
+            if self.janitor:
+                self.janitor.run_janitor_cleanup()
+            return 1
+
+        if next_agent_weight == "HEAVY":
+            self.log_status("Target node identified as HEAVY. Restricting processing to single-thread serial route.", "INFO")
+            if self.janitor and ram_usage_pct > 70.0:
+                self.janitor.run_janitor_cleanup()
+            return 1
+
+        # Dynamic capacity throttle for LIGHT processes
+        if ram_usage_pct < 55.0:
+            return 3  # High Concurrency Speed-Burst
+        elif ram_usage_pct < 75.0:
+            return 2  # Balanced Execution
         else:
-            print(f"[{self.orchestrator_name}] ERROR: '{agent_script}' crashed! Triggering Self-Healing Loop (Agent 62)...")
-            # Invoke healing process using Agent 62
-            healer_path = os.path.join(self.workspace_dir, self.auto_debugger)
-            if os.path.exists(healer_path):
-                heal_run = subprocess.run([sys.executable, healer_path, script_path], capture_output=True, text=True)
-                if heal_run.returncode == 0:
-                    print(f"[{self.orchestrator_name}] HEALING COMPLETE: Retrying repaired script...")
-                    retry_result = subprocess.run([sys.executable, script_path], capture_output=True, text=True)
-                    if retry_result.returncode == 0:
-                        print(f"[{self.orchestrator_name}] SUCCESS: Resolved and bypassed crash for '{agent_script}'!")
-                        return True
-            
-            print(f"[{self.orchestrator_name}] CRITICAL FAILURE: Automated recovery failed for '{agent_script}'.")
+            return 1  # Safe Serialization
+
+    def trigger_agent_node_execution(self, agent_data):
+        """Routes execution loops through Agent 99's core engine to provide un-crashable self-healing runs."""
+        agent_file = agent_data["file"]
+        script_path = os.path.join(self.base_dir, agent_file)
+
+        if self.healing_engine:
+            self.log_status(f"Launching Agent {agent_data['agent_id']} under Agent 99 Self-Healing shield...", "INFO")
+            report = self.healing_engine.execute_and_heal(script_path)
+            status = report.get("execution_status", "FAILED")
+            return status in ["SUCCESS", "HEALED"]
+        else:
+            self.log_status(f"Shield missing! Booting plain subprocess for {agent_file}", "WARNING")
+            try:
+                result = subprocess.run([sys.executable, script_path], capture_output=True, text=True, check=True)
+                return result.returncode == 0
+            except Exception as e:
+                self.log_status(f"Execution failed on unshielded crash: {str(e)}", "ERROR")
+                return False
+
+    def launch_autonomous_orchestration(self):
+        """The core central decision center. Runs discovery, assigns steps, scales capacity, and triggers loops."""
+        self.log_status("Activating Z-Net Master Brain Autonomous Orchestration Sequence...", "INFO")
+        
+        # 1. Discover what files exist in the user's setup right now
+        active_agents = self.discover_and_classify_workspace_agents()
+        
+        if not active_agents:
+            self.log_status("No executable agent scripts discovered in current base execution path.", "CRITICAL")
             return False
 
-    def run_hardware_guard_check(self):
-        # Heavy computing se pehle RAM checks control karna
-        print(f"[{self.orchestrator_name}] Running dynamic Hardware pre-flight diagnostics...")
-        
-        # Trigger RAM Monitor
-        ram_monitor_path = os.path.join(self.workspace_dir, self.ram_monitor)
-        if os.path.exists(ram_monitor_path):
-            subprocess.run([sys.executable, ram_monitor_path], capture_output=True)
-            
-        # Trigger Janitor to clean up heap leaks before next execution phase
-        ram_janitor_path = os.path.join(self.workspace_dir, self.ram_janitor)
-        if os.path.exists(ram_janitor_path):
-            subprocess.run([sys.executable, ram_janitor_path], capture_output=True)
-
-    def start_global_pipeline(self):
-        print(f"================================================================")
-        print(f"      Z-NET CORE MASSIVE PRODUCTION ENGINE INITIALIZED          ")
-        print(f"================================================================")
-        
-        start_time = time.time()
-        pipeline_status = {}
-        
-        # 1. Start Orchestration flow by setting baseline concept parameters
-        print(f"\n[{self.orchestrator_name}] Step 1: Triggering Creative and Concept Directors...")
-        for director in self.pipeline_modules["Artistic Concept Core"]:
-            success = self._execute_agent(director)
-            pipeline_status[director] = "SUCCESS" if success else "FAILED"
-            if not success:
-                print(f"[{self.orchestrator_name}] Halting pipeline on critical art directives.")
-                return
-
-        # 2. Run Module by Module Sequence
-        for module_name, agents in self.pipeline_modules.items():
-            if module_name == "Artistic Concept Core":
-                continue # Already processed
-                
-            print(f"\n--- Initiating Orchestration for [{module_name}] ---")
-            
-            # Heavy Modules trigger dynamic physical memory sweep checks
-            if "Blender" in module_name or "VFX" in module_name or "Smoothness" in module_name:
-                self.run_hardware_guard_check()
-
-            for agent in agents:
-                success = self._execute_agent(agent)
-                pipeline_status[agent] = "SUCCESS" if success else "FAILED"
-                
-                # Check dynamic logger feedback if script completed
-                vibe_logger_path = os.path.join(self.workspace_dir, self.vibe_logger)
-                if os.path.exists(vibe_logger_path) and success:
-                    subprocess.run([sys.executable, vibe_logger_path, f"Completed node {agent}"], capture_output=True)
-
-        end_time = time.time()
-        total_duration = round(end_time - start_time, 2)
-        
-        # Create consolidated final report log
-        final_report = {
-            "orchestration_session": "Z_NET_GLOBAL_RUN",
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "total_execution_time_sec": total_duration,
-            "pipeline_integrity_matrix": pipeline_status
+        completed_ledger = []
+        state_log = {
+            "orchestration_initiated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "status": "RUNNING",
+            "processed_nodes": []
         }
-        
-        with open(self.heartbeat_log, "w", encoding="utf-8") as f:
-            json.dump(final_report, f, indent=4)
+        self._serialize_state(state_log)
 
-        print(f"\n================================================================")
-        print(f"   Z-NET MASTER PIPELINE COMPLETE | Duration: {total_duration}s")
-        print(f"   Dynamic telemetry heartbeat generated at: '{self.heartbeat_log}'")
-        print(f"================================================================")
+        # 2. Iterate through all discovered agents sequentially or adaptive parallel blocks
+        for agent in active_agents:
+            # Check resource levels and adjust concurrency cap right before launch
+            concurrency_limit = self.evaluate_hardware_concurrency_throttle(agent["weight"])
+            self.log_status(f"Active Scaled Concurrency Factor set to: {concurrency_limit}", "INFO")
+
+            # Execute via self-healing pipeline wrapper
+            success = self.trigger_agent_node_execution(agent)
+
+            if success:
+                self.log_status(f"Step Finalized Successfully: Agent {agent['agent_id']}", "INFO")
+                completed_ledger.append(agent["agent_id"])
+                state_log["processed_nodes"] = completed_ledger
+                self._serialize_state(state_log)
+            else:
+                self.log_status(f"Pipeline flow fractured at Agent {agent['agent_id']}. Initiating Emergency Halt.", "CRITICAL")
+                state_log["status"] = f"CRITICAL_HALT_AT_AGENT_{agent['agent_id']}"
+                self._serialize_state(state_log)
+                return False
+
+        state_log["status"] = "ALL_MODULES_SUCCESSFULLY_COMPLETED"
+        state_log["orchestration_concluded"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._serialize_state(state_log)
+        self.log_status("System Matrix run state concluded flawlessly. All modules integrated.", "INFO")
+        return True
+
+    def _serialize_state(self, data):
+        try:
+            with open(self.pipeline_state_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.log_status(f"State writing exception: {str(e)}", "ERROR")
 
 if __name__ == "__main__":
-    controller = ZNetCoreOrchestratorController()
-    controller.start_global_pipeline()
+    orchestrator = ZNetCoreOrchestratorController()
+    print("\n=======================================================")
+    print("      Z-NET SYSTEM INFRASTRUCTURE CENTRAL COMMAND      ")
+    print("=======================================================")
+    orchestrator.launch_autonomous_orchestration()
