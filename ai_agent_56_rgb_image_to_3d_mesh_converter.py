@@ -4,7 +4,7 @@ import json
 import urllib.request
 import shutil
 
-# Manual .env loader utility (consistent with Agent 30, 33, 46, 47)
+# Manual .env loader utility
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r") as f:
@@ -23,6 +23,13 @@ try:
 except ImportError:
     GRADIO_AVAILABLE = False
 
+# Dynamic import of Agent 63 RAM Janitor
+try:
+    from agent_63_automated_background_ram_janitor import AutomatedBackgroundRamJanitor
+    RAM_JANITOR_AVAILABLE = True
+except ImportError:
+    RAM_JANITOR_AVAILABLE = False
+
 class RgbImageTo3dMeshConverter:
     def __init__(self, workspace_dir="znet_workspace"):
         self.agent_name = "Ai Agent 56: rgb_image_to_3d_mesh_converter"
@@ -31,7 +38,7 @@ class RgbImageTo3dMeshConverter:
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
         
-        # Hugging Face Token for unlimited space requests (Prevent Rate Limiting!)
+        # Hugging Face Token for unlimited space requests
         self.hf_token = os.environ.get("HF_TOKEN", None)
         
         # IO File Definitions
@@ -44,6 +51,14 @@ class RgbImageTo3dMeshConverter:
         
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
+
+        # Initialize Memory Janitor Safeguard
+        if RAM_JANITOR_AVAILABLE:
+            self.janitor = AutomatedBackgroundRamJanitor(workspace_dir=self.workspace_dir)
+            self.log_message("Agent 63 RAM Janitor integrated successfully.", "INFO")
+        else:
+            self.janitor = None
+            self.log_message("Agent 63 RAM Janitor module not found. Memory cleanup bypassed.", "WARNING")
 
     def log_message(self, message, level="INFO"):
         """Systematic logging utility for runtime execution debugging."""
@@ -111,7 +126,7 @@ class RgbImageTo3dMeshConverter:
             self.log_message(f"Critical error writing local core geometry: {str(e)}", "CRITICAL")
 
     def _normalize_mesh_coordinates(self):
-        """Parses the generated OBJ file, centers it on 0,0,0 and scales it to fit Blender views."""
+        """Parses the generated OBJ file, centers it on 0,0,0 and scales it."""
         if not os.path.exists(self.output_mesh_path):
             return
 
@@ -172,34 +187,41 @@ class RgbImageTo3dMeshConverter:
     def execute_conversion_pipeline(self):
         self.log_message("Initializing 3D Generation Pipeline...", "INFO")
 
+        # SAFEGUARD: Pre-execution memory purge
+        if self.janitor:
+            self.log_message("Running pre-execution memory cleanup sweep...", "INFO")
+            self.janitor.run_janitor_cleanup()
+
         # 1. Image Validation Check
         if not self._validate_input_integrity():
             self._smart_fallback_by_image_style()
             self._normalize_mesh_coordinates()
-            return
+            
+            # Post-execution clean on failure path
+            if self.janitor:
+                self.janitor.run_janitor_cleanup()
+                
+            return self._generate_blueprint(status="Fallback Active")
 
         # 2. Universal API Generation Check
         if GRADIO_AVAILABLE:
             if self.hf_token:
-                self.log_message("Secure Hugging Face Token detected. Initiating authorized Gradio connection to TripoSR...", "INFO")
+                self.log_message("Secure Hugging Face Token detected. Initiating authorized Gradio connection...", "INFO")
             else:
-                self.log_message("Gradio connection initiating anonymously (Warning: Rate limits may apply)...", "WARNING")
+                self.log_message("Gradio connection initiating anonymously...", "WARNING")
                 
             try:
-                # Connected with explicit hf_token to secure pipeline speed
                 client = Client("stabilityai/TripoSR", hf_token=self.hf_token)
                 result = client.predict(
                     image=self.input_colorized_path,
                     api_name="/generate_3d"
                 )
                 
-                # SAFEGUARD: Robust Type and Structure checking
                 if isinstance(result, (list, tuple)) and len(result) > 0:
                     temp_obj_path = str(result[0])
                     if os.path.exists(temp_obj_path):
                         shutil.copy(temp_obj_path, self.output_mesh_path)
                     
-                    # Safe mapping of materials (.mtl) and texture shaders (.png)
                     for temp_file in result[1:]:
                         temp_file_str = str(temp_file)
                         if os.path.exists(temp_file_str):
@@ -208,14 +230,13 @@ class RgbImageTo3dMeshConverter:
                             elif temp_file_str.endswith('.png'):
                                 shutil.copy(temp_file_str, self.output_texture_path)
                     
-                    self.log_message("Universal textured 3D mesh successfully downloaded to workspace.", "INFO")
+                    self.log_message("Universal textured 3D mesh successfully downloaded.", "INFO")
                 elif isinstance(result, str) and os.path.exists(result):
                     shutil.copy(result, self.output_mesh_path)
-                    self.log_message("Universal 3D geometry imported successfully without materials.", "INFO")
+                    self.log_message("Universal 3D geometry imported successfully.", "INFO")
                 else:
                     raise ValueError("Unexpected API response format from TripoSR Space.")
                 
-                # Normalize post-download mesh structure
                 self._normalize_mesh_coordinates()
 
             except Exception as e:
@@ -223,26 +244,34 @@ class RgbImageTo3dMeshConverter:
                 self._smart_fallback_by_image_style()
                 self._normalize_mesh_coordinates()
         else:
-            self.log_message("Gradio Client dependency not found on host machine. Routing to fallback stream.", "WARNING")
+            self.log_message("Gradio Client dependency not found. Routing to fallback stream.", "WARNING")
             self._smart_fallback_by_image_style()
             self._normalize_mesh_coordinates()
 
         # 3. Export Metadata Blueprint
+        blueprint = self._generate_blueprint(status="Success")
+
+        # SAFEGUARD: Post-execution memory purge to release allocated variables and buffers
+        if self.janitor:
+            self.log_message("Running post-execution memory cleanup sweep...", "INFO")
+            self.janitor.run_janitor_cleanup()
+
+        return blueprint
+
+    def _generate_blueprint(self, status="Success"):
         blueprint = {
             "agent": self.agent_name,
-            "status": "Success",
+            "status": status,
             "mesh_path": self.output_mesh_path,
             "materials_found": os.path.exists(self.output_material_path),
             "textures_found": os.path.exists(self.output_texture_path)
         }
-        
         try:
             with open(self.output_blueprint_path, "w", encoding="utf-8") as blue_f:
                 json.dump(blueprint, blue_f, indent=4)
             self.log_message("Agent blueprint metadata updated successfully.", "INFO")
         except Exception as e:
             self.log_message(f"Failed to write blueprint metadata: {str(e)}", "ERROR")
-
         return blueprint
 
 if __name__ == "__main__":
