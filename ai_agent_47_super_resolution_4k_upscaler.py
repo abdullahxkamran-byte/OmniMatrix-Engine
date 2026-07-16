@@ -3,36 +3,50 @@ import re
 import sys
 import json
 import urllib.request
+import urllib.parse
 import urllib.error
+
+# Manual .env loader utility
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
 
 class SuperResolution4kUpscaler:
     def __init__(self, workspace_dir="znet_workspace"):
         self.agent_name = "Ai Agent 47: super_resolution_4k_upscaler"
         self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        # Gemini API Configs
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
+        self.gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent)"
+        
+        # Local model configs
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_local = "llama3"
+        
         self.output_upscaled_video = os.path.join(self.workspace_dir, "47_super_resolved_4k_video.mp4")
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
 
     def _load_upstream_blueprint(self):
-        # Frame interpolation aur previous compression blueprints read karta hai resolution match karne ke liye
         interp_path = os.path.join(self.workspace_dir, "46_frame_interpolation_blueprint.json")
         comp_path = os.path.join(self.workspace_dir, "45_bitrate_compression_blueprint.json")
         
-        input_video = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4") # Default input
-        current_res = "1920x1080" # Default baseline
+        input_video = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4")
+        current_res = "1920x1080"
 
         if os.path.exists(interp_path):
             try:
                 with open(interp_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                # Interpolator output ko track karta hai as primary input
                 input_video = data.get("input_video_tracked", input_video)
             except Exception:
                 pass
@@ -61,6 +75,14 @@ class SuperResolution4kUpscaler:
         return cleaned
 
     def _save_to_workspace(self, data, filename="47_super_resolution_blueprint.json"):
+        # SAFEGUARD: Enforce tile size limits on the AI model output parameters directly to protect VRAM.
+        specs = data.get("upscale_specifications", {})
+        if specs:
+            tile_size = specs.get("vram_tile_size", 128)
+            if tile_size > 128 or tile_size <= 0:
+                print(f"[{self.agent_name}] Safeguard Active: Capping upscale VRAM tile size to 128 (originally {tile_size}) to prevent CUDA OOM!")
+                specs["vram_tile_size"] = 128
+                
         file_path = os.path.join(self.workspace_dir, filename)
         try:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -77,42 +99,41 @@ class SuperResolution4kUpscaler:
 
         system_prompt = (
             "You are an expert deep-learning video upscaling AI and super-resolution engine coordinator.\n"
-            "Your task is to analyze the source video parameters and design the absolute best upscaling parameters using AI models (like Real-ESRGAN-anime, Waifu2x, or neural-network-based filters) to hit 4K resolution cleanly without blurry edges.\n"
+            "Your task is to design upscaling parameters using AI models (like Real-ESRGAN-anime or Waifu2x) to upscale cleanly to 4K.\n"
             "Output a raw JSON object containing these exact configuration keys:\n"
-            "- 'target_resolution': string (e.g., '3840x2160' for 4K horizontal).\n"
-            "- 'ai_model_name': string (choose from: 'realesrgan-x4plus-anime' for sharp cartoon/anime lines, 'realesrgan-x4plus' for cinematic realistic footage, 'waifu2x-vulkan' for light-weight high-speed upscaling).\n"
-            "- 'upscale_factor': float (e.g., 2.0 or 4.0 depending on the scale from current resolution to target resolution).\n"
-            "- 'denoise_strength': float (scale from 0.0 to 1.0; defines how much compression noise to suppress before upscaling).\n"
-            "- 'vram_tile_size': integer (default 128 or 256; lower tile size prevents 'Out of Memory' crashes on low-end GPUs during heavy neural passes).\n"
-            "- 'gpu_backend': string (choose from: 'cuda' for Nvidia GPUs, 'vulkan' for universal cross-platform compatibility, 'cpu' for safe slow rendering).\n"
+            "- 'target_resolution': string (always '3840x2160' for 4K).\n"
+            "- 'ai_model_name': string (choose from: 'realesrgan-x4plus-anime' for cartoons/anime, 'realesrgan-x4plus' for realistic footage, 'waifu2x-vulkan' for high-speed Vulkan processing).\n"
+            "- 'upscale_factor': float (usually 2.0 or 4.0).\n"
+            "- 'denoise_strength': float (scale from 0.0 to 1.0).\n"
+            "- 'vram_tile_size': integer (SAFE SPECIFICATION: must be set to 128 or lower to prevent Out Of Memory crashes on free GPUs).\n"
+            "- 'gpu_backend': string (choose 'cuda' for Nvidia, 'vulkan' for cross-platform, or 'cpu' for safe rendering).\n"
             "- 'ffmpeg_sr_filter_command': string representing the suggested scaling command template using the selected parameters.\n"
-            "Format your output STRICTLY as a raw JSON object. Do not output conversational text, backticks, or markdown formatting."
+            "Format your output STRICTLY as a raw JSON object with only the keys listed above. Do not write markdown formatting or backticks."
         )
 
         user_content = (
             f"Source Video Path: '{input_video}'\n"
             f"Current Resolution: {current_res}\n"
             f"Target Resolution Requested: {target_resolution}\n"
-            f"Content Type Preference: Anime Style (highly optimized for clean vector lines and high color contrast)"
+            f"Content Type Preference: Anime Style (optimized for vector lines)"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
+        if self.gemini_key:
+            print(f"[{self.agent_name}] Status: Querying Google Gemini Cloud AI Node")
+            url = f"{self.gemini_url}?key={self.gemini_key}"
+            headers = {"Content-Type": "application/json"}
             payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content}
-                ],
-                "response_format": {"type": "json_object"}
+                "contents": [{
+                    "parts": [{
+                        "text": f"{system_prompt}\n\nUser Context:\n{user_content}"
+                    }]
+                }],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
+                }
             }
         else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
+            print(f"[{self.agent_name}] Warning: Gemini Key missing! Querying Local LLM Instance [{self.model_local}]")
             url = self.ollama_url
             headers = {"Content-Type": "application/json"}
             payload = {
@@ -133,8 +154,8 @@ class SuperResolution4kUpscaler:
                 result = response.read().decode("utf-8")
                 response_json = json.loads(result)
                 
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
+                if self.gemini_key:
+                    raw_ai_message = response_json["candidates"][0]["content"]["parts"][0]["text"]
                 else:
                     raw_ai_message = response_json["message"]["content"]
                 
@@ -155,15 +176,11 @@ class SuperResolution4kUpscaler:
             return self._execute_procedural_fallback(input_video, current_res, target_resolution)
 
     def _execute_procedural_fallback(self, input_video, current_res, target_resolution):
-        # Safety fallback using high-performance mathematical modeling
         print(f"[{self.agent_name}] Executing local procedural fallback filter design.")
-        
-        # Anime-centric scaling configurations
         model_fallback = "realesrgan-x4plus-anime"
         scale_factor = 2.0 if "1080" in current_res else 4.0
-        tile_size = 128  # Safe baseline to protect graphics memory
+        tile_size = 128
         
-        # Generate safe custom scale filter for FFmpeg using libx264 backend if AI tools are offline
         fallback_filter = f"ffmpeg -i {input_video} -vf scale={target_resolution.replace('x', ':')}:flags=neighbor {self.output_upscaled_video}"
 
         fallback_output = {
@@ -184,13 +201,5 @@ class SuperResolution4kUpscaler:
 
 if __name__ == "__main__":
     upscaler = SuperResolution4kUpscaler()
-    # Testing upscale configuration targets for 4K horizontal (3840x2160)
     result = upscaler.design_upscale_parameters(target_resolution="3840x2160")
-    
-    print("\n--- Z-NET SUPER-RESOLUTION ENGINE: AGENT 47 COMPLETE ---")
-    specs = result.get("upscale_specifications", {})
-    print(f"Target Output Resolution: {specs.get('target_resolution', 'N/A')}")
-    print(f"AI Model Selected: {specs.get('ai_model_name', 'N/A')} (Backend: {specs.get('gpu_backend', 'N/A')})")
-    print(f"VRAM Tile Constraint: {specs.get('vram_tile_size', 'N/A')} blocks (Safe protection active)")
-    print(f"Execution Command Template:\n  '{specs.get('ffmpeg_sr_filter_command', 'N/A')}'")
-    print("---------------------------------------------------------")
+    print("\n--- Z-NET SUPER-RESOLUTION ENGINE COMPLETE ---")
