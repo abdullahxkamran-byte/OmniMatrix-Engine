@@ -39,7 +39,7 @@ class RgbImageTo3dMeshConverter:
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
         
         # Hugging Face Token for unlimited space requests
-        self.hf_token = os.environ.get("HF_TOKEN", None)
+        self.hf_token = os.environ.get("HF_TOKEN", os.environ.get("HF_API_KEY", None))
         
         # IO File Definitions
         self.input_colorized_path = os.path.join(self.workspace_dir, "55_colorized_manga_panel.png")
@@ -81,16 +81,43 @@ class RgbImageTo3dMeshConverter:
         return True
 
     def _smart_fallback_by_image_style(self):
-        """Analyzes local state to download a style-matched 3D asset if offline."""
+        """Analyzes Agent 55's blueprint metadata to download a style-matched 3D asset if offline."""
         self.log_message("Online API skipped or failed. Activating Smart Style Fallback System...", "WARNING")
         
-        img_name_lower = os.path.basename(self.input_colorized_path).lower()
+        # Path to Agent 55's blueprint
+        agent_55_blueprint = os.path.join(self.workspace_dir, "55_manga_comprehend_blueprint.json")
+        is_character = False
+        character_name = "Unknown"
         
-        if any(keyword in img_name_lower for keyword in ["char", "gojo", "sukuna", "naruto", "sasuke"]):
-            self.log_message("Character pattern detected. Fetching high-quality humanoid mannequin asset...", "INFO")
+        # Step 1: Read metadata from Agent 55's output
+        if os.path.exists(agent_55_blueprint):
+            try:
+                with open(agent_55_blueprint, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Supports both schema formats: 'extracted_metadata' or 'analysis_metrics'
+                    metadata = data.get("extracted_metadata", data.get("analysis_metrics", {}))
+                    characters = metadata.get("detected_characters", [])
+                    
+                    if characters and len(characters) > 0:
+                        is_character = True
+                        character_name = characters[0].get("name", "Character")
+                        self.log_message(f"Agent 55 Blueprint confirmed character identity: {character_name}", "INFO")
+            except Exception as e:
+                self.log_message(f"Failed to parse Agent 55 blueprint metadata: {str(e)}", "WARNING")
+        
+        # Step 2: Backup filename-based check if blueprint reading failed/was empty
+        if not is_character:
+            img_name_lower = os.path.basename(self.input_colorized_path).lower()
+            if any(keyword in img_name_lower for keyword in ["char", "gojo", "sukuna", "naruto", "sasuke", "goku", "killua"]):
+                is_character = True
+                character_name = "Filename Matched Character"
+        
+        # Step 3: Decision Matrix
+        if is_character:
+            self.log_message(f"Character structure identified ('{character_name}'). Fetching humanoid mannequin...", "INFO")
             url = "https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/mannequin.obj"
         else:
-            self.log_message("Environment pattern assumed. Fetching structural geometric mesh asset...", "INFO")
+            self.log_message("No explicit character found. Fetching structural geometric mesh...", "INFO")
             url = "https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/cube.obj"
             
         try:
@@ -211,6 +238,7 @@ class RgbImageTo3dMeshConverter:
                 self.log_message("Gradio connection initiating anonymously...", "WARNING")
                 
             try:
+                # Connected to StabilityAI's TripoSR Space for high-quality single-image-to-3D
                 client = Client("stabilityai/TripoSR", hf_token=self.hf_token)
                 result = client.predict(
                     image=self.input_colorized_path,
