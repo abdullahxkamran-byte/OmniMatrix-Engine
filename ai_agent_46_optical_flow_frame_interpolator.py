@@ -3,24 +3,38 @@ import re
 import sys
 import json
 import urllib.request
+import urllib.parse
 import urllib.error
+
+# Manual .env loader utility (In case python-dotenv is not installed)
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
 
 class OpticalFlowFrameInterpolator:
     def __init__(self, workspace_dir="znet_workspace"):
         self.agent_name = "Ai Agent 46: optical_flow_frame_interpolator"
         self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        # Gemini API Configs
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        
+        # Local fallback config
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_local = "llama3"
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
 
     def _load_upstream_data(self):
-        # Compression metadata aur high-action cues load karta hai parameters tuning ke liye
         comp_path = os.path.join(self.workspace_dir, "45_bitrate_compression_blueprint.json")
         storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
         
@@ -32,7 +46,6 @@ class OpticalFlowFrameInterpolator:
                 with open(comp_path, "r", encoding="utf-8") as f:
                     comp_data = json.load(f)
                 video_metadata["source_video"] = comp_data.get("output_video_path", "")
-                # Defaulting base to 30.0 if not parsed
                 video_metadata["source_fps"] = 30.0
             except Exception:
                 pass
@@ -42,7 +55,6 @@ class OpticalFlowFrameInterpolator:
                 with open(storyboard_path, "r", encoding="utf-8") as f:
                     sb_data = json.load(f)
                 for panel in sb_data.get("storyboard_panels", []):
-                    # Agar scene me high intensity camera movement ya action hai, toh flow adjust karenge
                     if "dynamic" in panel.get("camera_movement_type", "").lower():
                         has_high_action = True
                         break
@@ -65,6 +77,21 @@ class OpticalFlowFrameInterpolator:
         return cleaned
 
     def _save_to_workspace(self, data, filename="46_frame_interpolation_blueprint.json"):
+        # SAFEGUARD: Prevent high CPU lockups due to exhaustive search ('esa') during high action
+        settings = data.get("interpolation_settings", {})
+        if settings:
+            if settings.get("target_fps", 60) > 60:
+                print(f"[{self.agent_name}] Safeguard Active: Capping FPS to 60 to prevent massive processing load!")
+                settings["target_fps"] = 60
+            
+            if settings.get("motion_estimation_algorithm", "") == "esa":
+                print(f"[{self.agent_name}] Safeguard Active: Downgrading 'esa' (Exhaustive Search) to 'epzs' (Fast Search) to save Colab RAM!")
+                settings["motion_estimation_algorithm"] = "epzs"
+                # Re-adjust filter string dynamically to match safeguard
+                filter_str = settings.get("ffmpeg_filter_string", "")
+                if "me_method=esa" in filter_str:
+                    settings["ffmpeg_filter_string"] = filter_str.replace("me_method=esa", "me_method=epzs")
+
         file_path = os.path.join(self.workspace_dir, filename)
         try:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -81,16 +108,16 @@ class OpticalFlowFrameInterpolator:
 
         system_prompt = (
             "You are an elite video encoding AI and optical flow interpolation specialist.\n"
-            "Your task is to analyze the video metadata and output optimal motion-compensated interpolation parameters for FFmpeg's minterpolate filter to upscale video from 24/30 FPS to ultra-smooth 60 FPS.\n"
+            "Your task is to analyze the video metadata and output optimal motion-compensated interpolation parameters for FFmpeg's minterpolate filter.\n"
             "Output a raw JSON object with the following keys:\n"
             "- 'target_fps': integer (always set to 60 for ultra-smooth rendering).\n"
-            "- 'interpolation_mode': string (choose between 'mci' for Motion Compensated Interpolation or 'blend' if video has too many sudden visual cuts to prevent distortion).\n"
-            "- 'motion_estimation_algorithm': string (choose from: 'epzs' for fast motion search, 'esa' for exhaustive slow search, 'tss' for three step search).\n"
-            "- 'motion_compensation_method': string (choose from: 'obmc' for Overlapped Block Motion Compensation to smooth edge halos, or 'mci').\n"
-            "- 'macroblock_size': integer (usually 16 or 8; smaller means finer motion detection but higher CPU/GPU load).\n"
-            "- 'search_parameter': integer (range 4 to 32; defines search window range for motion vector tracking).\n"
+            "- 'interpolation_mode': string (choose 'mci' for Motion Compensated Interpolation, or 'blend' if sudden fast cuts occur).\n"
+            "- 'motion_estimation_algorithm': string (choose 'epzs' for fast search, or 'tss' for three-step search).\n"
+            "- 'motion_compensation_method': string (choose 'obmc' for Overlapped Block Motion Compensation, or 'mci').\n"
+            "- 'macroblock_size': integer (16 or 8; larger is faster, smaller is cleaner).\n"
+            "- 'search_parameter': integer (range 4 to 32; search window range for motion vector).\n"
             "- 'ffmpeg_filter_string': string containing the constructed minterpolate filter (e.g., 'minterpolate=fps=60:mi_mode=mci:mc_mode=obmc:me_method=epzs').\n"
-            "Format your output STRICTLY as a raw JSON object. Do not output conversational text or backticks."
+            "Format your output STRICTLY as a raw JSON object with only the keys listed above. Do not include markdown formatting or backticks."
         )
 
         user_content = (
@@ -99,23 +126,22 @@ class OpticalFlowFrameInterpolator:
             f"High-Action/Fast Cuts Detected: {high_action}\n"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
+        if self.gemini_key:
+            print(f"[{self.agent_name}] Status: Querying Google Gemini Cloud AI Node")
+            url = f"{self.gemini_url}?key={self.gemini_key}"
+            headers = {"Content-Type": "application/json"}
             payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content}
-                ],
-                "response_format": {"type": "json_object"}
+                "contents": [{
+                    "parts": [{
+                        "text": f"{system_prompt}\n\nUser Context:\n{user_content}"
+                    }]
+                }],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
+                }
             }
         else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
+            print(f"[{self.agent_name}] Warning: Gemini Key missing! Querying Local LLM Instance [{self.model_local}]")
             url = self.ollama_url
             headers = {"Content-Type": "application/json"}
             payload = {
@@ -136,8 +162,8 @@ class OpticalFlowFrameInterpolator:
                 result = response.read().decode("utf-8")
                 response_json = json.loads(result)
                 
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
+                if self.gemini_key:
+                    raw_ai_message = response_json["candidates"][0]["content"]["parts"][0]["text"]
                 else:
                     raw_ai_message = response_json["message"]["content"]
                 
@@ -158,20 +184,18 @@ class OpticalFlowFrameInterpolator:
             return self._execute_procedural_fallback(video_meta, high_action)
 
     def _execute_procedural_fallback(self, video_meta, high_action):
-        # Procedural fallback math calculations to avoid pipeline breakages
         if high_action:
-            # High action scenes require safety overrides to avoid extreme warping artifacts
             interpolated_mode = "mci"
-            mc_method = "obmc"  # smooth edge guards active
+            mc_method = "obmc"
             me_algo = "epzs"
             mb_size = 16
             search_param = 16
         else:
             interpolated_mode = "mci"
             mc_method = "mci"
-            me_algo = "esa"
+            me_algo = "epzs" # Fallback safe algorithm
             mb_size = 8
-            search_param = 32
+            search_param = 16
 
         filter_str = f"minterpolate=fps=60:mi_mode={interpolated_mode}:mc_mode={mc_method}:me_method={me_algo}:mb_size={mb_size}:search_param={search_param}"
 
@@ -194,10 +218,4 @@ class OpticalFlowFrameInterpolator:
 if __name__ == "__main__":
     interpolator = OpticalFlowFrameInterpolator()
     result = interpolator.design_smoothness_parameters()
-    
-    print("\n--- Z-NET OPTICAL FLOW INTERPOLATOR: AGENT 46 COMPLETE ---")
-    settings = result.get("interpolation_settings", {})
-    print(f"Target Frame Rate: {settings.get('target_fps', 'N/A')} FPS")
-    print(f"Estimation Method: {settings.get('motion_estimation_algorithm', 'N/A')} (Mode: {settings.get('interpolation_mode', 'N/A')})")
-    print(f"Generated FFmpeg Filter:\n  '{settings.get('ffmpeg_filter_string', 'N/A')}'")
-    print("-----------------------------------------------------------")
+    print("\n--- Z-NET OPTICAL FLOW INTERPOLATOR SYSTEM COMPLETE ---")
