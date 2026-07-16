@@ -3,7 +3,20 @@ import re
 import sys
 import json
 import urllib.request
+import urllib.parse
 import urllib.error
+
+# Manual .env loader utility
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
 
 class AutonomousVisionMediaScout:
     def __init__(self, workspace_dir="znet_workspace"):
@@ -14,16 +27,16 @@ class AutonomousVisionMediaScout:
         self.model_local = "llama3"
         self.model_cloud = "gpt-4o-mini"
         
+        # API Keys from environment
         self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        self.pexels_api_key = os.environ.get("PEXELS_API_KEY", None)
+        self.pixabay_api_key = os.environ.get("PIXABAY_API_KEY", None)
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
 
     def _scan_workspace_assets(self):
-        # Workspace me bani final ya temporary video files dhoondhta hai
         potential_files = []
-        
-        # Priority order for finding the best rendered video
         check_paths = [
             os.path.join(self.workspace_dir, "48_final_denoised_clean.mp4"),
             os.path.join(self.workspace_dir, "47_super_resolved_4k_video.mp4"),
@@ -35,14 +48,9 @@ class AutonomousVisionMediaScout:
             if os.path.exists(path):
                 potential_files.append(path)
                 
-        # Default fallback if nothing exists yet
-        if not potential_files:
-            potential_files.append(os.path.join(self.workspace_dir, "mock_final_output.mp4"))
-
         return potential_files
 
     def _load_storyboard_data(self):
-        # Syncing with storyboards to detect peak high-emotional panels
         story_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
         scenes_data = []
 
@@ -60,14 +68,83 @@ class AutonomousVisionMediaScout:
                 pass
 
         if not scenes_data:
-            # Safe mock scene details if storyboard is missing
             scenes_data = [
-                {"timestamp_sec": 1.5, "description": "Goku powers up with massive energy aura", "mood": "HYPED_CLIMAX"},
-                {"timestamp_sec": 4.2, "description": "Close-up cinematic face reveal with glowing eyes", "mood": "EPIC_REVEAL"},
-                {"timestamp_sec": 7.8, "description": "Character standing against a dark moon background", "mood": "COOL_NIGHT_AESTHETIC"}
+                {"timestamp_sec": 1.5, "description": "dark anime background with storm clouds and lightning", "mood": "HYPED_CLIMAX"},
+                {"timestamp_sec": 4.2, "description": "cinematic retro neon city street raining at night", "mood": "EPIC_REVEAL"},
+                {"timestamp_sec": 7.8, "description": "glowing stars celestial galaxy deep space background", "mood": "COOL_NIGHT_AESTHETIC"}
             ]
 
         return scenes_data
+
+    def search_and_download_stock_video(self, query, filename_prefix="scouted_stock"):
+        """Scouts and downloads background stock video footage from Pexels or Pixabay APIs."""
+        safe_query = urllib.parse.quote(query)
+        downloaded_file_path = None
+        
+        # Step 1: Try Pexels API
+        if self.pexels_api_key:
+            print(f"[{self.agent_name}] Querying Pexels Video API for query: '{query}'")
+            url = f"https://api.pexels.com/videos/search?query={safe_query}&per_page=1"
+            req = urllib.request.Request(url)
+            req.add_header("Authorization", self.pexels_api_key)
+            try:
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    res_data = json.loads(response.read().decode("utf-8"))
+                    videos = res_data.get("videos", [])
+                    if videos:
+                        video_files = videos[0].get("video_files", [])
+                        # Select best resolution file
+                        best_video = None
+                        for vf in video_files:
+                            if vf.get("quality") == "hd" or vf.get("width", 0) >= 1280:
+                                best_video = vf
+                                break
+                        if not best_video and video_files:
+                            best_video = video_files[0]
+                            
+                        if best_video:
+                            video_url = best_video.get("link")
+                            downloaded_file_path = self._download_file(video_url, f"{filename_prefix}_{safe_query[:20]}.mp4")
+                            if downloaded_file_path:
+                                print(f"[{self.agent_name}] Successfully downloaded asset from Pexels: {downloaded_file_path}")
+                                return downloaded_file_path
+            except Exception as e:
+                print(f"[{self.agent_name}] Pexels API query failed or timed out: {str(e)}")
+
+        # Step 2: Try Pixabay API as robust fallback
+        if self.pixabay_api_key and not downloaded_file_path:
+            print(f"[{self.agent_name}] Querying Pixabay Video API for query: '{query}'")
+            url = f"https://pixabay.com/api/videos/?key={self.pixabay_api_key}&q={safe_query}&per_page=3"
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    res_data = json.loads(response.read().decode("utf-8"))
+                    hits = res_data.get("hits", [])
+                    if hits:
+                        video_url = hits[0].get("videos", {}).get("medium", {}).get("url")
+                        if not video_url:
+                            video_url = hits[0].get("videos", {}).get("small", {}).get("url")
+                        if video_url:
+                            downloaded_file_path = self._download_file(video_url, f"{filename_prefix}_{safe_query[:20]}.mp4")
+                            if downloaded_file_path:
+                                print(f"[{self.agent_name}] Successfully downloaded asset from Pixabay: {downloaded_file_path}")
+                                return downloaded_file_path
+            except Exception as e:
+                print(f"[{self.agent_name}] Pixabay API query failed or timed out: {str(e)}")
+
+        print(f"[{self.agent_name}] No stock asset matches found online or API keys missing for query: '{query}'")
+        return None
+
+    def _download_file(self, url, filename):
+        file_path = os.path.join(self.workspace_dir, filename)
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30) as response, open(file_path, 'wb') as out_file:
+                out_file.write(response.read())
+            return file_path
+        except Exception as e:
+            print(f"[{self.agent_name}] Error downloading file: {str(e)}")
+            return None
 
     def _clean_json_response(self, raw_text):
         cleaned = raw_text.strip()
@@ -99,6 +176,18 @@ class AutonomousVisionMediaScout:
         
         print(f"[{self.agent_name}] AI Computer Vision Scout online. Analyzing visual data structure...")
 
+        # If no local videos exist, scout background footage dynamically
+        scouted_stock_paths = []
+        if not assets:
+            print(f"[{self.agent_name}] No local video assets found. Starting dynamic stock video search...")
+            for scene in scenes[:2]: # Search top 2 scene descriptions to avoid high rate limits
+                description = scene.get("description", "")
+                # Extract key noun phrases or use full scene description
+                search_query = " ".join(description.split()[:4])  # Get first 4 words for clean search results
+                downloaded_clip = self.search_and_download_stock_video(search_query)
+                if downloaded_clip:
+                    scouted_stock_paths.append(downloaded_clip)
+
         system_prompt = (
             "You are an advanced AI Video Content Specialist and Autonomous Media Scout.\n"
             "Your job is to analyze the available video files and storyboard data to detect, scout, and predict the exact timestamps of the most visually stunning, high-energy, and 'clickable' frames (Hero Frames) to be extracted for high-CTR thumbnails and promotional cards.\n"
@@ -113,6 +202,7 @@ class AutonomousVisionMediaScout:
 
         user_content = (
             f"Available Video Assets found in Workspace: {assets}\n"
+            f"Scouted Online Stock Background Assets: {scouted_stock_paths}\n"
             f"Storyboard Scenes to scout:\n{json.dumps(scenes, indent=2)}"
         )
 
@@ -164,6 +254,7 @@ class AutonomousVisionMediaScout:
                 final_output = {
                     "agent_executed": self.agent_name,
                     "target_video_scouted": assets[0] if assets else "none",
+                    "scouted_stock_assets": scouted_stock_paths,
                     "scouted_frames": structured_output.get("scouted_frames", [])
                 }
                 
@@ -172,18 +263,15 @@ class AutonomousVisionMediaScout:
 
         except Exception as e:
             print(f"[{self.agent_name}] AI scouting logic bypassed: {str(e)}. Triggering procedural vision algorithm.")
-            return self._execute_procedural_fallback(assets, scenes)
+            return self._execute_procedural_fallback(assets, scenes, scouted_stock_paths)
 
-    def _execute_procedural_fallback(self, assets, scenes):
-        # Procedural analytical fallback mapping the best frames logically
+    def _execute_procedural_fallback(self, assets, scenes, stock_paths):
         scouted_frames = []
-        
         for scene in scenes:
             ts = scene.get("timestamp_sec", 1.0)
             mood = str(scene.get("mood", "")).upper()
             desc = scene.get("description", "")
             
-            # Map logical CTR potential based on scene characteristics
             if "CLIMAX" in mood or "HYPED" in mood:
                 score = 0.98
                 use_case = "Primary Thumbnail Focus"
@@ -208,6 +296,7 @@ class AutonomousVisionMediaScout:
         fallback_output = {
             "agent_executed": f"{self.agent_name} (Procedural Vision Fallback)",
             "target_video_scouted": assets[0] if assets else "none",
+            "scouted_stock_assets": stock_paths,
             "scouted_frames": scouted_frames
         }
         self._save_to_workspace(fallback_output)
@@ -219,6 +308,7 @@ if __name__ == "__main__":
     
     print("\n--- Z-NET AUTONOMOUS VISION SCOUT: AGENT 49 COMPLETE ---")
     print(f"Target Video Scanned: '{result.get('target_video_scouted', 'N/A')}'")
+    print(f"Downloaded Background Stock Clips: {result.get('scouted_stock_assets', [])}")
     print(f"Total High-CTR Frames scouted and locked: {len(result.get('scouted_frames', []))}")
     for frame in result.get("scouted_frames", []):
         print(f"  Timestamp: {frame['timestamp_sec']}s | Score: {frame['scout_score']} -> {frame['potential_use_case']}")
