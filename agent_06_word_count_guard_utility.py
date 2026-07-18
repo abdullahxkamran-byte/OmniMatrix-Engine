@@ -162,6 +162,6 @@ if __name__ == "__main__":
     guard = WordCountGuardUtility()
     output = guard.run_guard_utility()
     
-    print("\n--- Z-NET CORE UTILITY: AGENT 06 PROGRAMMATIC COMPRESSION COMPLETED ---")
+    print("\n--- Z-NET CORE UTILITY: AGeNT 06 PROGRAMMATIC COMPRESSION COMPLETED ---")
     print(json.dumps(output, indent=4))
     print("------------------------------------------------------------------------")
