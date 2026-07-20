@@ -1,63 +1,70 @@
 import os
+import re
 import sys
 import json
-import re
+import time
 import urllib.request
-import urllib.parse
 import urllib.error
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# Manual .env loader utility (consistent with Z-Net architecture)
-def load_env_file(filepath=".env"):
-    if os.path.exists(filepath):
-        with open(filepath, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
+load_dotenv()
 
-load_env_file()
-
-class AiMasterContinuityDirector:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 08: master_continuity_director"
-        self.workspace_dir = workspace_dir
+class UniversalScriptCompiler:
+    def __init__(self, state_file_path="matrix_state.json", export_dir="znet_exports"):
+        self.agent_name = "Agent 08: script_file_formatter"
+        self.state_file = state_file_path
+        self.export_dir = export_dir
         
-        # Dual-Engine AI Fallback Config
-        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        # Network Resilience
+        self.max_retries = 3
+        self.retry_delay = 3
         
+        # API Keys Initialization
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Setup Gemini
+        if self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
+            self.gemini_model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+        # OpenAI/Ollama Setup
+        self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.ollama_url = "http://localhost:11434/api/chat"
-        self.ollama_model = "llama3"
+        self.model_openai = "gpt-4o-mini"
+        self.model_local = "llama3"
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        # Ensure export directory exists for human-readable outputs
+        if not os.path.exists(self.export_dir):
+            os.makedirs(self.export_dir)
 
-    def _load_stage_data(self):
-        """Loads clean scripts from Stage 6 and aesthetic styles from Stage 7."""
-        guard_path = os.path.join(self.workspace_dir, "06_word_count_guard.json")
-        phonk_path = os.path.join(self.workspace_dir, "07_dark_phonk_vibe.json")
+    def _log_info(self, message):
+        print(f"[{self.agent_name}] INFO: {message}")
 
-        guard_data = {}
-        phonk_data = {}
+    def _log_error(self, message):
+        print(f"[{self.agent_name}] ERROR: {message}", file=sys.stderr)
 
-        if os.path.exists(guard_path):
-            try:
-                with open(guard_path, "r", encoding="utf-8") as f:
-                    guard_data = json.load(f)
-                print(f"[{self.agent_name}] Loaded Stage 6 data successfully.")
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: Cannot read Stage 6: {str(e)}")
+    def _read_state(self):
+        if not os.path.exists(self.state_file):
+            self._log_error("Critical Error: matrix_state.json not found.")
+            sys.exit(1)
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self._log_error(f"Failed to read state file: {str(e)}")
+            sys.exit(1)
 
-        if os.path.exists(phonk_path):
-            try:
-                with open(phonk_path, "r", encoding="utf-8") as f:
-                    phonk_data = json.load(f)
-                print(f"[{self.agent_name}] Loaded Stage 7 data successfully.")
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: Cannot read Stage 7: {str(e)}")
-
-        return guard_data, phonk_data
+    def _write_state(self, state_data):
+        try:
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                json.dump(state_data, f, indent=4)
+        except Exception as e:
+            self._log_error(f"Failed to persist state: {str(e)}")
 
     def _clean_json_response(self, raw_text):
         cleaned = raw_text.strip()
@@ -70,186 +77,157 @@ class AiMasterContinuityDirector:
             cleaned = cleaned[start_idx:end_idx + 1]
         return cleaned
 
-    def _run_ai_alignment_call(self, raw_merged_timeline):
-        """Uses Gemini (Cloud) or Ollama (Local) to perform intelligence-based character tagging and script alignment."""
+    def _build_compiler_prompt(self, raw_merged_data):
         system_prompt = (
-            "You are the Z-Net AI Master Video Director.\n"
-            "Your task is to review a series of draft video frames and align them into a high-retention masterpiece.\n"
-            "Specifically, you must identify and tag the correct 'character' speaking each line (e.g., 'Gojo', 'Sukuna', 'Naruto', 'Sasuke', 'Narrator') based on the context of the dialogue.\n"
-            "Format your output strictly as a RAW JSON object with the following structure:\n"
-            "{\n"
-            "  \"master_timeline\": [\n"
-            "    {\n"
-            "      \"frame_index\": 1,\n"
-            "      \"character\": \"Narrator\",\n"
-            "      \"duration_seconds\": 3.0,\n"
-            "      \"spoken_voiceover\": \"The voiceover text\",\n"
-            "      \"visual_style_prompt\": \"visual description\",\n"
-            "      \"camera_shake_intensity\": 0.5,\n"
-            "      \"bass_drop_sync\": false,\n"
-            "      \"ambient_glitch_rate\": 0.1,\n"
-            "      \"color_palette_hex\": [\"#000000\", \"#ffffff\"]\n"
-            "    }\n"
-            "  ]\n"
-            "}\n"
-            "Rules:\n"
-            "- Extract correct character names from the dialogue. If it is general narrative, use 'Narrator'.\n"
-            "- Do not change the general meaning of the voiceover, but ensure it flows cleanly.\n"
-            "- Do not write any markdown formatting or pre-text. Only raw JSON."
+            "You are the Final Video Continuity Director. Your job is to compile, review, and align raw timeline data into a Master Playbook.\n"
+            "Analyze the voiceover for each frame and intelligently assign a 'character_voice' (e.g., 'Narrator', 'Protagonist', 'Expert', 'Gojo', 'Villain' etc.) based on the context.\n"
+            "Format your output EXACTLY as a JSON object with the key 'master_timeline' containing a list of frames.\n"
+            "Each frame must contain these keys:\n"
+            "- 'frame_index': integer\n"
+            "- 'character_voice': string (The detected speaker)\n"
+            "- 'spoken_audio': string (The final confirmed voiceover text)\n"
+            "- 'vfx_style_prompt': string (The visual description)\n"
+            "- 'camera_shake_intensity': float\n"
+            "- 'bass_drop_sync': boolean\n"
+            "- 'color_palette': list of 3 hex codes\n"
         )
+        user_prompt = f"Raw Unaligned Timeline Data:\n{json.dumps(raw_merged_data, indent=2)}"
+        return system_prompt, user_prompt
 
-        user_content = json.dumps(raw_merged_timeline, indent=2)
-
-        # ENGINE A: GEMINI (CLOUD)
-        if self.gemini_key:
-            print(f"[{self.agent_name}] Status: Executing Cloud Gemini Master AI Director...")
-            url = f"{self.gemini_url}?key={self.gemini_key}"
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "contents": [{"parts": [{"text": f"{system_prompt}\n\nInput Timeline:\n{user_content}"}]}],
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
+    def _call_ai_engine(self, system_prompt, user_prompt):
+        if self.gemini_api_key:
+            self._log_info("Routing to Priority 1: Google Gemini (Fast Compilation)")
             try:
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(url, data=data, headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    result = response.read().decode("utf-8")
-                    res_json = json.loads(result)
-                    raw_msg = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    return json.loads(self._clean_json_response(raw_msg))
+                response = self.gemini_model.generate_content(f"{system_prompt}\n\n{user_prompt}")
+                return json.loads(self._clean_json_response(response.text))
             except Exception as e:
-                print(f"[{self.agent_name}] Gemini alignment failed: {str(e)}. Swapping to Local Ollama...")
+                self._log_error(f"Gemini failed: {str(e)}. Switching to OpenAI...")
 
-        # ENGINE B: OLLAMA (LOCAL FALLBACK)
-        print(f"[{self.agent_name}] Status: Executing Local Ollama Llama3 Master Director...")
-        payload = {
-            "model": self.ollama_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Analyze and align this timeline:\n{user_content}"}
-            ],
-            "stream": False,
-            "format": "json"
-        }
+        if self.openai_api_key:
+            self._log_info("Routing to Priority 2: OpenAI (Deep Alignment)")
+            try:
+                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+                payload = {"model": self.model_openai, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "response_format": {"type": "json_object"}}
+                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=45) as response:
+                    return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"]))
+            except Exception as e:
+                self._log_error(f"OpenAI failed: {str(e)}. Switching to Ollama...")
+
+        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(self.ollama_url, data=data, headers={"Content-Type": "application/json"})
+            headers = {"Content-Type": "application/json"}
+            payload = {"model": self.model_local, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "stream": False, "format": "json"}
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
             with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                res_json = json.loads(result)
-                raw_msg = res_json["message"]["content"]
-                return json.loads(self._clean_json_response(raw_msg))
+                return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["message"]["content"]))
         except Exception as e:
-            print(f"[{self.agent_name}] Local Ollama alignment failed: {str(e)}. Using Procedural Merger.")
+            self._log_error(f"Ollama failed: {str(e)}.")
             return None
 
-    def _procedural_merge_fallback(self, guard_frames, phonk_frames):
-        """Standard backup algorithmic alignment if both AI engines fail."""
-        print(f"[{self.agent_name}] Running procedural merge backup...")
+    def _procedural_compile(self, raw_data):
+        self._log_info("Executing Procedural Offline Compilation.")
         master_timeline = []
-        phonk_map = {item["frame_index"]: item for item in phonk_frames}
-        
-        for idx, frame in enumerate(guard_frames):
-            f_idx = frame.get("frame_index", idx + 1)
-            phonk_meta = phonk_map.get(f_idx, {})
-            voiceover = frame.get("optimized_voiceover", frame.get("spoken_voiceover", ""))
-            
-            # Smart Offline Name Matcher
-            voiceover_lower = voiceover.lower()
-            character = "Narrator"
-            if "gojo" in voiceover_lower:
-                character = "Gojo"
-            elif "sukuna" in voiceover_lower:
-                character = "Sukuna"
-            elif "goku" in voiceover_lower:
-                character = "Goku"
-
+        for frame in raw_data:
             master_timeline.append({
-                "frame_index": f_idx,
-                "character": character,
-                "duration_seconds": frame.get("duration_seconds", 3.0),
-                "spoken_voiceover": voiceover,
-                "visual_style_prompt": phonk_meta.get("visual_style_prompt", "High-contrast dark cinematic style."),
-                "camera_shake_intensity": phonk_meta.get("camera_shake_intensity", 0.4),
-                "bass_drop_sync": phonk_meta.get("bass_drop_sync", False),
-                "ambient_glitch_rate": phonk_meta.get("ambient_glitch_rate", 0.1),
-                "color_palette_hex": phonk_meta.get("color_palette_hex", ["#000000", "#ffffff"])
+                "frame_index": frame.get("frame_index", 1),
+                "character_voice": "Narrator",
+                "spoken_audio": frame.get("spoken_audio", ""),
+                "vfx_style_prompt": frame.get("vfx_style_prompt", "Cinematic Scene"),
+                "camera_shake_intensity": frame.get("camera_shake_intensity", 0.0),
+                "bass_drop_sync": frame.get("bass_drop_sync", False),
+                "color_palette": frame.get("color_palette", ["#000000", "#FFFFFF", "#888888"])
             })
         return {"master_timeline": master_timeline}
 
-    def align_and_format(self):
-        guard_data, phonk_data = self._load_stage_data()
-        topic = guard_data.get("source_topic", phonk_data.get("source_topic", "General Target"))
-        
-        guard_frames = guard_data.get("timeline_frames", [])
-        phonk_frames = phonk_data.get("phonk_frames", [])
-
-        # Create basic raw merge to pass to AI
-        raw_merged = []
-        phonk_map = {item["frame_index"]: item for item in phonk_frames}
-        for idx, frame in enumerate(guard_frames):
-            f_idx = frame.get("frame_index", idx + 1)
-            phonk_meta = phonk_map.get(f_idx, {})
-            raw_merged.append({
-                "frame_index": f_idx,
-                "spoken_voiceover": frame.get("optimized_voiceover", frame.get("spoken_voiceover", "")),
-                "visual_style_prompt": phonk_meta.get("visual_style_prompt", "Cinematic dark anime look"),
-                "duration_seconds": frame.get("duration_seconds", 3.0)
-            })
-
-        # Run alignment
-        ai_aligned_data = None
-        if raw_merged:
-            ai_aligned_data = self._run_ai_alignment_call(raw_merged)
-
-        if not ai_aligned_data:
-            ai_aligned_data = self._procedural_merge_fallback(guard_frames, phonk_frames)
-
-        master_timeline = ai_aligned_data.get("master_timeline", [])
-
-        # Construct final payload
-        output_json = {
-            "source_topic": topic,
-            "agent_executed": self.agent_name,
-            "total_frames": len(master_timeline),
-            "master_timeline": master_timeline
-        }
-
-        # Save Structured JSON
-        json_path = os.path.join(self.workspace_dir, "08_final_master_script.json")
-        try:
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(output_json, f, indent=4)
-            print(f"[{self.agent_name}] Success: AI Aligned Master JSON written to '{json_path}'")
-        except Exception as e:
-            print(f"[{self.agent_name}] Error writing JSON: {str(e)}")
-
-        # Save Readable TXT Preview for editing references
-        txt_path = os.path.join(self.workspace_dir, "08_final_script_preview.txt")
+    def _generate_human_readable_txt(self, topic, timeline):
+        txt_path = os.path.join(self.export_dir, "08_master_playbook_preview.txt")
         try:
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(f"=== MASTER VIDEO SCRIPT PREVIEW ===\n")
+                f.write("=== Z-NET MASTER VIDEO PLAYBOOK ===\n")
                 f.write(f"Topic: {topic}\n")
-                f.write(f"Total Video Frames: {len(master_timeline)}\n")
-                f.write(f"====================================\n\n")
-
-                for frame in master_timeline:
-                    f_write_block = (
-                        f"Frame {frame['frame_index']} | Character: {frame.get('character', 'Narrator')} | Duration: {frame['duration_seconds']}s\n"
-                        f"  [Voiceover]: \"{frame['spoken_voiceover']}\"\n"
-                        f"  [VFX Style]: {frame['visual_style_prompt']}\n"
-                        f"  [Colors]: {', '.join(frame.get('color_palette_hex', ['#000000']))}\n"
-                        f"  [Pacing Notes]: Shake: {frame.get('camera_shake_intensity', 0.5)}x, Glitch: {int(frame.get('ambient_glitch_rate', 0.1)*100)}%, Bass Drop Sync: {frame.get('bass_drop_sync', False)}\n"
-                        f"----------------------------------------------------------------------\n"
-                    )
-                    f.write(f_write_block)
-            print(f"[{self.agent_name}] Text script preview saved to '{txt_path}'")
+                f.write(f"Total Frames: {len(timeline)}\n")
+                f.write("===================================\n\n")
+                
+                for frame in timeline:
+                    f.write(f"FRAME {frame['frame_index']} | CHARACTER: {frame['character_voice']}\n")
+                    f.write(f"AUDIO: \"{frame['spoken_audio']}\"\n")
+                    f.write(f"VISUALS: {frame['vfx_style_prompt']}\n")
+                    f.write(f"VFX SETTINGS -> Shake: {frame['camera_shake_intensity']} | Bass Drop: {frame['bass_drop_sync']} | Palette: {', '.join(frame['color_palette'])}\n")
+                    f.write("-" * 60 + "\n")
+            self._log_info(f"Human-readable playbook saved to: {txt_path}")
         except Exception as e:
-            print(f"[{self.agent_name}] Error writing Preview Text file: {str(e)}")
+            self._log_error(f"Failed to generate text playbook: {str(e)}")
 
-        return output_json
+    def execute(self):
+        state = self._read_state()
+        
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent != "Agent_08":
+            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+            return False
+
+        topic = state.get("runtime_data", {}).get("core_topic", "Unknown")
+        
+        scripting_module = state.get("runtime_data", {}).get("module_a_scripting", {})
+        storyboard_frames = scripting_module.get("agent_03_storyboard", {}).get("storyboard_frames", [])
+        vibe_data = scripting_module.get("agent_07_vibe_enhancer", {}).get("phonk_frames", [])
+
+        if not storyboard_frames:
+            self._log_error("Critical Error: Storyboard data missing. Cannot compile.")
+            return False
+
+        self._log_info(f"Compiling Final Master Playbook for: {topic}")
+
+        raw_merged = []
+        vibe_map = {item["frame_index"]: item for item in vibe_data}
+        
+        for frame in storyboard_frames:
+            f_idx = frame.get("frame_index", 1)
+            v_meta = vibe_map.get(f_idx, {})
+            raw_merged.append({
+                "frame_index": f_idx,
+                "spoken_audio": frame.get("spoken_audio", ""),
+                "vfx_style_prompt": v_meta.get("visual_style_prompt", ""),
+                "camera_shake_intensity": v_meta.get("camera_shake_intensity", 0.0),
+                "bass_drop_sync": v_meta.get("bass_drop_sync", False),
+                "color_palette": v_meta.get("color_palette_hex", [])
+            })
+
+        system_prompt, user_prompt = self._build_compiler_prompt(raw_merged)
+        
+        compiled_data = None
+        for attempt in range(1, self.max_retries + 1):
+            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
+            if parsed_json and "master_timeline" in parsed_json:
+                compiled_data = parsed_json
+                self._log_info(f"Success! Master Timeline aligned with {len(compiled_data['master_timeline'])} frames.")
+                break
+            else:
+                self._log_error("Alignment schema error. Retrying...")
+                time.sleep(self.retry_delay)
+
+        if not compiled_data:
+            self._log_error("AI Alignment failed. Triggering Procedural Compile.")
+            compiled_data = self._procedural_compile(raw_merged)
+            state["pipeline_status"]["last_active_agent"] = "Agent_08_Fallback"
+        else:
+            state["pipeline_status"]["last_active_agent"] = "Agent_08"
+
+        # Export human-readable TXT file for the user
+        self._generate_human_readable_txt(topic, compiled_data["master_timeline"])
+
+        state["runtime_data"]["module_a_scripting"]["FINAL_MASTER_PLAYBOOK"] = compiled_data
+        
+        # CRITICAL PIPELINE JUMP: MODULE A TO MODULE B
+        state["pipeline_status"]["current_module"] = "Module_B_Audio"
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_09"
+        
+        self._write_state(state)
+        
+        self._log_info("MODULE A COMPLETED! Scripting finalized. Handoff to Module B (Agent 09).")
+        return True
 
 if __name__ == "__main__":
-    director = AiMasterContinuityDirector()
-    output = director.align_and_format()
-    print("\n--- Z-NET DYNAMIC AI ALIGNMENT COMPLETE ---")
+    compiler = UniversalScriptCompiler()
+    compiler.execute()
