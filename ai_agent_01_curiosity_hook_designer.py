@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class CuriosityHookDesigner:
+class UniversalHookDesigner:
     def __init__(self, state_file_path="matrix_state.json"):
-        self.agent_name = "Ai Agent 01: curiosity_hook_designer"
+        self.agent_name = "Ai Agent 01: universal_hook_designer"
         self.state_file = state_file_path
         self.max_retries = 3
         self.retry_delay = 2
@@ -42,12 +42,13 @@ class CuriosityHookDesigner:
     def _verify_and_patch_state_schema(self):
         """Validates matrix_state.json structural integrity, patching missing nodes on runtime."""
         if not os.path.exists(self.state_file):
-            self._log_info(f"State ledger '{self.state_file}' missing. Rebuilding master template.")
+            self._log_info(f"State ledger '{self.state_file}' missing. Rebuilding universal master template.")
             default_state = {
                 "global_config": {
                     "animation_dna": "Anime",
-                    "vibe_tempo": "Phonk",
-                    "resolution": "1080x1920"
+                    "vibe_tempo": "Dark & Suspenseful",
+                    "resolution": "1080x1920",
+                    "content_format": "cinematic_movie" # Options: explainer, cinematic_movie, casual_commentary
                 },
                 "pipeline_status": {
                     "current_module": "Module_A",
@@ -66,19 +67,28 @@ class CuriosityHookDesigner:
         state = self._read_state()
         modified = False
         
+        if "global_config" not in state:
+            state["global_config"] = {"animation_dna": "Anime", "vibe_tempo": "Phonk", "resolution": "1080x1920", "content_format": "explainer"}
+            modified = True
+        elif "content_format" not in state["global_config"]:
+            state["global_config"]["content_format"] = "explainer"
+            modified = True
+            
         if "pipeline_status" not in state:
             state["pipeline_status"] = {"current_module": "Module_A", "last_active_agent": "None", "next_agent": "Ai_Agent_01"}
             modified = True
+            
         if "runtime_data" not in state:
             state["runtime_data"] = {"core_topic": "", "module_a_scripting": {}}
             modified = True
+            
         if "module_a_scripting" not in state["runtime_data"]:
             state["runtime_data"]["module_a_scripting"] = {}
             modified = True
             
         if modified:
             self._write_state(state)
-            self._log_info("Schema drift detected and patched successfully.")
+            self._log_info("Schema drift detected and patched successfully with Universal capabilities.")
 
     def _read_state(self):
         """Thread-safe state file read block."""
@@ -107,58 +117,83 @@ class CuriosityHookDesigner:
                 return False
         return True
 
-    def _build_contextual_prompt(self, topic, dna_profile, vibe_profile):
-        """Constructs heavily contextual engineering guidelines for the LLM architecture."""
-        return (
-            f"You are a computational short-form content retention engineer. "
-            f"Generate exactly 3 raw, highly aggressive hook variants for target topic: '{topic}'.\n"
-            f"Contextual Parameters Enforced:\n"
-            f"- Art/VFX Context Direction (DNA): {dna_profile}\n"
-            f"- Audio Design/Pacing Rhythm (Vibe): {vibe_profile}\n\n"
-            f"Execution specifications required:\n"
-            f"1. hook_id: 'pattern_interrupt' | Focus: Complete violation of auditory/visual expectations to capture attention within 1.2 seconds.\n"
-            f"2. hook_id: 'controversial_angle' | Focus: Attack a deeply rooted historical fan premise or objective core concept belief.\n"
-            f"3. hook_id: 'curiosity_loop' | Focus: Semantic frame cliffhanger. Withhold vital information explicitly completed at the absolute final frame.\n\n"
+    def _build_contextual_prompt(self, topic, dna_profile, vibe_profile, content_format):
+        """Constructs highly dynamic prompts based on the desired universal content format."""
+        
+        base_instructions = (
+            f"You are a master creative director and writer. Generate exactly 3 variants for the opening of the content.\n"
+            f"Target Topic: '{topic}'\n"
+            f"Visual DNA: {dna_profile}\n"
+            f"Audio Vibe: {vibe_profile}\n\n"
             f"Output Constraints:\n"
-            f"Your output must strictly resolve into a JSON array containing exactly 3 objects. "
-            f"Required object keys: 'hook_id', 'hook_type', 'hook_script', 'visual_concept_cue', 'audio_pacing_cue'. "
-            f"Do not format with Markdown code block syntax wrapper. Provide absolute raw text JSON."
+            f"Output must be a raw JSON array containing exactly 3 objects with keys: "
+            f"'hook_id', 'hook_type', 'hook_script', 'visual_concept_cue', 'audio_pacing_cue'.\n"
         )
+
+        if content_format == "cinematic_movie":
+            format_rules = (
+                f"FORMAT: CINEMATIC ANIME/MOVIE EPISODE\n"
+                f"You are writing the 'Cold Open' scene of an episode. No YouTubers, no narration. Characters are in the world.\n"
+                f"In 'hook_script', write actual screenplays (e.g., [Character Name]: Dialogue + Action).\n"
+                f"1. hook_id: 'action_open' | Focus: Start immediately in the middle of a high-stakes physical or magical conflict.\n"
+                f"2. hook_id: 'suspense_dialogue' | Focus: Two characters facing off, intense dialogue before the clash.\n"
+                f"3. hook_id: 'world_build' | Focus: Slow environmental reveal with a single chilling line of dialogue at the end.\n"
+            )
+        elif content_format == "casual_commentary":
+            format_rules = (
+                f"FORMAT: CASUAL CREATOR COMMENTARY\n"
+                f"You are a friendly, natural content creator reviewing or reacting to the topic. Keep the language natural, like talking to a friend.\n"
+                f"In 'hook_script', write the opening lines of the creator.\n"
+                f"1. hook_id: 'friendly_question' | Focus: Ask a relatable question to the audience about the topic.\n"
+                f"2. hook_id: 'reaction_shock' | Focus: Start with genuine surprise or excitement about a specific detail.\n"
+                f"3. hook_id: 'hidden_detail' | Focus: Casually point out an easter egg or detail fans might have missed.\n"
+            )
+        else: # Default: explainer (aggressive hooks)
+            format_rules = (
+                f"FORMAT: AGGRESSIVE VIRAL EXPLAINER\n"
+                f"You are a short-form content retention engineer. Make the viewer stop scrolling instantly.\n"
+                f"In 'hook_script', write an aggressive voiceover line.\n"
+                f"1. hook_id: 'pattern_interrupt' | Focus: Complete violation of expectations within 1.2 seconds.\n"
+                f"2. hook_id: 'controversial_angle' | Focus: Attack a deeply rooted historical fan premise.\n"
+                f"3. hook_id: 'curiosity_loop' | Focus: Semantic frame cliffhanger withholding vital information.\n"
+            )
+
+        return base_instructions + format_rules
 
     def _execute_procedural_fallback(self, topic, state):
         """Algorithmic fallbacks configured by context strings if internet/API fails entirely."""
         self._log_info("Invoking algorithmic contextual local fallback sub-routines.")
-        dna = state.get("global_config", {}).get("animation_dna", "Anime")
         
-        # Tailor fallback visual/audio cues depending on context strings
-        if dna.lower() == "anime":
-            v_cue_1 = "High contrast cel-shaded lighting bloom with speedlines."
-            a_cue_1 = "Aggressive Phonk sub-bass drift explosion."
+        content_format = state.get("global_config", {}).get("content_format", "explainer")
+        
+        if content_format == "cinematic_movie":
+            hook_script_1 = f"[Shadowy Figure]: You thought {topic} was the end. It was just the prologue. (Steps out of the smoke)"
+        elif content_format == "casual_commentary":
+            hook_script_1 = f"Did you guys also notice that weird thing about {topic} in the latest release? I can't stop thinking about it."
         else:
-            v_cue_1 = "Cinematic volumetric smoke overlay with dramatic split frame."
-            a_cue_1 = "Sub-bass industrial drone impact wave."
+            hook_script_1 = f"Everything you understood about {topic} was constructed as a lie."
 
         fallback_hooks = [
             {
-                "hook_id": "pattern_interrupt",
-                "hook_type": "Pattern Interrupt",
-                "hook_script": f"Everything you understood about {topic} was constructed as a lie.",
-                "visual_concept_cue": v_cue_1,
-                "audio_pacing_cue": a_cue_1
+                "hook_id": "fallback_primary",
+                "hook_type": "Primary Fallback",
+                "hook_script": hook_script_1,
+                "visual_concept_cue": "System default visual load.",
+                "audio_pacing_cue": "System default audio bed."
             },
             {
-                "hook_id": "controversial_angle",
-                "hook_type": "Controversial Angle",
-                "hook_script": f"The entire fanbase completely misunderstood {topic}, and the truth is painful.",
-                "visual_concept_cue": "Rapid split-screen asset frame flashing.",
-                "audio_pacing_cue": "Instant sidechained frequency drop cutout."
+                "hook_id": "fallback_secondary",
+                "hook_type": "Secondary Fallback",
+                "hook_script": f"Backup script initialized for {topic}.",
+                "visual_concept_cue": "Standard frame.",
+                "audio_pacing_cue": "Standard audio."
             },
             {
-                "hook_id": "curiosity_loop",
-                "hook_type": "Curiosity Loop",
-                "hook_script": f"There is a single hidden reality within {topic} that changes everything. Watch closely.",
-                "visual_concept_cue": "Slow atmospheric push camera move.",
-                "audio_pacing_cue": "Low frequency structural atmospheric pad humming."
+                "hook_id": "fallback_tertiary",
+                "hook_type": "Tertiary Fallback",
+                "hook_script": f"System processing {topic} offline.",
+                "visual_concept_cue": "Standard frame.",
+                "audio_pacing_cue": "Standard audio."
             }
         ]
         return fallback_hooks
@@ -180,13 +215,14 @@ class CuriosityHookDesigner:
 
         dna_profile = state.get("global_config", {}).get("animation_dna", "Anime")
         vibe_profile = state.get("global_config", {}).get("vibe_tempo", "Phonk")
+        content_format = state.get("global_config", {}).get("content_format", "explainer")
 
-        prompt = self._build_contextual_prompt(topic, dna_profile, vibe_profile)
+        prompt = self._build_contextual_prompt(topic, dna_profile, vibe_profile, content_format)
         
         generated_data = None
         for attempt in range(1, self.max_retries + 1):
             try:
-                self._log_info(f"Executing cloud network transaction. Attempt {attempt} of {self.max_retries}.")
+                self._log_info(f"Executing cloud network transaction ({content_format.upper()} Mode). Attempt {attempt} of {self.max_retries}.")
                 response = self.model.generate_content(prompt)
                 parsed_json = json.loads(response.text)
                 
@@ -214,9 +250,9 @@ class CuriosityHookDesigner:
         state["pipeline_status"]["next_agent"] = "Ai_Agent_02"
         self._write_state(state)
         
-        self._log_info("Transaction ledger committed. Control sequence moved to Ai_Agent_02.")
+        self._log_info(f"Transaction ledger committed in {content_format} mode. Control sequence moved to Ai_Agent_02.")
         return True
 
 if __name__ == "__main__":
-    designer = CuriosityHookDesigner()
+    designer = UniversalHookDesigner()
     designer.execute()
