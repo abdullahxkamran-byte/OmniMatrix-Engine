@@ -2,56 +2,39 @@ import os
 import sys
 import json
 
-class SrtSubtitleCompiler:
-    def __init__(self, workspace_dir="znet_workspace"):
+class OmniMatrixSrtSubtitleCompiler:
+    def __init__(self, workspace_dir="znet_workspace", export_dir="znet_exports/subtitles"):
         self.agent_name = "Agent 13: srt_subtitle_compiler"
         self.workspace_dir = workspace_dir
+        self.export_dir = export_dir
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
 
         if not os.path.exists(self.workspace_dir):
             os.makedirs(self.workspace_dir)
+        if not os.path.exists(self.export_dir):
+            os.makedirs(self.export_dir)
 
-    def _load_precision_timestamps(self):
-        """
-        Loads global millisecond timestamps from Stage 12.
-        Falls back to manual bypass if upstream files are missing.
-        """
-        input_path = os.path.join(self.workspace_dir, "12_precision_timestamps.json")
-        if os.path.exists(input_path):
-            try:
-                with open(input_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                print(f"[{self.agent_name}] Success: Stage 12 timestamps loaded from '{input_path}'")
-                return data
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: File read error ({str(e)}). Activating fallback compiler.")
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        print(f"[{self.agent_name}] Workspace Alert: Upstream timing database is missing. Compiling mock data.")
-        return {
-            "precision_timeline": [
-                {
-                    "frame_index": 1,
-                    "srt_frame_start": "00:00:00,000",
-                    "srt_frame_end": "00:00:03,500",
-                    "spoken_voiceover": "Unleash your true hidden inner power",
-                    "aligned_words": [
-                        {"word": "Unleash", "srt_format_start": "00:00:00,000", "srt_format_end": "00:00:00,800"},
-                        {"word": "your", "srt_format_start": "00:00:00,800", "srt_format_end": "00:00:01,200"},
-                        {"word": "true", "srt_format_start": "00:00:01,200", "srt_format_end": "00:00:01,800"},
-                        {"word": "hidden", "srt_format_start": "00:00:01,800", "srt_format_end": "00:00:02,400"},
-                        {"word": "inner", "srt_format_start": "00:00:02,400", "srt_format_end": "00:00:02,900"},
-                        {"word": "power", "srt_format_start": "00:00:02,900", "srt_format_end": "00:00:03,500"}
-                    ]
-                }
-            ]
-        }
+    def _load_matrix_state(self):
+        """Loads the central OmniMatrix state."""
+        if not os.path.exists(self.state_file):
+            self.log("matrix_state.json not found. Upstream modules must run first.", "ERROR")
+            sys.exit(1)
+        with open(self.state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _save_matrix_state(self, state_data):
+        """Updates the central OmniMatrix state with subtitle paths."""
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=4)
+        self.log("OmniMatrix state successfully updated with subtitle metadata.")
 
     def _write_srt_file(self, blocks, file_path):
         """
-        Procedurally writes SRT blocks in strict formatting sequence:
-        Index
-        HH:MM:SS,mmm --> HH:MM:SS,mmm
-        Subtitle text
-        [empty line]
+        Writes standard SubRip Text (.srt) format.
+        Format: Index -> Start Time --> End Time -> Text
         """
         try:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -59,31 +42,39 @@ class SrtSubtitleCompiler:
                     f.write(f"{idx + 1}\n")
                     f.write(f"{block['start']} --> {block['end']}\n")
                     f.write(f"{block['text']}\n\n")
-            print(f"[{self.agent_name}] Success: Subtitles written to '{file_path}'")
+            self.log(f"Subtitles written successfully to '{file_path}'")
             return True
         except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to write file: {str(e)}")
+            self.log(f"Failed to write SRT file: {str(e)}", "ERROR")
             return False
 
-    def compile_subtitles(self):
-        """
-        Orchestrates compiling both Standard and Rapid-Fire high-impact Subtitle sequences.
-        """
-        timing_data = self._load_precision_timestamps()
-        timeline = timing_data.get("precision_timeline", [])
+    def execute_compilation(self):
+        state = self._load_matrix_state()
+        
+        # Verify Pipeline Sequence
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent and target_agent != "Agent_13":
+            self.log(f"Pipeline sequence mismatch. Expected {target_agent}, but running {self.agent_name}. Proceeding anyway for testing.", "WARNING")
+
+        audio_module = state.get("module_b_audio", {})
+        audio_timeline = audio_module.get("audio_timeline", [])
+        
+        if not audio_timeline:
+            self.log("Audio timeline is empty. Cannot compile subtitles.", "ERROR")
+            return
+
+        self.log("Compiling Standard and Rapid-Fire SRT subtitles from precision timestamps...")
 
         standard_blocks = []
         rapid_fire_blocks = []
 
-        print(f"[{self.agent_name}] Running Subtitle compiler engines...")
-
-        for frame in timeline:
-            f_idx = frame.get("frame_index", 1)
-            f_start = frame.get("srt_frame_start", "00:00:00,000")
-            f_end = frame.get("srt_frame_end", "00:00:01,000")
+        for frame in audio_timeline:
+            timing_data = frame.get("global_timing", {})
+            f_start = timing_data.get("srt_frame_start", "00:00:00,000")
+            f_end = timing_data.get("srt_frame_end", "00:00:01,000")
             full_voiceover = frame.get("spoken_voiceover", "").strip()
 
-            # Style 1: Standard Frame Block
+            # Compile Standard Subtitles (Full sentence per frame)
             if full_voiceover:
                 standard_blocks.append({
                     "start": f_start,
@@ -91,52 +82,41 @@ class SrtSubtitleCompiler:
                     "text": full_voiceover
                 })
 
-            # Style 2: Rapid-Fire (Word-by-Word) Block
-            words = frame.get("aligned_words", [])
+            # Compile Rapid-Fire Subtitles (Word by Word for Shorts/Reels style)
+            words = frame.get("words_alignment", [])
             for word_item in words:
                 word_text = word_item.get("word", "").strip()
-                # Clean word and convert to UPPERCASE for professional aggressive phonk impact!
-                uppercase_word = word_text.upper() 
+                uppercase_word = word_text.upper()
                 
                 if uppercase_word:
                     rapid_fire_blocks.append({
-                        "start": word_item.get("srt_format_start", f_start),
-                        "end": word_item.get("srt_format_end", f_end),
+                        "start": word_item.get("srt_start", f_start),
+                        "end": word_item.get("srt_end", f_end),
                         "text": uppercase_word
                     })
 
-        # Save both files physically to the workspace
-        standard_path = os.path.join(self.workspace_dir, "13_standard_subtitles.srt")
-        rapid_path = os.path.join(self.workspace_dir, "13_rapid_fire_subtitles.srt")
+        standard_path = os.path.join(self.export_dir, "standard_subtitles.srt")
+        rapid_path = os.path.join(self.export_dir, "rapid_fire_subtitles.srt")
 
         self._write_srt_file(standard_blocks, standard_path)
         self._write_srt_file(rapid_fire_blocks, rapid_path)
 
-        output_metadata = {
-            "agent_executed": self.agent_name,
+        # Update OmniMatrix State with physical paths for FFmpeg to use later
+        state["module_b_audio"]["subtitle_assets"] = {
             "standard_srt_path": standard_path,
             "rapid_fire_srt_path": rapid_path,
             "total_standard_segments": len(standard_blocks),
             "total_rapid_fire_words": len(rapid_fire_blocks)
         }
-
-        # Save manifest record
-        manifest_path = os.path.join(self.workspace_dir, "13_srt_compiler_output.json")
-        try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(output_metadata, f, indent=4)
-            print(f"[{self.agent_name}] Manifest registered: '{manifest_path}'")
-        except Exception as e:
-            print(f"[{self.agent_name}] Error saving manifest record: {str(e)}")
-
-        return output_metadata
+        
+        # OmniMatrix Pipeline Handshake
+        state["pipeline_status"]["last_active_agent"] = "Agent_13"
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_14"
+        
+        self._save_matrix_state(state)
+        self.log("Module B - Subtitle Compilation Complete. Handoff to Ai Agent 14.")
 
 if __name__ == "__main__":
-    compiler = SrtSubtitleCompiler()
-    output = compiler.compile_subtitles()
-    
-    print("\n--- Z-NET AUDIO ENGINE: AGENT 13 COMPLETED ---")
-    print(f"Standard SRT Blocks: {output['total_standard_segments']}")
-    print(f"Rapid-Fire (Shorts Style) SRT Words: {output['total_rapid_fire_words']}")
-    print("All subtitles mapped with millisecond boundaries!")
-    print("-----------------------------------------------")
+    compiler = OmniMatrixSrtSubtitleCompiler()
+    compiler.execute_compilation()
+    print("\n--- OMNIMATRIX MODULE B: AGENT 13 COMPLETE ---")
