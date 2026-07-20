@@ -1,12 +1,10 @@
 import os
-import re
 import sys
 import json
+import re
 import urllib.request
 import urllib.parse
-import urllib.error
 
-# Manual .env loader utility
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r") as f:
@@ -18,110 +16,49 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class AutonomousSfxAlchemistSynthesizer:
-    def __init__(self, workspace_dir="znet_workspace"):
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+
+class AiAgent17AutonomousSfxAlchemistSynthesizer:
+    def __init__(self, workspace_dir="znet_workspace", sfx_export_dir="znet_exports/audio_sfx"):
         self.agent_name = "Ai Agent 17: autonomous_sfx_alchemist_synthesizer"
         self.workspace_dir = workspace_dir
+        self.sfx_export_dir = sfx_export_dir
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+
+        if not os.path.exists(self.sfx_export_dir):
+            os.makedirs(self.sfx_export_dir)
+
         self.ollama_url = "http://localhost:11434/api/chat"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.model_local = "llama3"
         self.model_cloud = "gpt-4o-mini"
         
-        # API Keys
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
         self.freesound_api_key = os.environ.get("FREESOUND_API_KEY", None)
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        if GEMINI_AVAILABLE and self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
 
-    def _load_upstream_data(self):
-        storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
-        beat_path = os.path.join(self.workspace_dir, "14_phonk_beat_drop_map.json")
-        
-        action_cues = []
-        target_bpm = 130
-        
-        if os.path.exists(storyboard_path):
-            try:
-                with open(storyboard_path, "r", encoding="utf-8") as f:
-                    sb_data = json.load(f)
-                for i, panel in enumerate(sb_data.get("storyboard_panels", [])):
-                    desc = panel.get("visual_prompt", "").lower()
-                    ts = panel.get("timestamp_sec", float(i * 3.0))
-                    
-                    if any(x in desc for x in ["slash", "cut", "sword", "fight", "hit", "punch", "kick"]):
-                        action_cues.append({"timestamp_sec": ts, "event": "slash_impact", "intensity": 0.9, "desc": desc})
-                    elif any(x in desc for x in ["teleport", "dash", "flash", "speed", "zoom"]):
-                        action_cues.append({"timestamp_sec": ts, "event": "speed_swoosh", "intensity": 0.8, "desc": desc})
-                    elif any(x in desc for x in ["explode", "shatter", "break", "impact", "blast"]):
-                        action_cues.append({"timestamp_sec": ts, "event": "heavy_explosion", "intensity": 1.0, "desc": desc})
-                    else:
-                        action_cues.append({"timestamp_sec": ts, "event": "subtle_transition", "intensity": 0.5, "desc": desc})
-            except Exception as e:
-                print(f"[{self.agent_name}] Storyboard parse warning: {str(e)}")
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        if os.path.exists(beat_path):
-            try:
-                with open(beat_path, "r", encoding="utf-8") as f:
-                    b_data = json.load(f)
-                target_bpm = b_data.get("target_bpm", 130)
-            except Exception:
-                pass
+    def _load_matrix_state(self):
+        if not os.path.exists(self.state_file):
+            self.log("matrix_state.json not found. Upstream modules must run first.", "ERROR")
+            sys.exit(1)
+        with open(self.state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-        if not action_cues:
-            print(f"[{self.agent_name}] Workspace Alert: No upstream storyboard found. Creating default action SFX cues.")
-            action_cues = [
-                {"timestamp_sec": 1.5, "event": "speed_swoosh", "intensity": 0.85, "desc": "lightning fast speed teleport swoosh"},
-                {"timestamp_sec": 4.2, "event": "slash_impact", "intensity": 0.95, "desc": "sword slash air impact slice"},
-                {"timestamp_sec": 8.0, "event": "heavy_explosion", "intensity": 1.0, "desc": "giant anime energy blast explosion"}
-            ]
-
-        return {"target_bpm": target_bpm, "action_cues": action_cues}
-
-    def search_and_download_freesound_sfx(self, query, filename_prefix="17_sfx"):
-        """Searches and downloads high-quality preview sound effects from Freesound API."""
-        if not self.freesound_api_key:
-            print(f"[{self.agent_name}] Freesound API Key missing in environment. Skipping search.")
-            return None
-
-        # Clean search query
-        clean_query = re.sub(r'[^a-zA-Z0-9\s]', '', query).strip()
-        safe_query = urllib.parse.quote(clean_query)
-        
-        print(f"[{self.agent_name}] Querying Freesound API for: '{clean_query}'")
-        # Get mp3 preview URLs directly
-        url = f"https://freesound.org/apiv2/search/text/?query={safe_query}&token={self.freesound_api_key}&fields=id,name,previews&page_size=1"
-        
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=15) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                results = res_data.get("results", [])
-                if results:
-                    previews = results[0].get("previews", {})
-                    preview_url = previews.get("preview-hq-mp3") or previews.get("preview-lq-mp3")
-                    if preview_url:
-                        # Clean name for local file
-                        clean_filename_q = re.sub(r'\s+', '_', clean_query).lower()
-                        filename = f"{filename_prefix}_{clean_filename_q}.mp3"
-                        downloaded_path = self._download_file(preview_url, filename)
-                        return downloaded_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Freesound API query failed: {str(e)}")
-            
-        return None
-
-    def _download_file(self, url, filename):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response, open(file_path, 'wb') as out_file:
-                out_file.write(response.read())
-            print(f"[{self.agent_name}] Downloaded audio file: {file_path}")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Error downloading audio file: {str(e)}")
-            return None
+    def _save_matrix_state(self, state_data):
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=4)
+        self.log("OmniMatrix state successfully updated with SFX Alchemist Blueprints.")
 
     def _clean_json_response(self, raw_text):
         cleaned = raw_text.strip()
@@ -133,196 +70,181 @@ class AutonomousSfxAlchemistSynthesizer:
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
         return cleaned
 
-    def _save_to_workspace(self, data, filename="17_sfx_alchemist_synthesizer_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
+    def _download_file(self, url, filename):
+        file_path = os.path.join(self.sfx_export_dir, filename)
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: SFX Alchemist blueprints written to '{file_path}'")
+            req = urllib.request.Request(url, headers={'User-Agent': 'OmniMatrix-Engine/1.0'})
+            with urllib.request.urlopen(req, timeout=30) as response, open(file_path, 'wb') as out_file:
+                out_file.write(response.read())
+            self.log(f"Freesound SFX Downloaded: {filename}")
             return file_path
         except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save state files: {str(e)}")
+            self.log(f"Failed to download audio file: {str(e)}", "ERROR")
             return None
 
-    def design_synthesized_sfx(self):
-        input_data = self._load_upstream_data()
-        bpm = input_data.get("target_bpm", 130)
-        cues = input_data.get("action_cues", [])
+    def fetch_real_sfx(self, query):
+        """Attempts to find a real audio file via Freesound API to compliment the synth."""
+        if not self.freesound_api_key:
+            return None
 
-        print(f"[{self.agent_name}] Alchemist Engine active. Synthesizing custom anime sound designs...")
-
-        system_prompt = (
-            "You are an expert anime sound designer and dynamic synthesizer programmer. "
-            "Your job is to analyze video action cues (explosions, slashes, sweeps) and output precise synthesizer/DSP instructions to programmatically generate these sounds.\n"
-            "For each action cue, output exactly 1 sound design block inside a list named 'synthesized_sfx_parameters' with these exact parameters:\n"
-            "- 'timestamp_sec': float matching the action cue timestamp.\n"
-            "- 'sfx_class': string designating sound style (choose from: 'riser-whoosh', 'impact-blast', 'glitch-static', 'metallic-laser').\n"
-            "- 'oscillator_wave': string (choose from: 'noise-pink', 'sine-mod', 'sawtooth-aggressive', 'square-pulse').\n"
-            "- 'filter_envelope': object containing 'cutoff_start_hz' (integer, 200 to 12000), 'cutoff_end_hz' (integer, 20 to 8000), and 'resonance' (float, 0.1 to 0.9).\n"
-            "- 'duration_seconds': float length of the sound (choose between 0.3 and 3.0 seconds based on intensity).\n"
-            "- 'panning_trajectory': string specifying spatial motion (choose from: 'left-to-right', 'right-to-left', 'center-wide', 'ping-pong').\n"
-            "- 'reverb_room_size': float (scale from 0.0 to 1.0 for space wetness).\n"
-            "- 'vibe_narrative_note': a short stylistic note of what this synthesized sound should mimic (e.g., 'Saber slash slicing air', 'Instant teleport flash sound').\n"
-            "Format your output STRICTLY as a raw JSON object containing the list key 'synthesized_sfx_parameters'. "
-            "No conversational talking, no markdown backticks, no code block packaging. Return only valid JSON."
-        )
-
-        user_prompt = (
-            f"Target Video Pace: {bpm} BPM\n"
-            f"Active Storyboard Action Cues:\n{json.dumps(cues, indent=2)}"
-        )
-
+        clean_query = re.sub(r'[^a-zA-Z0-9\s]', '', query).strip()
+        safe_query = urllib.parse.quote(clean_query)
+        
+        url = f"[https://freesound.org/apiv2/search/text/?query=](https://freesound.org/apiv2/search/text/?query=){safe_query}&token={self.freesound_api_key}&fields=id,name,previews&page_size=1"
+        
         try:
-            if self.openai_api_key:
-                print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-                url = self.openai_url
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.openai_api_key}"
-                }
-                payload = {
-                    "model": self.model_cloud,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-            else:
-                print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-                url = self.ollama_url
-                headers = {"Content-Type": "application/json"}
-                payload = {
-                    "model": self.model_local,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "stream": False,
-                    "format": "json"
-                }
-
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                sfx_parameters = structured_output.get("synthesized_sfx_parameters", [])
-                
-                # Fetch Real Sound Effects if API key exists
-                if self.freesound_api_key:
-                    print(f"[{self.agent_name}] Querying Freesound to map real sound files to synthesizer blueprints...")
-                    for sfx in sfx_parameters:
-                        query_note = sfx.get("vibe_narrative_note", "anime swoosh")
-                        # Pick first 3 descriptive words to keep search broad and accurate
-                        search_q = " ".join(query_note.split()[:3])
-                        downloaded_path = self.search_and_download_freesound_sfx(search_q)
-                        sfx["downloaded_real_sfx_path"] = downloaded_path
-                
-                final_output = {
-                    "target_bpm": bpm,
-                    "agent_executed": self.agent_name,
-                    "synthesized_sfx_parameters": sfx_parameters
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            req = urllib.request.Request(url, headers={'User-Agent': 'OmniMatrix-Engine/1.0'})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_data = json.loads(response.read().decode("utf-8"))
+                results = res_data.get("results", [])
+                if results:
+                    previews = results[0].get("previews", {})
+                    preview_url = previews.get("preview-hq-mp3") or previews.get("preview-lq-mp3")
+                    if preview_url:
+                        clean_filename_q = re.sub(r'\s+', '_', clean_query).lower()[:20]
+                        filename = f"sfx_asset_{clean_filename_q}.mp3"
+                        return self._download_file(preview_url, filename)
         except Exception as e:
-            print(f"[{self.agent_name}] Connectivity/Parsing Exception: {str(e)}. Triggering procedural synthesizer fallback.")
-            return self._execute_procedural_fallback(bpm, cues)
+            self.log(f"Freesound search failed for '{query}': {str(e)}", "WARNING")
+        return None
 
-    def _execute_procedural_fallback(self, bpm, cues):
+    def design_sfx_blueprints_ai(self, bpm, action_cues):
+        """Queries AI logic cores to construct precise DSP synthesizer parameters."""
+        system_prompt = (
+            "You are an elite Hollywood sound designer and DSP synthesizer programmer. "
+            "Analyze the given video action cues and output precise synthesizer instructions to generate cinematic sounds from scratch.\n"
+            "Return STRICTLY a JSON object containing a list named 'synthesized_sfx_parameters'.\n"
+            "Each parameter block must contain:\n"
+            "- 'timestamp_sec': float matching the action cue timestamp.\n"
+            "- 'sfx_class': string (choose from: 'riser-whoosh', 'impact-blast', 'glitch-static', 'metallic-laser').\n"
+            "- 'oscillator_wave': string (choose from: 'noise-pink', 'sine-mod', 'sawtooth-aggressive', 'square-pulse').\n"
+            "- 'filter_envelope': object with 'cutoff_start_hz' (200-12000), 'cutoff_end_hz' (20-8000), and 'resonance' (0.1-0.9).\n"
+            "- 'duration_seconds': float (0.3 to 3.0).\n"
+            "- 'panning_trajectory': string ('left-to-right', 'right-to-left', 'center-wide', 'ping-pong').\n"
+            "- 'reverb_room_size': float (0.0 to 1.0).\n"
+            "- 'vibe_narrative_note': string (e.g., 'Saber slash slicing air').\n"
+        )
+        
+        user_prompt = f"Video BPM: {bpm}\nAction Cues:\n{json.dumps(action_cues, indent=2)}"
+
+        if GEMINI_AVAILABLE and self.gemini_api_key:
+            self.log("Routing to Core 1: Gemini AI for DSP sound architecture...")
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(
+                    system_prompt + "\n\n" + user_prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                return json.loads(response.text.strip()).get("synthesized_sfx_parameters", [])
+            except Exception as e:
+                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
+
+        if self.openai_api_key:
+            self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
+            url = self.openai_url
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+            payload = {
+                "model": self.model_cloud,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            try:
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_data = json.loads(response.read().decode("utf-8"))
+                    raw_text = res_data["choices"][0]["message"]["content"]
+                    return json.loads(self._clean_json_response(raw_text)).get("synthesized_sfx_parameters", [])
+            except Exception as e:
+                self.log(f"OpenAI Engine failed: {e}. Engaging Math Fallback.", "WARNING")
+
+        self.log("All AI Cores failed. Engaging Offline Procedural Synthesis Logic.", "STATUS")
+        return self._execute_procedural_fallback(action_cues)
+
+    def _execute_procedural_fallback(self, cues):
+        """Mathematical fallback for sound design generation."""
         sfx_list = []
         for cue in cues:
             ts = float(cue.get("timestamp_sec", 1.0))
-            event_type = cue.get("event", "subtle_transition")
             intensity = float(cue.get("intensity", 0.7))
-            desc = cue.get("desc", "anime action")
-
-            if "explosion" in event_type or intensity >= 0.95:
-                sfx_class = "impact-blast"
-                osc = "sawtooth-aggressive"
-                cutoff_start = 8000
-                cutoff_end = 60
-                res = 0.4
-                dur = 2.5
-                pan = "center-wide"
-                room = 0.85
-                note = "Heavy bass drop blast explosion impact"
-            elif "slash" in event_type or "speed" in event_type:
-                sfx_class = "riser-whoosh"
-                osc = "noise-pink"
-                cutoff_start = 200
-                cutoff_end = 10000
-                res = 0.7
-                dur = 0.8
-                pan = "left-to-right"
-                room = 0.35
-                note = "Cinematic white noise sword swoosh transition"
+            
+            if intensity >= 0.9:
+                sfx_class, osc, note = "impact-blast", "sawtooth-aggressive", "Heavy cinematic impact"
+            elif intensity >= 0.7:
+                sfx_class, osc, note = "riser-whoosh", "noise-pink", "Fast air swoosh"
             else:
-                sfx_class = "glitch-static"
-                osc = "square-pulse"
-                cutoff_start = 4000
-                cutoff_end = 3000
-                res = 0.5
-                dur = 0.4
-                pan = "ping-pong"
-                room = 0.15
-                note = "Lo-fi synth pop transition glitch"
-
-            downloaded_path = None
-            if self.freesound_api_key:
-                # Search using the description from the fallback cue
-                search_q = " ".join(desc.split()[:3])
-                downloaded_path = self.search_and_download_freesound_sfx(search_q)
+                sfx_class, osc, note = "glitch-static", "square-pulse", "UI glitch transition"
 
             sfx_list.append({
                 "timestamp_sec": ts,
                 "sfx_class": sfx_class,
                 "oscillator_wave": osc,
-                "filter_envelope": {
-                    "cutoff_start_hz": cutoff_start,
-                    "cutoff_end_hz": cutoff_end,
-                    "resonance": res
-                },
-                "duration_seconds": dur,
-                "panning_trajectory": pan,
-                "reverb_room_size": room,
-                "vibe_narrative_note": note,
-                "downloaded_real_sfx_path": downloaded_path
+                "filter_envelope": {"cutoff_start_hz": 8000, "cutoff_end_hz": 100, "resonance": 0.5},
+                "duration_seconds": 1.5,
+                "panning_trajectory": "center-wide",
+                "reverb_room_size": 0.6,
+                "vibe_narrative_note": note
             })
+        return sfx_list
 
-        fallback_output = {
-            "target_bpm": bpm,
-            "agent_executed": f"{self.agent_name} (Procedural Synthesis Fallback)",
-            "synthesized_sfx_parameters": sfx_list
-        }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+    def process_sfx_generation(self):
+        state = self._load_matrix_state()
+        
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent and target_agent != "Ai_Agent_17":
+            self.log(f"Pipeline sequence mismatch. Expected {target_agent}, but executing {self.agent_name}.", "WARNING")
+
+        # Fetch action cues from Module A (Visual Storyboard) if available
+        # Fallback to generating cues based on Beat Map
+        storyboard = state.get("module_a_scripting", {}).get("storyboard_mapping", {})
+        beat_map_data = state.get("module_b_audio", {}).get("phonk_beat_map", {})
+        
+        bpm = beat_map_data.get("target_bpm", 130)
+        action_cues = []
+
+        if storyboard:
+            panels = storyboard.get("panels", [])
+            for panel in panels:
+                ts = panel.get("timestamp_sec", 0.0)
+                desc = panel.get("prompt", "").lower()
+                intensity = 0.9 if any(x in desc for x in ["fight", "punch", "explode"]) else 0.5
+                action_cues.append({"timestamp_sec": ts, "intensity": intensity, "desc": desc})
+        
+        if not action_cues:
+            self.log("No Visual Storyboard found. Extrapolating Action Cues from Audio Beat Map.", "WARNING")
+            events = beat_map_data.get("beat_sync_events", [])
+            for ev in events:
+                if ev.get("impact_intensity", 0.0) > 0.6:
+                    action_cues.append({"timestamp_sec": ev.get("timestamp_sec"), "intensity": ev.get("impact_intensity"), "desc": "Heavy music beat impact transition"})
+
+        if not action_cues:
+            self.log("No data available to generate SFX. Exiting.", "ERROR")
+            return
+
+        self.log(f"Alchemist Engine active. Synthesizing blueprints for {len(action_cues)} visual cues...")
+        sfx_blueprints = self.design_sfx_blueprints_ai(bpm, action_cues)
+
+        # Enhance blueprints by attempting to download complimentary real audio
+        for sfx in sfx_blueprints:
+            query = " ".join(sfx.get("vibe_narrative_note", "").split()[:3])
+            real_audio_path = self.fetch_real_sfx(query)
+            if real_audio_path:
+                sfx["downloaded_real_sfx_path"] = real_audio_path
+
+        state["module_b_audio"]["sfx_synthesizer_blueprints"] = sfx_blueprints
+        
+        # Pipeline Handshake
+        state["pipeline_status"]["last_active_agent"] = "Ai_Agent_17"
+        state["pipeline_status"]["next_agent"] = "Agent_18"
+        
+        self._save_matrix_state(state)
+        self.log("Success! SFX architecture integrated into OmniMatrix. Handoff to Agent 18.")
 
 if __name__ == "__main__":
-    synthesizer = AutonomousSfxAlchemistSynthesizer()
-    output = synthesizer.design_synthesized_sfx()
-    
-    print("\n--- Z-NET AUDIO ENGINE: AGENT 17 SFX SYNTHESIS COMPLETED ---")
-    print(f"Syncing visuals at: {output['target_bpm']} BPM")
-    print(f"Total Synthesized SFX blueprints designed: {len(output['synthesized_sfx_parameters'])}")
-    if output["synthesized_sfx_parameters"]:
-        sample = output["synthesized_sfx_parameters"][0]
-        print(f"Sample Trigger: {sample['timestamp_sec']}s | Class: {sample['sfx_class']} ({sample['oscillator_wave']})")
-        print(f"Real SFX Path: {sample.get('downloaded_real_sfx_path', 'N/A')}")
-    print("-------------------------------------------------------------")
+    synthesizer = AiAgent17AutonomousSfxAlchemistSynthesizer()
+    synthesizer.process_sfx_generation()
+    print("\n--- OMNIMATRIX MODULE B: AGENT 17 COMPLETE ---")
