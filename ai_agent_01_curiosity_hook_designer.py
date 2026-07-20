@@ -1,158 +1,130 @@
 import os
-import re
 import sys
 import json
-import urllib.request
-import urllib.error
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class CuriosityHookDesigner:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 01: curiosity_hook_designer"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_name = "llama3"
-        self.workspace_dir = workspace_dir
+    def __init__(self, state_file_path="matrix_state.json"):
+        self.agent_name = "Agent_01_Curiosity_Hook_Designer"
+        self.state_file = state_file_path
         
-        # Physical workspace directory creation
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _clean_json_response(self, raw_text):
-        """
-        Extracts and cleans raw JSON from the LLM response to prevent structure crashes.
-        """
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
+            print(f"[{self.agent_name}] CRITICAL ERROR: GEMINI_API_KEY not found in environment.")
+            sys.exit(1)
             
-        return cleaned
-
-    def _save_to_workspace(self, data, filename="01_curiosity_hooks.json"):
-        """
-        Persists the generated dynamic output to physical disk storage.
-        """
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: State persisted to physical file at '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Could not write state file: {str(e)}")
-            return None
-
-    def generate_hooks(self, core_topic):
-        """
-        Takes any dynamic topic in the universe and processes it via the local LLM matrix.
-        """
-        print(f"[{self.agent_name}] Initializing execution loop for dynamic topic: '{core_topic}'")
-
-        system_prompt = (
-            "You are an expert short-form video retention strategist for YouTube Shorts and TikTok. "
-            "Your job is to generate highly engaging, intense, and high-retention hook variations. "
-            "Provide exactly 3 distinct hook variations:\n"
-            "1. Pattern Interrupt (creates dynamic shock)\n"
-            "2. Controversial Angle (challenges a well-known community belief)\n"
-            "3. Curiosity Loop (forces them to watch until the absolute end).\n"
-            "Format your response STRICTLY as a raw JSON object containing a list named 'hooks', "
-            "where each hook item has the following keys: 'hook_id', 'hook_text', and 'visual_concept_cue'. "
-            "Do not include any greeting, conversational text, or explanation. Only output valid JSON."
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            generation_config={"response_mime_type": "application/json"}
         )
 
-        user_prompt = f"Topic: {core_topic}"
-
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "stream": False,
-            "format": "json"
-        }
-
+    def _read_state(self):
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                self.ollama_url, 
-                data=data, 
-                headers={"Content-Type": "application/json"}
-            )
-            
-            with urllib.request.urlopen(req, timeout=45) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "source_topic": core_topic,
-                    "agent_executed": self.agent_name,
-                    "hooks": structured_output.get("hooks", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
-        except urllib.error.URLError as e:
-            print(f"[{self.agent_name}] Connection Failure: Local LLM engine is offline. Activating fallback handler.")
-            return self._execute_procedural_fallback(core_topic)
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"[{self.agent_name}] Parser Failure: LLM returned malformed data. Re-routing to structured fallback.")
-            return self._execute_procedural_fallback(core_topic)
-
-    def _execute_procedural_fallback(self, core_topic):
-        """
-        Dynamically constructs procedural fallbacks for any topic when offline.
-        """
-        fallback_data = {
-            "source_topic": core_topic,
-            "agent_executed": f"{self.agent_name} (Procedural Fallback Mode)",
-            "hooks": [
-                {
-                    "hook_id": "pattern_interrupt",
-                    "hook_text": f"The hidden dark conspiracy surrounding {core_topic} that everyone missed.",
-                    "visual_concept_cue": "Extreme rapid zoom, flash glitch effect matching sub-bass heavy frequency drop."
-                },
-                {
-                    "hook_id": "controversial_angle",
-                    "hook_text": f"Why your entire perspective on {core_topic} is completely incorrect.",
-                    "visual_concept_cue": "Splitscreen visual frame comparison with high contrast cel-shaded lighting bloom."
-                },
-                {
-                    "hook_id": "curiosity_loop",
-                    "hook_text": f"Pay very close attention, because this single dynamic detail changes absolutely everything about {core_topic}.",
-                    "visual_concept_cue": "Slow atmospheric pan moving into a dark, foggy environment grid."
-                }
-            ]
-        }
-        self._save_to_workspace(fallback_data)
-        return fallback_data
-
-if __name__ == "__main__":
-    designer = CuriosityHookDesigner()
-    
-    # Check if a dynamic topic was passed via command line terminal argument
-    if len(sys.argv) > 1:
-        # Example: python ai_agent_01_curiosity_hook_designer.py "Dunia ki koi bhi cheez"
-        input_topic = " ".join(sys.argv[1:])
-    else:
-        # Prompt user dynamically if no argument was passed to terminal
-        print("\n--- Z-NET ABSOLUTE ENGINE CORE SETUP ---")
-        input_topic = input("Enter any topic in the universe to process: ").strip()
-        if not input_topic:
-            print("[System Error] Topic cannot be empty. Terminating execution.")
+            with open(self.state_file, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print(f"[{self.agent_name}] ERROR: matrix_state.json not found. Agent 65 must initialize it first.")
             sys.exit(1)
 
-    result_data = designer.generate_hooks(input_topic)
-    
-    print("\n--- Z-NET DYNAMIC PROCESSING COMPLETE ---")
-    print(json.dumps(result_data, indent=4))
-    print(f"Output stored physically in workspace directory.")
+    def _write_state(self, state_data):
+        with open(self.state_file, 'w') as f:
+            json.dump(state_data, f, indent=4)
+        print(f"[{self.agent_name}] SUCCESS: Hook data written to matrix_state.json")
+
+    def execute(self):
+        """
+        Main worker execution sequence. Reads assigned topic from Agent 65,
+        generates universal hooks, and hands over control to Agent 02.
+        """
+        state = self._read_state()
+        
+        # Verify if it is actually Agent 01's turn to run
+        current_active_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if current_active_agent != "Ai_Agent_01":
+            print(f"[{self.agent_name}] STANDBY: It is not my turn. Current agent in queue is {current_active_agent}.")
+            return False
+
+        # Read the core topic assigned by Agent 65
+        topic = state.get("runtime_data", {}).get("core_topic", "")
+        if not topic:
+            print(f"[{self.agent_name}] ERROR: No topic assigned by Agent 65. Aborting task.")
+            return False
+
+        print(f"[{self.agent_name}] Booting sequence. Assigned Topic: '{topic}'")
+
+        # Universal Prompt: Designed to handle anime, comics, movies, or abstract concepts
+        system_prompt = (
+            "You are an elite, universal short-form content strategist. "
+            f"Your objective is to generate viral hooks for the topic: '{topic}'. "
+            "This topic could be an anime battle, comic book lore, a movie theory, or a real-world concept. "
+            "Adapt your tone automatically to fit the epic, mysterious, or kinetic nature of the topic. "
+            "Generate exactly 3 hook variations:\n"
+            "1. Pattern_Interrupt: A shocking, fast-paced opening statement that visually and audibly jolts the viewer.\n"
+            "2. Controversial_Angle: A bold statement that directly challenges the fanbase's most common belief.\n"
+            "3. Curiosity_Loop: An open-ended statement that introduces a hidden detail forcing them to watch until the end.\n\n"
+            "Output MUST be a strictly formatted JSON array containing exactly 3 objects. "
+            "Each object must contain keys: 'hook_type', 'hook_script', and 'visual_cue'. "
+            "No markdown, no conversation, pure JSON data."
+        )
+
+        try:
+            print(f"[{self.agent_name}] Communicating with Neural Brain (Gemini)...")
+            response = self.model.generate_content(system_prompt)
+            generated_hooks = json.loads(response.text)
+            
+            # Inject generated data into the Module A workspace within the global state
+            if "module_a_scripting" not in state["runtime_data"]:
+                state["runtime_data"]["module_a_scripting"] = {}
+                
+            state["runtime_data"]["module_a_scripting"]["agent_01_hooks"] = generated_hooks
+            
+            # Handoff control to the next agent in the pipeline
+            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_01"
+            state["pipeline_status"]["next_agent"] = "Ai_Agent_02"
+            
+            self._write_state(state)
+            print(f"[{self.agent_name}] Task complete. Passing baton to Ai_Agent_02.")
+            return True
+
+        except Exception as e:
+            print(f"[{self.agent_name}] CRITICAL API FAILURE: {str(e)}")
+            self._apply_fallback(state, topic)
+            return False
+
+    def _apply_fallback(self, state, topic):
+        """Generates dynamic offline fallbacks so the pipeline does not break."""
+        print(f"[{self.agent_name}] Engaging universal fallback protocol.")
+        fallback_hooks = [
+            {
+                "hook_type": "Pattern_Interrupt",
+                "hook_script": f"Everything you thought you knew about {topic} is completely wrong.",
+                "visual_cue": "Rapid zoom-in with chromatic aberration and sub-bass impact."
+            },
+            {
+                "hook_type": "Controversial_Angle",
+                "hook_script": f"The biggest debate regarding {topic} has already been solved, and fans hate the answer.",
+                "visual_cue": "Split-screen comparison with a heavy vignette."
+            },
+            {
+                "hook_type": "Curiosity_Loop",
+                "hook_script": f"There is one hidden detail in {topic} that changes the entire storyline. Watch closely.",
+                "visual_cue": "Slow, cinematic pan revealing a blurred background element."
+            }
+        ]
+        
+        if "module_a_scripting" not in state["runtime_data"]:
+            state["runtime_data"]["module_a_scripting"] = {}
+            
+        state["runtime_data"]["module_a_scripting"]["agent_01_hooks"] = fallback_hooks
+        state["pipeline_status"]["last_active_agent"] = "Ai_Agent_01"
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_02"
+        self._write_state(state)
+
+if __name__ == "__main__":
+    # This block allows Agent 01 to be triggered as a standalone script by the Conductor (Agent 65).
+    worker_node = CuriosityHookDesigner()
+    worker_node.execute()
