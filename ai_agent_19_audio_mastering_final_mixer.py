@@ -1,73 +1,58 @@
 import os
-import re
 import sys
 import json
+import re
 import urllib.request
-import urllib.error
 
-class AudioMasteringFinalMixer:
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
+
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+
+class AiAgent19AudioMasteringFinalMixer:
     def __init__(self, workspace_dir="znet_workspace"):
         self.agent_name = "Ai Agent 19: audio_mastering_final_mixer"
         self.workspace_dir = workspace_dir
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+
         self.ollama_url = "http://localhost:11434/api/chat"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.model_local = "llama3"
         self.model_cloud = "gpt-4o-mini"
         
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        if GEMINI_AVAILABLE and self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
 
-    def _load_all_upstream_audio_modules(self):
-        # Saare pichle audio agents ke state files ko compile karta hai final master ke liye
-        stages = {
-            "sidechain": "16_sidechain_compression_blueprint.json",
-            "sfx": "17_sfx_alchemist_synthesizer_blueprint.json",
-            "bgm_vibe": "18_bgm_vibe_matcher_blueprint.json"
-        }
-        
-        compiled_audio_blueprint = {
-            "has_sidechain": False,
-            "has_sfx": False,
-            "has_bgm_automation": False,
-            "meta": {}
-        }
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        # 1. Load Sidechain Blueprint
-        sc_path = os.path.join(self.workspace_dir, stages["sidechain"])
-        if os.path.exists(sc_path):
-            try:
-                with open(sc_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                compiled_audio_blueprint["sidechain_triggers"] = data.get("compression_triggers", [])
-                compiled_audio_blueprint["has_sidechain"] = True
-            except Exception:
-                pass
+    def _load_matrix_state(self):
+        if not os.path.exists(self.state_file):
+            self.log("matrix_state.json not found. Run upstream modules first.", "ERROR")
+            sys.exit(1)
+        with open(self.state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-        # 2. Load SFX Synthesizer Blueprint
-        sfx_path = os.path.join(self.workspace_dir, stages["sfx"])
-        if os.path.exists(sfx_path):
-            try:
-                with open(sfx_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                compiled_audio_blueprint["synthesized_sfx"] = data.get("synthesized_sfx_parameters", [])
-                compiled_audio_blueprint["has_sfx"] = True
-            except Exception:
-                pass
-
-        # 3. Load BGM Vibe Automation
-        bgm_path = os.path.join(self.workspace_dir, stages["bgm_vibe"])
-        if os.path.exists(bgm_path):
-            try:
-                with open(bgm_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                compiled_audio_blueprint["bgm_segments"] = data.get("bgm_automation_segments", [])
-                compiled_audio_blueprint["has_bgm_automation"] = True
-            except Exception:
-                pass
-
-        return compiled_audio_blueprint
+    def _save_matrix_state(self, state_data):
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=4)
+        self.log("OmniMatrix state successfully updated with Final Audio Mastering Blueprint.")
 
     def _clean_json_response(self, raw_text):
         cleaned = raw_text.strip()
@@ -79,133 +64,110 @@ class AudioMasteringFinalMixer:
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
         return cleaned
 
-    def _save_to_workspace(self, data, filename="19_final_mastered_audio_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Final audio mastering blueprint saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save mastering state: {str(e)}")
-            return None
-
-    def design_final_mix_master(self):
-        compiled_data = self._load_all_upstream_audio_modules()
-        print(f"[{self.agent_name}] Mastering Console active. Calculating global loudness and EQ cuts...")
-
+    def fetch_mastering_ai(self, audio_signals_summary):
+        """Uses AI logic cores to design professional mastering chains."""
         system_prompt = (
-            "You are a legendary audio mastering engineer specialized in optimizing phonk/bass-heavy tracks for phone speakers and headphones.\n"
-            "Your job is to analyze all compiled audio parameters and output final mastering/mixing console settings "
-            "to achieve maximum loudness without digital clipping (limiting at -0.1 dB or -1.0 dB True Peak).\n"
-            "Output exactly 1 mastering blueprint inside a JSON structure with these keys:\n"
-            "- 'target_loudness_lufs': float representing target loudness (choose between -10.0 and -6.0 LUFS for competitive mobile short platform standards).\n"
-            "- 'master_true_peak_limiter_db': float (choose between -1.0 and -0.1 dB to prevent platform conversion distortion).\n"
-            "- 'stereo_widening_factor': float (scale from 1.0 to 1.8; higher means wider background elements, keeping vocals dead-center).\n"
-            "- 'low_cut_filter_hz': integer representing low-end rumble cleanup (choose between 20 and 35 Hz to clean sub mud).\n"
-            "- 'vocal_presence_boost_db': float representing boost in high-mids (1.5kHz to 3kHz, choose between +1.0 and +3.0 dB).\n"
+            "You are a legendary audio mastering engineer specialized in optimizing high-energy videos for mobile platforms (TikTok/Shorts).\n"
+            "Analyze the compiled audio components and output final mixing/mastering console settings to achieve maximum punch without distortion.\n"
+            "Return STRICTLY a JSON object containing the mastering parameters with these keys:\n"
+            "- 'target_loudness_lufs': float (choose between -11.0 and -7.0 LUFS for competitive mobile standards).\n"
+            "- 'master_true_peak_limiter_db': float (-1.0 to -0.1 dB to prevent clipping during platform compression).\n"
+            "- 'stereo_widening_factor': float (1.0 to 1.5; widens BGM/SFX while keeping voice central).\n"
+            "- 'low_cut_filter_hz': integer (20 to 40 Hz to remove sub-harmonic mud).\n"
+            "- 'vocal_presence_boost_db': float (1.0 to 4.0 dB boost in the 2kHz-4kHz range for clarity).\n"
             "- 'glue_compressor_settings': object containing 'threshold_db' (float, -2.0 to -6.0), 'ratio' (string, '1.5:1' or '2:1'), and 'makeup_gain_db' (float).\n"
-            "Format your output STRICTLY as a raw JSON object containing these master settings. "
-            "No conversational talk, no markdown backticks, no code block formats. Output only valid JSON."
         )
+        
+        user_prompt = f"Active Audio Elements in Mix:\n{json.dumps(audio_signals_summary, indent=2)}"
+
+        if GEMINI_AVAILABLE and self.gemini_api_key:
+            self.log("Routing to Core 1: Gemini AI for Mastering Console Logic...")
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(
+                    system_prompt + "\n\n" + user_prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                return json.loads(response.text.strip())
+            except Exception as e:
+                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
 
         if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
+            self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
             url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
             payload = {
                 "model": self.model_cloud,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Compiled Audio Signal Map:\n{json.dumps(compiled_data, indent=2)}"}
+                    {"role": "user", "content": user_prompt}
                 ],
                 "response_format": {"type": "json_object"}
             }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Compiled Audio Signal Map:\n{json.dumps(compiled_data, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
+            try:
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_data = json.loads(response.read().decode("utf-8"))
+                    raw_text = res_data["choices"][0]["message"]["content"]
+                    return json.loads(self._clean_json_response(raw_text))
+            except Exception as e:
+                self.log(f"OpenAI Engine failed: {e}. Engaging Offline Math Mastering.", "WARNING")
 
-        try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "compiled_signals_summary": {
-                        "sidechain_active": compiled_data["has_sidechain"],
-                        "sfx_active": compiled_data["has_sfx"],
-                        "bgm_active": compiled_data["has_bgm_automation"]
-                    },
-                    "mastering_parameters": structured_output
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
+        self.log("All AI API Cores failed. Engaging Procedural Fallback Mastering.", "STATUS")
+        return self._execute_procedural_fallback()
 
-        except Exception as e:
-            print(f"[{self.agent_name}] Network Exception: {str(e)}. Running procedural mastering console.")
-            return self._execute_procedural_fallback(compiled_data)
-
-    def _execute_procedural_fallback(self, compiled_data):
-        # Generates industry standard mastering limits mathematically
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Master Fallback)",
-            "compiled_signals_summary": {
-                "sidechain_active": compiled_data["has_sidechain"],
-                "sfx_active": compiled_data["has_sfx"],
-                "bgm_active": compiled_data["has_bgm_automation"]
-            },
-            "mastering_parameters": {
-                "target_loudness_lufs": -8.0,
-                "master_true_peak_limiter_db": -0.5,
-                "stereo_widening_factor": 1.4,
-                "low_cut_filter_hz": 30,
-                "vocal_presence_boost_db": 1.5,
-                "glue_compressor_settings": {
-                    "threshold_db": -4.0,
-                    "ratio": "2:1",
-                    "makeup_gain_db": 2.5
-                }
+    def _execute_procedural_fallback(self):
+        """Mathematical fallback for industry standard mastering limits."""
+        return {
+            "target_loudness_lufs": -9.0,
+            "master_true_peak_limiter_db": -0.5,
+            "stereo_widening_factor": 1.3,
+            "low_cut_filter_hz": 30,
+            "vocal_presence_boost_db": 2.0,
+            "glue_compressor_settings": {
+                "threshold_db": -4.0,
+                "ratio": "2:1",
+                "makeup_gain_db": 2.0
             }
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def process_final_mix(self):
+        state = self._load_matrix_state()
+        
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent and target_agent != "Ai_Agent_19":
+            self.log(f"Pipeline sequence mismatch. Expected {target_agent}, but executing {self.agent_name}.", "WARNING")
+
+        audio_module = state.get("module_b_audio", {})
+        
+        # Compile a summary of all active audio layers for the AI to analyze
+        audio_signals_summary = {
+            "has_sidechain_ducking": audio_module.get("sidechain_compression_applied", False),
+            "total_sfx_layers": len(audio_module.get("sfx_synthesizer_blueprints", [])),
+            "bgm_automation_active": "bgm_automation_map" in audio_module,
+            "voiceover_tracks_count": len(audio_module.get("audio_timeline", [])),
+            "beat_drops_count": len(audio_module.get("phonk_beat_map", {}).get("beat_sync_events", []))
+        }
+
+        self.log("Mastering Console active. Calculating global loudness, True Peak, and EQ curves...")
+        
+        mastering_parameters = self.fetch_mastering_ai(audio_signals_summary)
+
+        state["module_b_audio"]["final_mastering_blueprint"] = {
+            "signal_summary_used": audio_signals_summary,
+            "mastering_parameters": mastering_parameters
+        }
+        
+        # Pipeline Handshake - Handoff to Agent 20 (Audio Renderer / Next Module)
+        state["pipeline_status"]["last_active_agent"] = "Ai_Agent_19"
+        state["pipeline_status"]["next_agent"] = "Agent_20"
+        
+        self._save_matrix_state(state)
+        self.log("Success! Final mastering parameters locked into OmniMatrix. Module B Audio logic is fully compiled.")
 
 if __name__ == "__main__":
-    mixer = AudioMasteringFinalMixer()
-    output = mixer.design_final_mix_master()
-    
-    print("\n--- Z-NET AUDIO ENGINE: AGENT 19 MASTER COMPLETED ---")
-    print(f"Compilation Scan - Sidechain: {output['compiled_signals_summary']['sidechain_active']} | SFX: {output['compiled_signals_summary']['sfx_active']} | BGM: {output['compiled_signals_summary']['bgm_active']}")
-    mp = output["mastering_parameters"]
-    print(f"Output Standard: {mp['target_loudness_lufs']} LUFS | Ceiling: {mp['master_true_peak_limiter_db']}dB True Peak")
-    print(f"Glue EQ: High-mid vocal boost of +{mp['vocal_presence_boost_db']}dB | Low cut applied at {mp['low_cut_filter_hz']}Hz")
-    print("------------------------------------------------------")
+    mixer = AiAgent19AudioMasteringFinalMixer()
+    mixer.process_final_mix()
+    print("\n--- OMNIMATRIX MODULE B: AGENT 19 MASTER COMPLETE ---")
