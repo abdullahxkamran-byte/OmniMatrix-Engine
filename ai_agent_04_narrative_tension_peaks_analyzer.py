@@ -2,131 +2,150 @@ import os
 import re
 import sys
 import json
+import time
 import urllib.request
 import urllib.error
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class NarrativeTensionPeaksAnalyzer:
-    def __init__(self, workspace_dir="znet_workspace"):
+    def __init__(self, state_file_path="matrix_state.json"):
         self.agent_name = "Ai Agent 04: narrative_tension_peaks_analyzer"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+        self.state_file = state_file_path
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _load_previous_stage(self):
-        """
-        Dynamically imports structural states from stage 3. If missing, 
-        prompts the user to declare a topic and runs a universal emergency generator.
-        """
-        input_file_path = os.path.join(self.workspace_dir, "03_visual_storyboard.json")
-        if os.path.exists(input_file_path):
-            try:
-                with open(input_file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                print(f"[{self.agent_name}] Success: Stage 3 storyboard state imported from '{input_file_path}'")
-                return data
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: File read error ({str(e)}). Switching to prompt bypass.")
+        # Network Resilience
+        self.max_retries = 3
+        self.retry_delay = 3
         
-        # Interactive fallback prompt if workspace upstream data is absent
-        print(f"[{self.agent_name}] Pipeline Gap: Upstream storyboard file is missing.")
-        user_input = input("Enter any topic to execute tension peaks mapping: ").strip()
-        if not user_input:
-            print("[System Error] Empty topic value. Halting execution.")
-            sys.exit(1)
+        # API Keys Initialization
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Setup Gemini
+        if self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
+            self.gemini_model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                generation_config={"response_mime_type": "application/json"}
+            )
             
-        return {
-            "source_topic": user_input,
-            "storyboard_frames": [
-                {
-                    "frame_index": 1,
-                    "spoken_voiceover": f"Do not ignore this universal warning about {user_input}.",
-                    "scenic_art_prompt": f"Dynamic silhouette standing in front of cosmic distortion."
-                }
-            ]
-        }
+        # OpenAI/Ollama Setup
+        self.openai_url = "https://api.openai.com/v1/chat/completions"
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_openai = "gpt-4o-mini"
+        self.model_local = "llama3"
+
+    def _log_info(self, message):
+        print(f"[{self.agent_name}] INFO: {message}")
+
+    def _log_error(self, message):
+        print(f"[{self.agent_name}] ERROR: {message}", file=sys.stderr)
+
+    def _read_state(self):
+        if not os.path.exists(self.state_file):
+            self._log_error("Critical Error: matrix_state.json not found.")
+            sys.exit(1)
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self._log_error(f"Failed to read state file: {str(e)}")
+            sys.exit(1)
+
+    def _write_state(self, state_data):
+        try:
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                json.dump(state_data, f, indent=4)
+        except Exception as e:
+            self._log_error(f"Failed to persist state: {str(e)}")
 
     def _clean_json_response(self, raw_text):
-        """
-        Strips backticks, markdown markers, and extraneous symbols to isolate raw JSON.
-        """
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-        
         start_idx = cleaned.find('{')
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
         return cleaned
 
-    def _save_to_workspace(self, data, filename="04_tension_peaks.json"):
-        """
-        Persists the final processed tension timeline JSON inside the Z-Net workspace folder.
-        """
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Tension peak configuration written to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save state files: {str(e)}")
-            return None
-
-    def analyze_tension(self):
-        """
-        Processes voiceovers and visual cues to compute dynamic keyframes for typography,
-        editing pacing, audio compression, and color shifts.
-        """
-        input_data = self._load_previous_stage()
-        topic = input_data.get("source_topic", "Dynamic Target")
-        frames = input_data.get("storyboard_frames", [])
-
-        print(f"[{self.agent_name}] Mapping visual and auditory stress curves for: '{topic}'")
-
-        system_prompt = (
-            "You are an expert anime sound director and cinematic editor. "
-            "Your job is to read a video storyboard and output a precise, synchronized list of dynamic tension curves.\n"
-            "Analyze each frame and provide the following variables strictly mapped inside a list named 'tension_timeline':\n"
+    def _build_universal_prompt(self, topic, content_format, frames):
+        """Dynamically calculates tension rules based on the video format type."""
+        
+        base_system = (
+            "You are an expert anime sound director, VFX pacing analyst, and cinematic editor. "
+            "Read the provided storyboard frames and output a precise list of dynamic tension curves.\n"
+            "Analyze EACH frame (regardless of how many there are) and provide these variables mapped inside "
+            "a list named 'tension_timeline':\n"
             "- 'frame_index': matching integer representing the frame order.\n"
             "- 'tension_score': integer from 1 (calm/whisper) to 10 (intense climax/explosive screen shake).\n"
             "- 'pacing_instruction': string detailing editing cut rate (e.g., 'slow-hold', 'double-time-cuts', 'glitch-jump').\n"
-            "- 'highlight_keywords': list of strings of exactly 1-3 highly critical words in the voiceover that should be styled with explosive kinetic scaling.\n"
+            "- 'highlight_keywords': list of exactly 1-3 critical words in the voiceover to style with kinetic scaling.\n"
             "- 'vfx_color_shift': color styling recommendation (e.g., 'crimson-saturation', 'monochrome-glitch', 'high-contrast-gold').\n"
-            "- 'audio_attenuation_db': integer representing dynamic volume level adjustments (e.g., -3 for voice clearance, +4 for peak bass blast).\n"
-            "Format your output STRICTLY as a raw JSON object with the key 'tension_timeline'. "
-            "Do not output markdown code formatting wrapper tags, introductory chat, or conversational notes. Only valid JSON."
+            "- 'audio_attenuation_db': integer for dynamic volume adjustments (e.g., -3 for voice clarity, +4 for bass blast).\n"
+            "Output STRICTLY as a raw JSON object with the key 'tension_timeline'.\n"
         )
 
-        user_prompt = f"Storyboard Target: {topic}\nFrames Data:\n" + json.dumps(frames, indent=2)
+        user_context = f"Topic: '{topic}'\nNumber of Frames to Process: {len(frames)}\n\nStoryboard Data:\n" + json.dumps(frames, indent=2)
+
+        # Apply Universal Format Rules for Tension
+        if content_format == "cinematic_movie":
+            mode_rules = (
+                "MODE: CINEMATIC MOVIE EPISODE\n"
+                "Rule: Tension must start low (1-3) to build atmosphere, slowly ramp up, and peak (8-10) only during major dialogue reveals or action frames."
+            )
+        elif content_format == "casual_commentary":
+            mode_rules = (
+                "MODE: CASUAL CREATOR COMMENTARY\n"
+                "Rule: Tension is generally flat (3-4) but should have sudden, comedic 1-frame spikes (8) when the creator reacts with shock or plays a meme sound effect."
+            )
+        else:
+            mode_rules = (
+                "MODE: AGGRESSIVE VIRAL EXPLAINER\n"
+                "Rule: Start immediately with high tension (7+) to hook the viewer, and continuously escalate to 10. Do not let the tension drop, otherwise the viewer will scroll away."
+            )
+
+        return base_system + mode_rules, user_context
+
+    def _call_ai_engine(self, system_prompt, user_prompt):
+        """Tri-Core Routing Logic: Gemini -> OpenAI -> Ollama"""
+        
+        if self.gemini_api_key:
+            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
+            try:
+                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+                response = self.gemini_model.generate_content(full_prompt)
+                return json.loads(self._clean_json_response(response.text))
+            except Exception as e:
+                self._log_error(f"Gemini API failed: {str(e)}. Fallback to Priority 2...")
 
         if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
+            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.openai_api_key}"
+                }
+                payload = {
+                    "model": self.model_openai,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=45) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                    return json.loads(self._clean_json_response(result["choices"][0]["message"]["content"]))
+            except Exception as e:
+                self._log_error(f"OpenAI API failed: {str(e)}. Fallback to Priority 3...")
+
+        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
+        try:
             headers = {"Content-Type": "application/json"}
             payload = {
                 "model": self.model_local,
@@ -137,70 +156,43 @@ class NarrativeTensionPeaksAnalyzer:
                 "stream": False,
                 "format": "json"
             }
-
-        try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
             with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "source_topic": topic,
-                    "agent_executed": self.agent_name,
-                    "tension_timeline": structured_output.get("tension_timeline", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
+                result = json.loads(response.read().decode("utf-8"))
+                return json.loads(self._clean_json_response(result["message"]["content"]))
+        except Exception as e:
+            self._log_error(f"Local Ollama failed: {str(e)}.")
+            return None
 
-        except urllib.error.URLError as e:
-            print(f"[{self.agent_name}] Engine Connection Offline: Executing procedural tension calculation module.")
-            return self._execute_procedural_fallback(topic, frames)
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"[{self.agent_name}] Schema Alignment Error: Executing clean mathematical peak fallback mapping.")
-            return self._execute_procedural_fallback(topic, frames)
-
-    def _execute_procedural_fallback(self, topic, frames):
-        """
-        Calculates mathematical, context-relative tension curves dynamically 
-        for any arbitrary list of frames when API nodes fail.
-        """
+    def _execute_procedural_fallback(self, content_format, frames):
+        """Mathematical formula to calculate tension if all AI fails."""
+        self._log_info("Triggering Dynamic Procedural Tension Math Logic.")
+        
         timeline = []
-        # Calculate dynamic tension curve over the array size
         total_frames = len(frames) if frames else 1
         
         for idx, frame in enumerate(frames):
             frame_idx = frame.get("frame_index", idx + 1)
-            # Procedural tension ramp formula: curve builds up towards the climax frame
             progression = (idx + 1) / total_frames
-            tension_calc = int(2 + (progression * 7.5)) # Dynamic ramp between 2 and 10
             
-            voiceover = frame.get("spoken_voiceover", "Warning detected.")
-            words = [w.strip(".,!?\"'") for w in voiceover.split() if len(w) > 4]
+            # Math logic adjusts based on universal format
+            if content_format == "explainer":
+                tension_calc = int(6 + (progression * 4)) # Ramp from 6 to 10
+            elif content_format == "casual_commentary":
+                tension_calc = 8 if idx % 3 == 0 else 4 # Spikes every 3rd frame
+            else:
+                tension_calc = int(2 + (progression * 8)) # Slow build 2 to 10
+
+            voiceover = frame.get("spoken_audio", "Warning")
+            words = [w.strip(".,!?\"'") for w in voiceover.split() if len(w) > 3]
             highlights = words[:2] if words else ["Warning"]
 
             if tension_calc < 5:
-                pacing = "slow-hold"
-                color = "desaturated-grey"
-                db = -2
+                pacing, color, db = "slow-hold", "desaturated-grey", -2
             elif tension_calc < 8:
-                pacing = "dynamic-jump"
-                color = "high-contrast-gold"
-                db = 0
+                pacing, color, db = "dynamic-jump", "high-contrast", 0
             else:
-                pacing = "climax-glitch"
-                color = "crimson-saturation"
-                db = 4
+                pacing, color, db = "climax-glitch", "crimson-saturation", 4
 
             timeline.append({
                 "frame_index": frame_idx,
@@ -211,18 +203,61 @@ class NarrativeTensionPeaksAnalyzer:
                 "audio_attenuation_db": db
             })
 
-        fallback_data = {
-            "source_topic": topic,
-            "agent_executed": f"{self.agent_name} (Procedural Fallback Mode)",
-            "tension_timeline": timeline
-        }
-        self._save_to_workspace(fallback_data)
-        return fallback_data
+        return {"tension_timeline": timeline}
+
+    def execute(self):
+        state = self._read_state()
+        
+        # Pipeline Gate Check
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent != "Ai_Agent_04":
+            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+            return False
+
+        topic = state.get("runtime_data", {}).get("core_topic", "")
+        content_format = state.get("global_config", {}).get("content_format", "explainer")
+        
+        # Pull unlimited frames from Agent 03
+        agent_03_data = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_03_storyboard", {})
+        frames = agent_03_data.get("storyboard_frames", [])
+
+        if not frames:
+            self._log_error("Critical Error: No storyboard frames received from Agent 03.")
+            return False
+
+        self._log_info(f"Processing Tension/Stress Curves for {len(frames)} frames. Mode: {content_format.upper()}")
+
+        system_prompt, user_prompt = self._build_universal_prompt(topic, content_format, frames)
+        
+        generated_data = None
+        for attempt in range(1, self.max_retries + 1):
+            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
+            if parsed_json and "tension_timeline" in parsed_json:
+                generated_data = parsed_json
+                self._log_info(f"Success! Tension mapped for {len(generated_data['tension_timeline'])} frames.")
+                break
+            else:
+                self._log_error("Invalid response format. Retrying...")
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay)
+
+        if not generated_data:
+            self._log_error("All models failed. Applying Procedural Math Fallback.")
+            generated_data = self._execute_procedural_fallback(content_format, frames)
+            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_04_Fallback"
+        else:
+            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_04"
+
+        # Save Output
+        state["runtime_data"]["module_a_scripting"]["agent_04_tension_peaks"] = generated_data
+        
+        # STRICT HANDSHAKE AS PER YOUR MASTER LIST:
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_05"
+        self._write_state(state)
+        
+        self._log_info("Tension Peaks Locked! Handing pipeline over to Ai_Agent_05: story_arc_structural_architect.")
+        return True
 
 if __name__ == "__main__":
     analyzer = NarrativeTensionPeaksAnalyzer()
-    output = analyzer.analyze_tension()
-    
-    print("\n--- Z-NET CORE MODULE A: AGENT 04 TENSION CURVE COMPLETED ---")
-    print(json.dumps(output, indent=4))
-    print("-------------------------------------------------------------")
+    analyzer.execute()
