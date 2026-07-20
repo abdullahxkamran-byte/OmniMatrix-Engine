@@ -2,61 +2,69 @@ import os
 import re
 import sys
 import json
+import time
 import urllib.request
 import urllib.error
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-class HotTakeOpinionGenerator:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 02: hot_take_opinion_generator"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+load_dotenv()
+
+class UniversalCoreScriptGenerator:
+    def __init__(self, state_file_path="matrix_state.json"):
+        self.agent_name = "Ai Agent 02: universal_core_script_engine"
+        self.state_file = state_file_path
         
-        # Check if user has defined a premium cloud API Key in system environment
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _load_previous_stage(self):
-        """
-        Dynamically loads output from stage 1. If missing, prompts the user 
-        dynamically for a topic to keep the run completely universal.
-        """
-        input_file_path = os.path.join(self.workspace_dir, "01_curiosity_hooks.json")
-        if os.path.exists(input_file_path):
-            try:
-                with open(input_file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                print(f"[{self.agent_name}] Success: Read previous stage data from '{input_file_path}'")
-                return data
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: Could not read stage 1 file ({str(e)}). Transitioning to manual mode.")
+        # Network Resilience Settings
+        self.max_retries = 3
+        self.retry_delay = 3
         
-        # Interactive universal terminal trigger if previous file is missing
-        print(f"[{self.agent_name}] Active File Check: Previous stages are offline.")
-        user_input = input("Enter a dynamic topic to generate controversial arguments: ").strip()
-        if not user_input:
-            print("[System Error] No topic provided. Terminating execution.")
-            sys.exit(1)
+        # Initialize API Keys from .env
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Configure Gemini if key exists
+        if self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
+            self.gemini_model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                generation_config={"response_mime_type": "application/json"}
+            )
             
-        return {
-            "source_topic": user_input,
-            "hooks": [
-                {
-                    "hook_id": "direct_input",
-                    "hook_text": f"The dynamic reality of {user_input}",
-                    "visual_concept_cue": "Dynamic visual flash"
-                }
-            ]
-        }
+        # Cloud/Local AI Routing Details for OpenAI/Ollama
+        self.openai_url = "https://api.openai.com/v1/chat/completions"
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_openai = "gpt-4o-mini"
+        self.model_local = "llama3"
+
+    def _log_info(self, message):
+        print(f"[{self.agent_name}] INFO: {message}")
+
+    def _log_error(self, message):
+        print(f"[{self.agent_name}] ERROR: {message}", file=sys.stderr)
+
+    def _read_state(self):
+        """Thread-safe state file read block. Vital for fetching Agent 01's output."""
+        if not os.path.exists(self.state_file):
+            self._log_error("Critical Error: matrix_state.json not found. Run Agent 01 first.")
+            sys.exit(1)
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self._log_error(f"Failed to read state file: {str(e)}")
+            sys.exit(1)
+
+    def _write_state(self, state_data):
+        """Thread-safe state file execution block."""
+        try:
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                json.dump(state_data, f, indent=4)
+        except Exception as e:
+            self._log_error(f"Failed to persist state modification matrix: {str(e)}")
 
     def _clean_json_response(self, raw_text):
-        """
-        Strips wrapper blocks from AI model responses to isolate raw, parseable JSON.
-        """
+        """Strips wrapper blocks from AI model responses to isolate raw, parseable JSON."""
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
@@ -66,72 +74,111 @@ class HotTakeOpinionGenerator:
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
         return cleaned
 
-    def _save_to_workspace(self, data, filename="02_hot_takes.json"):
-        """
-        Saves parsed structured opinions physically to workspace directory.
-        """
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: State persisted to physical file at '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Could not write state file: {str(e)}")
-            return None
-
-    def generate_opinions(self):
-        """
-        Processes dynamic topics to extract intense, contrarian arguments for viral retention.
-        """
-        input_data = self._load_previous_stage()
-        topic = input_data.get("source_topic", "Unknown Subject")
+    def _build_universal_prompt(self, topic, selected_hook, content_format):
+        """Dynamically switches brain modes based on the OmniMatrix configuration."""
         
-        # Use first available hook to anchor the argument
-        hooks = input_data.get("hooks", [])
-        chosen_hook = hooks[0]["hook_text"] if hooks else f"The ultimate secret of {topic}"
-
-        print(f"[{self.agent_name}] Generating psychological hot takes for: '{topic}'")
-
-        system_prompt = (
-            "You are an expert retention analyst and high-friction scriptwriter. "
-            "Your objective is to take a core topic and construct highly controversial, "
-            "mind-bending, and intellectually gripping 'Hot Takes' or contrarian opinions. "
-            "Provide exactly 2 distinct hot-take options:\n"
-            "1. The Outrageous Paradigm Shift (completely flips general assumptions)\n"
-            "2. The Psychological Deception (argues that the audience is being actively fooled by popular narratives).\n"
-            "Each take must have three parameters:\n"
-            "- 'take_id': a unique string key\n"
-            "- 'statement': a raw, aggressive hook statement (one powerful sentence)\n"
-            "- 'argument_backing': a concise 2-sentence explanation of why this claim is logically or contextually true.\n"
-            "Format your output STRICTLY as a raw JSON object containing a list named 'hot_takes'. "
-            "Do not include any chat formatting, greetings, markdown blocks, or warnings. Only output valid JSON."
+        base_system = (
+            "You are a master scriptwriter and continuity engine. Your job is to take the provided "
+            "opening hook and continue the script logically, deeply, and engagingly.\n"
+            f"Output must STRICTLY be a raw JSON object containing a list named 'core_paths'. "
+            f"Generate exactly 2 continuation paths.\n"
+            f"Required keys for each object in the list: 'path_id', 'core_script_line', 'context_or_action'.\n"
         )
 
-        user_prompt = f"Topic: {topic}\nChosen Hook: {chosen_hook}"
+        user_context = f"Topic: '{topic}'\nPrevious Hook (Agent 01 Output): '{selected_hook}'\n\n"
 
-        # Dynamic connection router: OpenAI Cloud vs Local Ollama
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Premium Cloud Key detected. Querying OpenAI [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
+        if content_format == "cinematic_movie":
+            mode_rules = (
+                "MODE: CINEMATIC MOVIE SCREENPLAY\n"
+                "The hook provided is a 'Cold Open' scene. You must write the immediate continuation of this scene.\n"
+                "- 'core_script_line': Write the actual character dialogue (e.g., [Character Name]: Wait, who are you?).\n"
+                "- 'context_or_action': Describe the physical action, camera movement, or character expression happening during the dialogue."
+            )
+        elif content_format == "casual_commentary":
+            mode_rules = (
+                "MODE: CASUAL CREATOR COMMENTARY\n"
+                "The hook provided is a creator's opening reaction. You must continue their natural thought process.\n"
+                "- 'core_script_line': Write the next sentences the creator speaks naturally (e.g., 'I mean, think about it guys, when he first appeared...').\n"
+                "- 'context_or_action': Suggest what B-Roll or background gameplay/video should be showing on screen right now."
+            )
         else:
-            print(f"[{self.agent_name}] Status: Querying Local Engine [{self.model_local}]")
-            url = self.ollama_url
+            mode_rules = (
+                "MODE: AGGRESSIVE VIRAL EXPLAINER\n"
+                "The hook provided is an attention-grabbing pattern interrupt. You must now deliver the 'Hot Take' or core argument.\n"
+                "- 'core_script_line': Provide the deep psychological or controversial argument that proves the hook.\n"
+                "- 'context_or_action': Explain why this argument psychologically retains the viewer."
+            )
+
+        return base_system + mode_rules, user_context
+
+    def _execute_procedural_fallback(self, topic, content_format):
+        """Intelligent offline fallback that respects the Universal format."""
+        self._log_info(f"Triggering Universal Procedural Fallback for format: {content_format}")
+        
+        if content_format == "cinematic_movie":
+            script_line = f"[Character]: You think {topic} can save us now? It's too late. The system is already broken."
+            context = "Camera zooms in on the character's face, showing extreme desperation."
+        elif content_format == "casual_commentary":
+            script_line = f"Honestly, looking back at {topic}, I feel like 90% of people completely missed the point of that scene."
+            context = "Show a slow-motion replay of the main scene being discussed."
+        else:
+            script_line = f"The actual math behind {topic} proves that the popular opinion is mathematically impossible."
+            context = "Retains viewer by attacking a universally accepted truth with logic."
+
+        return {
+            "core_paths": [
+                {
+                    "path_id": "procedural_primary",
+                    "core_script_line": script_line,
+                    "context_or_action": context
+                }
+            ]
+        }
+
+    def _call_ai_engine(self, system_prompt, user_prompt):
+        """Tri-Core Routing Logic: Gemini -> OpenAI -> Ollama"""
+        
+        # PRIORITY 1: GEMINI
+        if self.gemini_api_key:
+            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
+            try:
+                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+                response = self.gemini_model.generate_content(full_prompt)
+                cleaned_message = self._clean_json_response(response.text)
+                return json.loads(cleaned_message)
+            except Exception as e:
+                self._log_error(f"Gemini API failed: {str(e)}. Fallback to Priority 2...")
+
+        # PRIORITY 2: OPENAI
+        if self.openai_api_key:
+            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.openai_api_key}"
+                }
+                payload = {
+                    "model": self.model_openai,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=45) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                    raw_ai_message = result["choices"][0]["message"]["content"]
+                    cleaned_message = self._clean_json_response(raw_ai_message)
+                    return json.loads(cleaned_message)
+            except Exception as e:
+                self._log_error(f"OpenAI API failed: {str(e)}. Fallback to Priority 3...")
+
+        # PRIORITY 3: OLLAMA (LOCAL)
+        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
+        try:
             headers = {"Content-Type": "application/json"}
             payload = {
                 "model": self.model_local,
@@ -142,70 +189,77 @@ class HotTakeOpinionGenerator:
                 "stream": False,
                 "format": "json"
             }
-
-        try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
             with urllib.request.urlopen(req, timeout=45) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                # Extract message content dynamically based on API platform format
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
+                result = json.loads(response.read().decode("utf-8"))
+                raw_ai_message = result["message"]["content"]
                 cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "source_topic": topic,
-                    "referenced_hook": chosen_hook,
-                    "agent_executed": self.agent_name,
-                    "hot_takes": structured_output.get("hot_takes", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
+                return json.loads(cleaned_message)
+        except Exception as e:
+            self._log_error(f"Local Ollama failed: {str(e)}.")
+            return None # Trigger procedural fallback
 
-        except urllib.error.URLError as e:
-            print(f"[{self.agent_name}] Connection Error: AI Engine is unreachable. Moving to physical fallback.")
-            return self._execute_procedural_fallback(topic, chosen_hook)
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"[{self.agent_name}] Data Error: Could not parse AI response. Launching physical fallback.")
-            return self._execute_procedural_fallback(topic, chosen_hook)
+    def execute(self):
+        """Main execution sequence. Validates pipeline, calls AI, and updates state."""
+        state = self._read_state()
+        
+        # 1. Pipeline Gatekeeper (Checks if Agent 01 did its job)
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent != "Ai_Agent_02":
+            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+            return False
 
-    def _execute_procedural_fallback(self, topic, chosen_hook):
-        """
-        Generates functional, context-specific fallback arguments dynamically 
-        for any topic when servers are down.
-        """
-        fallback_data = {
-            "source_topic": topic,
-            "referenced_hook": chosen_hook,
-            "agent_executed": f"{self.agent_name} (Procedural Fallback Mode)",
-            "hot_takes": [
-                {
-                    "take_id": "outrageous_paradigm_shift",
-                    "statement": f"We have been completely lied to about the actual origins of {topic}.",
-                    "argument_backing": f"The standard historical consensus surrounding {topic} completely ignores core mathematical anomalies. When you review the raw raw data, the conventional theories break down instantly."
-                },
-                {
-                    "take_id": "psychological_deception",
-                    "statement": f"The absolute worst mistake you can make when studying {topic} is trusting mainstream creators.",
-                    "argument_backing": f"Most experts repeat identical talking points to preserve their own status. They actively hide structural details that disprove their entire narrative."
-                }
-            ]
-        }
-        self._save_to_workspace(fallback_data)
-        return fallback_data
+        # 2. Extract Data from State (The Output of Agent 01)
+        topic = state.get("runtime_data", {}).get("core_topic", "")
+        content_format = state.get("global_config", {}).get("content_format", "explainer")
+        
+        agent_01_hooks = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_01_hooks", [])
+        
+        if not agent_01_hooks:
+            self._log_error("Critical Error: No hooks found from Agent 01. Pipeline broken.")
+            return False
+
+        # Take the best hook from Agent 01 as input for Agent 02
+        selected_hook = agent_01_hooks[0].get("hook_script", f"The reality of {topic}")
+        
+        self._log_info(f"Input received from Agent 01. Developing Continuation Script for mode: {content_format.upper()}")
+
+        # 3. Build Prompt
+        system_prompt, user_prompt = self._build_universal_prompt(topic, selected_hook, content_format)
+        
+        # 4. Multi-Retry Network Transaction
+        generated_data = None
+        for attempt in range(1, self.max_retries + 1):
+            self._log_info(f"Transaction Attempt {attempt}/{self.max_retries}...")
+            
+            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
+            
+            if parsed_json and "core_paths" in parsed_json and len(parsed_json["core_paths"]) > 0:
+                generated_data = parsed_json
+                break
+            else:
+                self._log_error("AI response invalid or missing 'core_paths'. Retrying...")
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay)
+
+        # 5. Handle Fallback if completely offline
+        if not generated_data:
+            self._log_error("All API and Local models failed. Applying algorithmic fallback.")
+            generated_data = self._execute_procedural_fallback(topic, content_format)
+            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_02_Fallback"
+        else:
+            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_02"
+
+        # 6. Save Output to State (Ready for Agent 03)
+        state["runtime_data"]["module_a_scripting"]["agent_02_core_script"] = generated_data
+        
+        # 7. Atomic Handshake Protocol: Pass the baton to Agent 03
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_03"
+        self._write_state(state)
+        
+        self._log_info("Transaction Complete! Core script locked. Pipeline handed over to Ai_Agent_03.")
+        return True
 
 if __name__ == "__main__":
-    generator = HotTakeOpinionGenerator()
-    output = generator.generate_opinions()
-    
-    print("\n--- Z-NET CORE MODULE A: AGENT 02 OUTPUT COMPLETE ---")
-    print(json.dumps(output, indent=4))
-    print("------------------------------------------------------")
+    generator = UniversalCoreScriptGenerator()
+    generator.execute()
