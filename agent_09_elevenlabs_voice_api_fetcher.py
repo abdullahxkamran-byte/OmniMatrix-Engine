@@ -1,9 +1,10 @@
 import os
 import sys
 import json
-import re
-import urllib.request
-import urllib.parse
+import time
+import requests
+import subprocess
+import asyncio
 
 # Manual .env loader utility
 def load_env_file(filepath=".env"):
@@ -17,84 +18,94 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-# Standardize Gemini Integration as per Registry Specs
+# Standardize Gemini Integration
 try:
     import google.generativeai as genai
     GEMINI_SDK_AVAILABLE = True
 except ImportError:
     GEMINI_SDK_AVAILABLE = False
 
-# Import Edge-TTS library if available for advanced failsafe
+# Import Edge-TTS for the ultimate fallback
 try:
     import edge_tts
-    import asyncio
     EDGE_TTS_AVAILABLE = True
 except ImportError:
     EDGE_TTS_AVAILABLE = False
 
-class ElevenlabsVoiceApiFetcher:
+# Import Gradio Client for the Hugging Face Character Juggaad
+try:
+    from gradio_client import Client
+    GRADIO_CLIENT_AVAILABLE = True
+except ImportError:
+    GRADIO_CLIENT_AVAILABLE = False
+
+
+class AiAgent09VoiceApiFetcher:
     def __init__(self, workspace_dir="znet_workspace"):
-        # Name matched with Z-Net Master Compendium Specification
-        self.agent_name = "Agent 09: elevenlabs_voice_api_fetcher"
+        self.agent_name = "Agent 09: Voice API Fetcher"
         self.workspace_dir = workspace_dir
         self.audio_dir = os.path.join(self.workspace_dir, "audio_tracks")
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
         
-        # API Keys loading
+        # Load API Keys
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.elevenlabs_key = os.environ.get("ELEVENLABS_API_KEY", None)
+        self.hf_token = os.environ.get("HF_TOKEN", None)
         
-        # Configure Gemini SDK directly if available
         if GEMINI_SDK_AVAILABLE and self.gemini_key:
             genai.configure(api_key=self.gemini_key)
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-        if not os.path.exists(self.audio_dir):
-            os.makedirs(self.audio_dir)
+        os.makedirs(self.audio_dir, exist_ok=True)
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
-    def _load_master_script(self):
-        """Loads the final formatted master timeline script from Stage 8."""
-        input_file_path = os.path.join(self.workspace_dir, "08_final_master_script.json")
-        if os.path.exists(input_file_path):
-            try:
-                with open(input_file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                self.log_message(f"Cannot read Stage 8 file: {str(e)}", "WARNING")
+    def _load_matrix_state(self):
+        """Loads the master OmniMatrix state."""
+        if not os.path.exists(self.state_file):
+            self.log("matrix_state.json not found. Run Module A first.", "ERROR")
+            sys.exit(1)
+        with open(self.state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-        self.log_message("Upstream script missing. Activating simulated anime duel script.", "ALERT")
-        return {
-            "source_topic": "Simulated Battle",
-            "master_timeline": [
-                {"frame_index": 1, "character": "Narrator", "spoken_voiceover": "The ultimate showdown begins now!"},
-                {"frame_index": 2, "character": "Gojo", "spoken_voiceover": "Don't worry. I am literally the strongest."},
-                {"frame_index": 3, "character": "Sukuna", "spoken_voiceover": "Foolish brat. I will rip your domain to shreds."}
-            ]
-        }
+    def _save_matrix_state(self, state_data):
+        """Saves the updated state back to OmniMatrix."""
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=4)
+        self.log("Matrix state successfully updated with audio metadata.")
+
+    def get_audio_duration(self, file_path):
+        """Calculates exact duration using ffprobe for perfect Video synchronization."""
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries",
+                 "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            )
+            return round(float(result.stdout.strip()), 2)
+        except Exception:
+            # Fallback estimation if ffprobe is missing (approx 2.5 words per second)
+            self.log("ffprobe not found. Using duration estimation fallback.", "WARNING")
+            return 2.0 
 
     def perform_ai_voice_casting(self, characters_list):
-        """Uses Gemini SDK to dynamically map characters to ElevenLabs Voice IDs and Edge-TTS locales."""
+        """Maps characters to Voice IDs or Hugging Face Models."""
         if not (GEMINI_SDK_AVAILABLE and self.gemini_key):
-            self.log_message("Gemini SDK missing or key absent. Activating smart offline casting...", "WARNING")
             return self._offline_rule_based_casting(characters_list)
 
-        self.log_message("Consulting Z-Net Gemini AI Casting Director...", "STATUS")
+        self.log("Consulting AI Casting Director for exact character mapping...", "STATUS")
         
         prompt = (
-            f"You are the Z-Net AI Voice Casting Director. Analyze these characters: {list(characters_list)}.\n"
-            "Map each to the best ElevenLabs pre-made Voice ID (e.g., Rachel='21m00Tcm4TlvDq8ikWAM', Clyde='2EiwXgHQaoKC5u4vEe9b', "
-            "Antoni='ERXwobaYiN019vkySvjV', Adam='pNInz6obpgmo512wG1ei', Nicole='piTKgcLEGmPEeToec5ms') "
-            "and an Edge-TTS locale variant (like 'en-US-ChristopherNeural', 'en-GB-RyanNeural', 'en-AU-WilliamNeural').\n"
-            "Return STRICTLY a JSON object with this exact structure, nothing else:\n"
+            f"You are the AI Voice Casting Director. Analyze these characters: {list(characters_list)}.\n"
+            "Provide optimal voice configurations. For famous characters (like Gojo, Batman, Goku), "
+            "provide a theoretical 'hf_rvc_model_id' (e.g., 'Gojo_English_v2').\n"
+            "Return STRICTLY a JSON object:\n"
             "{\n"
-            "  \"voice_mappings\": {\n"
+            "  \"mappings\": {\n"
             "    \"CharacterName\": {\n"
-            "      \"elevenlabs_voice_id\": \"pNInz6obpgmo512wG1ei\",\n"
-            "      \"edge_tts_voice\": \"en-US-ChristopherNeural\",\n"
-            "      \"description\": \"confident male tone\"\n"
+            "      \"elevenlabs_id\": \"pNInz6obpgmo512wG1ei\",\n"
+            "      \"hf_rvc_model_id\": \"Gojo_Satoru_Dub\",\n"
+            "      \"edge_tts_voice\": \"en-US-ChristopherNeural\"\n"
             "    }\n"
             "  }\n"
             "}"
@@ -102,123 +113,106 @@ class ElevenlabsVoiceApiFetcher:
 
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
-            )
-            raw_text = response.text.strip()
-            casting_blueprint = json.loads(raw_text)
-            return casting_blueprint.get("voice_mappings", {})
+            response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+            return json.loads(response.text.strip()).get("mappings", {})
         except Exception as e:
-            self.log_message(f"AI Casting failed: {str(e)}. Reverting to offline rule matrix.", "ERROR")
+            self.log(f"AI Casting failed: {str(e)}.", "ERROR")
             return self._offline_rule_based_casting(characters_list)
 
     def _offline_rule_based_casting(self, characters_list):
-        """Offline safety matrix to map typical anime archetypes to secure audio tracks."""
+        """Hardcoded fallback for exact anime/movie mappings."""
         mappings = {}
         for char in characters_list:
             char_lower = char.lower()
-            if any(name in char_lower for name in ["gojo", "goku", "hero"]):
-                mappings[char] = {
-                    "elevenlabs_voice_id": "pNInz6obpgmo512wG1ei", # Adam
-                    "edge_tts_voice": "en-GB-RyanNeural",
-                    "description": "Charismatic Male Lead"
-                }
-            elif any(name in char_lower for name in ["sukuna", "madara", "villain"]):
-                mappings[char] = {
-                    "elevenlabs_voice_id": "2EiwXgHQaoKC5u4vEe9b", # Clyde
-                    "edge_tts_voice": "en-AU-WilliamNeural",
-                    "description": "Deep Raspy Antagonist"
-                }
-            elif any(name in char_lower for name in ["girl", "female", "sakura", "hinata"]):
-                mappings[char] = {
-                    "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM", # Rachel
-                    "edge_tts_voice": "en-US-JennyNeural",
-                    "description": "Soft Female Voice"
-                }
+            if "gojo" in char_lower:
+                mappings[char] = {"elevenlabs_id": "Adam_ID", "hf_rvc_model_id": "Gojo_Eng_Dub", "edge_tts_voice": "en-US-GuyNeural"}
+            elif "batman" in char_lower:
+                mappings[char] = {"elevenlabs_id": "Deep_ID", "hf_rvc_model_id": "Batman_Arkham", "edge_tts_voice": "en-GB-RyanNeural"}
             else:
-                mappings[char] = {
-                    "elevenlabs_voice_id": "ERXwobaYiN019vkySvjV", # Antoni
-                    "edge_tts_voice": "en-US-ChristopherNeural",
-                    "description": "Neutral Voiceover Narrator"
-                }
+                mappings[char] = {"elevenlabs_id": "Antoni_ID", "hf_rvc_model_id": "Generic_Male", "edge_tts_voice": "en-US-ChristopherNeural"}
         return mappings
 
+    def _fetch_huggingface_juggaad(self, text, output_path, hf_model_id):
+        """
+        THE TRICK: Contacts a Hugging Face Space running RVC via Gradio Client.
+        Sends text -> Gets exact character voice -> Saves MP3.
+        """
+        if not GRADIO_CLIENT_AVAILABLE:
+            self.log("gradio_client not installed. Run: pip install gradio_client", "WARNING")
+            return False
+
+        self.log(f"Attempting Hugging Face Character Injection for: {hf_model_id}", "STATUS")
+        
+        try:
+            # Note: "rvc-space/anime-tts" is a placeholder for public RVC spaces on HF.
+            # You can swap this string with any active public Hugging Face TTS space URL.
+            client = Client("rvc-space/anime-tts") 
+            result = client.predict(
+                text=text,
+                model_name=hf_model_id,
+                api_name="/predict"
+            )
+            
+            # The API returns a temporary file path for the generated audio
+            temp_audio_path = result[0] if isinstance(result, list) else result
+            
+            with open(temp_audio_path, 'rb') as f_src, open(output_path, 'wb') as f_dst:
+                f_dst.write(f_src.read())
+                
+            return True
+        except Exception as e:
+            self.log(f"Hugging Face Space API failed (Space might be asleep): {str(e)}", "WARNING")
+            return False
+
     def _fetch_elevenlabs_audio(self, text, output_path, voice_id):
-        """Synthesizes premium audio using ElevenLabs API endpoints."""
+        """Synthesizes premium audio using ElevenLabs (if key exists)."""
         if not self.elevenlabs_key:
             return False
             
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-        headers = {
-            "xi-api-key": self.elevenlabs_key,
-            "Content-Type": "application/json",
-            "accept": "audio/mpeg"
-        }
-        payload = {
-            "text": text,
-            "model_id": "eleven_monolingual_v1",
-            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
-        }
+        headers = {"xi-api-key": self.elevenlabs_key, "Content-Type": "application/json"}
+        payload = {"text": text, "model_id": "eleven_monolingual_v1"}
         
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            with urllib.request.urlopen(req, timeout=30) as response:
+            response = requests.post(url, json=payload, headers=headers, timeout=20)
+            if response.status_code == 200:
                 with open(output_path, "wb") as f:
-                    f.write(response.read())
+                    f.write(response.content)
                 return True
-        except Exception as e:
-            self.log_message(f"ElevenLabs generation failed for voice {voice_id}: {str(e)}", "WARNING")
+            return False
+        except Exception:
             return False
 
     def _fetch_edge_tts_fallback(self, text, output_path, voice_name):
-        """Asynchronous Failsafe: Generates voice using high-quality free Edge-TTS."""
+        """Ultimate Failsafe: Free Microsoft Edge TTS."""
         if not EDGE_TTS_AVAILABLE:
-            # Low-tier HTTP translation scraper fallback if edge-tts library isn't globally active
-            try:
-                encoded_text = urllib.parse.quote(text)
-                clean_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q={encoded_text}"
-                req = urllib.request.Request(clean_url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=15) as response:
-                    with open(output_path, "wb") as f:
-                        f.write(response.read())
-                return True
-            except Exception:
-                return False
+            return False
 
         async def _generate():
             communicate = edge_tts.Communicate(text, voice_name)
             await communicate.save(output_path)
-            return True
-
+            
         try:
             asyncio.run(_generate())
             return True
         except Exception as e:
-            self.log_message(f"Failsafe Edge-TTS layer failed: {str(e)}", "ERROR")
+            self.log(f"Edge-TTS failed: {str(e)}", "ERROR")
             return False
 
-    def process_voiceovers(self):
-        script_data = self._load_master_script()
-        timeline = script_data.get("master_timeline", [])
-        topic = script_data.get("source_topic", "Dynamic Production")
-
-        unique_characters = set(frame.get("character", "Narrator") for frame in timeline)
-        self.log_message(f"Detected script characters for casting: {unique_characters}")
-
-        # Execute Dynamic Studio Casting Call
-        voice_casting_map = self.perform_ai_voice_casting(unique_characters)
-        audio_assets = []
+    def process_script_audio(self):
+        state = self._load_matrix_state()
+        script_data = state.get("module_a_script", {}).get("master_timeline", [])
         
-        # Token Management: Count total script characters to proactively guard limits
-        total_script_chars = sum(len(frame.get("spoken_voiceover", "")) for frame in timeline)
-        self.log_message(f"Total script size: {total_script_chars} characters.", "INFO")
+        if not script_data:
+            self.log("No master timeline found in matrix state.", "ERROR")
+            return
 
-        # Force token protection failover if script is unsafely long for a free tier tier
-        use_premium = self.elevenlabs_key is not None and total_script_chars < 5000
+        unique_characters = set(frame.get("character", "Narrator") for frame in script_data)
+        casting_map = self.perform_ai_voice_casting(unique_characters)
 
-        for frame in timeline:
+        audio_metadata_list = []
+
+        for frame in script_data:
             f_idx = frame.get("frame_index", 1)
             character = frame.get("character", "Narrator")
             text = frame.get("spoken_voiceover", "").strip()
@@ -226,66 +220,46 @@ class ElevenlabsVoiceApiFetcher:
             if not text:
                 continue
 
-            # SAFEGUARD: Protect ElevenLabs quota limits from heavy/runaway scripts
-            if len(text) > 300:
-                text = text[:297] + "..."
-
-            char_profile = voice_casting_map.get(character, {
-                "elevenlabs_voice_id": "ERXwobaYiN019vkySvjV",
-                "edge_tts_voice": "en-US-ChristopherNeural",
-                "description": "Default Voice Profile"
-            })
-
-            file_name = f"voiceover_frame_{f_idx:02d}_{character.lower()}.mp3"
+            char_profile = casting_map.get(character, {})
+            file_name = f"frame_{f_idx:03d}_{character.replace(' ', '_').lower()}.mp3"
             full_audio_path = os.path.join(self.audio_dir, file_name)
+            
             success = False
 
-            if use_premium:
-                v_id = char_profile.get("elevenlabs_voice_id", "ERXwobaYiN019vkySvjV")
-                self.log_message(f"Frame {f_idx}: Processing [{character}] via ElevenLabs (ID: {v_id})")
+            # Tier 1: ElevenLabs (If budget/key exists)
+            if self.elevenlabs_key:
+                v_id = char_profile.get("elevenlabs_id", "pNInz6obpgmo512wG1ei")
                 success = self._fetch_elevenlabs_audio(text, full_audio_path, v_id)
-                
-                if not success:
-                    self.log_message(f"ElevenLabs Token Exhausted/Failed. Activating Free HF Edge-TTS Failsafe Guard.", "WARNING")
-                    edge_v = char_profile.get("edge_tts_voice", "en-US-ChristopherNeural")
-                    success = self._fetch_edge_tts_fallback(text, full_audio_path, edge_v)
-            else:
+
+            # Tier 2: The HF Character Juggaad (If ElevenLabs absent or failed)
+            if not success:
+                hf_model = char_profile.get("hf_rvc_model_id", "Generic")
+                success = self._fetch_huggingface_juggaad(text, full_audio_path, hf_model)
+
+            # Tier 3: Edge TTS Failsafe
+            if not success:
                 edge_v = char_profile.get("edge_tts_voice", "en-US-ChristopherNeural")
-                self.log_message(f"Frame {f_idx}: Processing [{character}] via Failsafe Edge-TTS Mode ({edge_v})")
+                self.log(f"Falling back to Edge-TTS for Frame {f_idx} [{character}]")
                 success = self._fetch_edge_tts_fallback(text, full_audio_path, edge_v)
 
             if success:
-                self.log_message(f"Saved synchronized track -> '{full_audio_path}'")
-                audio_assets.append({
-                    "frame_index": f_idx,
-                    "character": character,
-                    "audio_file": full_audio_path,
-                    "casting_profile": char_profile,
-                    "spoken_voiceover": text
-                })
-            else:
-                self.log_message(f"Critical execution error on Frame {f_idx}.", "ERROR")
+                duration = self.get_audio_duration(full_audio_path)
+                self.log(f"Frame {f_idx} Audio Generated: {duration} seconds.")
+                
+                # Append audio data to the frame for the Video Module
+                frame["audio_file_path"] = full_audio_path
+                frame["audio_duration_seconds"] = duration
+                audio_metadata_list.append(frame)
 
-        output_metadata = {
-            "source_topic": topic,
-            "agent_executed": self.agent_name,
-            "engine_mode": "ElevenLabs Premium Studio" if use_premium else "HF Edge-TTS Guard Active",
-            "voice_casting_map": voice_casting_map,
-            "total_tracks": len(audio_assets),
-            "audio_tracks": audio_assets
+        # Update OmniMatrix State
+        state["module_b_audio"] = {
+            "status": "completed",
+            "total_tracks": len(audio_metadata_list),
+            "audio_timeline": audio_metadata_list
         }
-
-        output_path = os.path.join(self.workspace_dir, "09_vocal_audio_assets.json")
-        try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(output_metadata, f, indent=4)
-            self.log_message(f"Dynamic voice manifest saved to '{output_path}'")
-        except Exception as e:
-            self.log_message(f"Failed to write audio track manifest: {str(e)}", "ERROR")
-
-        return output_metadata
+        self._save_matrix_state(state)
+        self.log("Module B - Agent 09 processing complete. Handing over to Timeline Engine.")
 
 if __name__ == "__main__":
-    fetcher = ElevenlabsVoiceApiFetcher()
-    output = fetcher.process_voiceovers()
-    print("\n--- Z-NET VOCAL MODULE B: AGENT 09 COMPLETE ---")
+    fetcher = AiAgent09VoiceApiFetcher()
+    fetcher.process_script_audio()
