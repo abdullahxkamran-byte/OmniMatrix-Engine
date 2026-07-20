@@ -2,116 +2,152 @@ import os
 import re
 import sys
 import json
+import time
+import urllib.request
+import urllib.error
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-class WordCountGuardUtility:
-    def __init__(self, workspace_dir="znet_workspace"):
+load_dotenv()
+
+class UniversalWordCountGuard:
+    def __init__(self, state_file_path="matrix_state.json"):
         self.agent_name = "Agent 06: word_count_guard_utility"
-        self.workspace_dir = workspace_dir
-        # Energetic short-form target: 2.5 words per second (WPS)
-        self.target_words_per_second = 2.5 
-
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _load_previous_stage(self):
-        """
-        Loads upstream visual storyboard from Stage 3. If absent, 
-        prompts the user to enter a custom script manually.
-        """
-        input_file_path = os.path.join(self.workspace_dir, "03_visual_storyboard.json")
-        if os.path.exists(input_file_path):
-            try:
-                with open(input_file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                print(f"[{self.agent_name}] Success: Stage 3 storyboard loaded from '{input_file_path}'")
-                return data
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: File read error ({str(e)}). Transitioning to manual input.")
+        self.state_file = state_file_path
         
-        # Interactive fallback prompt if workspace has no active upstream data
-        print(f"[{self.agent_name}] Pipeline Gap: Upstream data file '{input_file_path}' is missing.")
-        user_input = input("Enter a raw voiceover script line to verify and compress: ").strip()
-        if not user_input:
-            print("[System Error] Empty input block. Halting utility.")
-            sys.exit(1)
+        # Network Resilience for AI Rewriting
+        self.max_retries = 2
+        self.retry_delay = 2
+        
+        # API Keys Initialization
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Setup Gemini
+        if self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
+            self.gemini_model = genai.GenerativeModel(model_name='gemini-1.5-flash')
             
-        return {
-            "source_topic": "Manual Formatting",
-            "storyboard_frames": [
-                {
-                    "frame_index": 1,
-                    "timestamp_start": 0.0,
-                    "timestamp_end": 4.0,
-                    "spoken_voiceover": user_input
-                }
-            ]
-        }
+        # OpenAI/Ollama Setup
+        self.openai_url = "https://api.openai.com/v1/chat/completions"
+        self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_openai = "gpt-4o-mini"
+        self.model_local = "llama3"
+
+    def _log_info(self, message):
+        print(f"[{self.agent_name}] INFO: {message}")
+
+    def _log_error(self, message):
+        print(f"[{self.agent_name}] ERROR: {message}", file=sys.stderr)
+
+    def _read_state(self):
+        if not os.path.exists(self.state_file):
+            self._log_error("Critical Error: matrix_state.json not found.")
+            sys.exit(1)
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self._log_error(f"Failed to read state file: {str(e)}")
+            sys.exit(1)
+
+    def _write_state(self, state_data):
+        try:
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                json.dump(state_data, f, indent=4)
+        except Exception as e:
+            self._log_error(f"Failed to persist state: {str(e)}")
+
+    def _get_target_wps(self, content_format):
+        """Determines the optimal speaking speed (Words Per Second) based on format."""
+        if content_format == "explainer":
+            return 3.0  # Very fast TikTok pacing
+        elif content_format == "casual_commentary":
+            return 2.5  # Standard YouTuber talking speed
+        elif content_format == "cinematic_movie":
+            return 2.0  # Slow, dramatic pacing
+        return 2.5
+
+    def _ai_compress_text(self, original_text, max_words):
+        """Uses Tri-Core AI to intelligently rewrite and compress the sentence safely."""
+        system_prompt = (
+            "You are a professional voiceover script editor. Your job is to strictly compress sentences.\n"
+            f"Rewrite the following text to convey the EXACT same meaning and impact, but in {max_words} words or less.\n"
+            "Keep the tone identical. Output ONLY the rewritten sentence without quotes, explanations, or formatting."
+        )
+        
+        # Priority 1: Gemini
+        if self.gemini_api_key:
+            try:
+                response = self.gemini_model.generate_content(f"{system_prompt}\n\nOriginal Text: {original_text}")
+                return response.text.strip().replace('"', '')
+            except Exception:
+                pass # Silent fail, fallback to Priority 2
+
+        # Priority 2: OpenAI
+        if self.openai_api_key:
+            try:
+                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+                payload = {"model": self.model_openai, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": original_text}]}
+                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    return json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"].strip().replace('"', '')
+            except Exception:
+                pass
+
+        # Priority 3: Ollama
+        try:
+            headers = {"Content-Type": "application/json"}
+            payload = {"model": self.model_local, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": original_text}], "stream": False}
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as response:
+                return json.loads(response.read().decode("utf-8"))["message"]["content"].strip().replace('"', '')
+        except Exception:
+            return None # Trigger procedural fallback
 
     def _programmatic_compress(self, text, max_words):
-        """
-        A 100% programmatic text compression engine. 
-        Filters out non-essential filler words, adjectives, and adverbs first.
-        If it still exceeds the limit, it performs a clean mathematical slice.
-        """
+        """Offline fallback: Regex filter for non-essential words to force compression."""
         words = text.strip().split()
         if len(words) <= max_words:
             return " ".join(words)
 
-        # High priority non-essential/filler words to strip first for concise narration
         filler_dictionary = {
             "absolutely", "actually", "basically", "completely", "extremely", "literally",
             "seriously", "truly", "very", "highly", "fully", "totally", "definitely", 
-            "surely", "probably", "perhaps", "maybe", "really", "quite", "just", 
-            "simply", "merely", "rather", "somewhat", "slightly", "somehow", "indeed", 
-            "furthermore", "moreover", "essentially", "ultimately", "basically",
-            "the", "a", "an", "and", "but", "or", "so", "yet", "for"
+            "really", "quite", "just", "simply", "essentially", "ultimately"
         }
 
-        filtered_words = []
-        removed_count = 0
-        needed_removals = len(words) - max_words
-
-        # Step 1: Strip common filler words to preserve primary nouns, actions, and verbs
-        for word in words:
-            cleaned_word = re.sub(r"[^\w]", "", word).lower()
-            if cleaned_word in filler_dictionary and removed_count < needed_removals:
-                removed_count += 1
-                continue
-            filtered_words.append(word)
-
-        # Step 2: Hard-limit programmatic slicing if text is still too long
+        filtered_words = [w for w in words if re.sub(r"[^\w]", "", w).lower() not in filler_dictionary]
+        
         if len(filtered_words) > max_words:
             filtered_words = filtered_words[:max_words]
-            # Ensure the final truncated word ends cleanly
             if filtered_words:
-                filtered_words[-1] = re.sub(r"[^\w]$", "", filtered_words[-1]) + "!"
+                filtered_words[-1] = re.sub(r"[^\w]$", "", filtered_words[-1]) + "."
 
         return " ".join(filtered_words)
 
-    def _save_to_workspace(self, data, filename="06_word_count_guard.json"):
-        """
-        Persists the audited and cleaned storyboard to the workspace directory.
-        """
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Programmatic audit data saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save state files: {str(e)}")
-            return None
+    def execute(self):
+        state = self._read_state()
+        
+        # Pipeline Gate Check
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        if target_agent != "Agent_06":
+            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+            return False
 
-    def run_guard_utility(self):
-        """
-        Calculates maximum allowed words per frame based on time allocations,
-        audits the script, and applies 100% deterministic compression rules.
-        """
-        input_data = self._load_previous_stage()
-        topic = input_data.get("source_topic", "Dynamic Task")
-        frames = input_data.get("storyboard_frames", [])
+        topic = state.get("runtime_data", {}).get("core_topic", "Unknown Target")
+        content_format = state.get("global_config", {}).get("content_format", "explainer")
+        
+        # Fetch the frames from Agent 03
+        agent_03_data = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_03_storyboard", {})
+        frames = agent_03_data.get("storyboard_frames", [])
 
-        print(f"[{self.agent_name}] Running programmatic pacing audit for: '{topic}'")
+        if not frames:
+            self._log_error("Critical Error: Storyboard frames missing. Cannot audit word count.")
+            return False
+
+        target_wps = self._get_target_wps(content_format)
+        self._log_info(f"Running Semantic Word Count Guard. Target Speed: {target_wps} WPS.")
 
         audit_queue = []
         optimization_applied = False
@@ -119,49 +155,66 @@ class WordCountGuardUtility:
         for frame in frames:
             f_idx = frame.get("frame_index", 1)
             start = float(frame.get("timestamp_start", 0.0))
-            end = float(frame.get("timestamp_end", start + 3.0)) # Fallback 3s duration
+            end = float(frame.get("timestamp_end", start + 3.0))
             duration = max(end - start, 1.0)
-            voiceover = frame.get("spoken_voiceover", "").strip()
+            voiceover = frame.get("spoken_audio", "").strip()
 
             word_count = len(voiceover.split())
-            max_recommended_words = int(duration * self.target_words_per_second)
+            max_recommended_words = int(duration * target_wps)
             
-            # Mathematical evaluation
             pacing_status = "safe"
             optimized_text = voiceover
 
+            # If frame has too many words for its duration
             if word_count > max_recommended_words:
                 pacing_status = "optimized_safe"
-                optimized_text = self._programmatic_compress(voiceover, max_recommended_words)
                 optimization_applied = True
-                print(f"[{self.agent_name}] Frame {f_idx}: Truncated '{voiceover}' -> '{optimized_text}'")
+                self._log_info(f"Frame {f_idx} over limit ({word_count} > {max_recommended_words}). Rewriting via AI...")
+                
+                # Try AI Rewrite first for perfect grammar
+                ai_rewritten = self._ai_compress_text(voiceover, max_recommended_words)
+                
+                if ai_rewritten and len(ai_rewritten.split()) <= (max_recommended_words + 2): # Allowing +2 buffer for AI
+                    optimized_text = ai_rewritten
+                    self._log_info(f"AI Rewrote: '{optimized_text}'")
+                else:
+                    # Fallback to math/regex logic
+                    optimized_text = self._programmatic_compress(voiceover, max_recommended_words)
+                    self._log_info(f"Procedural Fallback: '{optimized_text}'")
+                    
+                # Update the actual frame in Agent 03's data so the rest of the pipeline uses the correct text
+                frame["spoken_audio"] = optimized_text
 
             audit_queue.append({
                 "frame_index": f_idx,
                 "duration_seconds": round(duration, 2),
                 "original_word_count": word_count,
-                "max_recommended_words": max_recommended_words,
-                "calculated_wps": round(len(optimized_text.split()) / duration, 2),
-                "pacing_status": pacing_status,
-                "spoken_voiceover": voiceover,
-                "optimized_voiceover": optimized_text
+                "optimized_word_count": len(optimized_text.split()),
+                "max_allowed_words": max_recommended_words,
+                "pacing_status": pacing_status
             })
 
-        final_output = {
+        # Save Audit Data
+        audit_report = {
             "source_topic": topic,
-            "agent_executed": self.agent_name,
-            "pacing_audited": True,
-            "optimization_applied": optimization_applied,
-            "timeline_frames": audit_queue
+            "target_wps_applied": target_wps,
+            "optimization_triggered": optimization_applied,
+            "timeline_audits": audit_queue
         }
-
-        self._save_to_workspace(final_output)
-        return final_output
+        
+        # Update State 
+        state["runtime_data"]["module_a_scripting"]["agent_03_storyboard"]["storyboard_frames"] = frames # Update original frames
+        state["runtime_data"]["module_a_scripting"]["agent_06_word_guard"] = audit_report
+        
+        # PERFECT MASTER LIST HANDSHAKE -> Module A almost complete!
+        state["pipeline_status"]["last_active_agent"] = "Agent_06"
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_07"
+        
+        self._write_state(state)
+        
+        self._log_info("Word Guard Passed! Voiceover logic optimized. Pipeline handed to Ai_Agent_07: dark_phonk_vibe_enhancer.")
+        return True
 
 if __name__ == "__main__":
-    guard = WordCountGuardUtility()
-    output = guard.run_guard_utility()
-    
-    print("\n--- Z-NET CORE UTILITY: AGENT 06 PROGRAMMATIC COMPRESSION COMPLETED ---")
-    print(json.dumps(output, indent=4))
-    print("------------------------------------------------------------------------")
+    guard = UniversalWordCountGuard()
+    guard.execute()
