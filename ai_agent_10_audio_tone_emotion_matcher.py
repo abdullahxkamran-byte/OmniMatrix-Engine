@@ -1,61 +1,67 @@
+
 import os
-import re
 import sys
 import json
+import re
 import urllib.request
 import urllib.error
 
-class AudioToneEmotionMatcher:
+# Manual .env loader utility
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
+
+# Standardize Gemini Integration
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+
+class AiAgent10AudioToneEmotionMatcher:
     def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 10: audio_tone_emotion_matcher"
+        self.agent_name = "Ai Agent 10: Audio Tone Emotion Matcher"
         self.workspace_dir = workspace_dir
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        
         self.ollama_url = "http://localhost:11434/api/chat"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.model_local = "llama3"
         self.model_cloud = "gpt-4o-mini"
         
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        if GEMINI_AVAILABLE and self.gemini_api_key:
+            genai.configure(api_key=self.gemini_api_key)
 
-    def _load_previous_stage(self):
-        """
-        Loads the generated voice tracks and metadata from Stage 9.
-        Falls back to manual dynamic prompt if pipeline is unpopulated.
-        """
-        input_file_path = os.path.join(self.workspace_dir, "09_vocal_audio_assets.json")
-        if os.path.exists(input_file_path):
-            try:
-                with open(input_file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                print(f"[{self.agent_name}] Success: Stage 9 audio assets loaded from '{input_file_path}'")
-                return data
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: File read error ({str(e)}). Switching to manual override.")
-        
-        # Interactive fallback prompt if workspace upstream data is absent
-        print(f"[{self.agent_name}] Pipeline Gap: Upstream audio track assets are missing.")
-        user_input = input("Enter a dialogue line to map emotional audio coordinates: ").strip()
-        if not user_input:
-            print("[System Error] Empty target value. Halting execution.")
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _load_matrix_state(self):
+        """Loads the central OmniMatrix state."""
+        if not os.path.exists(self.state_file):
+            self.log("matrix_state.json not found. Run Module A and Agent 09 first.", "ERROR")
             sys.exit(1)
-            
-        return {
-            "source_topic": "Manual Emotion Mapping",
-            "audio_tracks": [
-                {
-                    "frame_index": 1,
-                    "audio_file": "voiceover_frame_01.mp3",
-                    "spoken_voiceover": user_input
-                }
-            ]
-        }
+        with open(self.state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _save_matrix_state(self, state_data):
+        """Updates the central OmniMatrix state with new emotional audio mappings."""
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=4)
+        self.log("Matrix state successfully updated with Audio Emotion Metadata.")
 
     def _clean_json_response(self, raw_text):
-        """
-        Sanitizes AI model outputs, isolating the raw JSON boundaries to protect parser logic.
-        """
+        """Sanitizes AI model outputs to extract raw JSON data safely."""
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
@@ -68,56 +74,42 @@ class AudioToneEmotionMatcher:
             
         return cleaned
 
-    def _save_to_workspace(self, data, filename="10_audio_emotion_match.json"):
-        """
-        Saves the structured emotional tone metadata to the workspace directory.
-        """
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Audio emotion matches saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save state files: {str(e)}")
-            return None
-
-    def match_emotions(self):
-        """
-        Analyzes spoken dialogues to assign precise emotional multipliers,
-        pitch-shifting indexes, reverb intensities, and EQ settings for dark phonk synchronization.
-        """
-        input_data = self._load_previous_stage()
-        topic = input_data.get("source_topic", "General Audio Target")
-        tracks = input_data.get("audio_tracks", [])
-
-        print(f"[{self.agent_name}] Analyzing script psychology and tone matrix for: '{topic}'")
-
+    def fetch_ai_mappings(self, tracks):
+        """Queries the AI logic cores to determine pitch, reverb, and EQ for each audio track."""
         system_prompt = (
-            "You are an expert sound designer and cinematic audio mixing engineer. "
-            "Your job is to read voiceover scripts and match each frame sequence with high-end phonk sound design controls.\n"
-            "Generate exactly 1 emotion match mapping for every frame inside a list named 'emotion_mappings'. "
-            "Each item must have these exact parameters:\n"
-            "- 'frame_index': integer representing the correct file sequence order.\n"
-            "- 'audio_file': string matching the exact source voiceover file name.\n"
-            "- 'tone_category': string describing the delivery style (choose only from: 'whisper-menace', 'screaming-rage', 'cold-assertive', 'hype-buildup', 'cosmic-vibration').\n"
-            "- 'pitch_shift_semitones': integer representing shifting instructions (scale from -4 for ultra-deep demonic voice to +2 for excited high-pitched intensity).\n"
-            "- 'delivery_speed_multiplier': float adjusting rate of play (scale from 0.90 for slow threat pace to 1.15 for super hyper speed style).\n"
-            "- 'reverb_mix': float representing environment wetness (scale from 0.0 for dry vocals to 0.60 for deep echoing cavern style).\n"
-            "- 'eq_preset': string indicating frequency boost (choose only from: 'heavy-bass-boost', 'radio-vocal-mid', 'crisp-air-treble').\n"
-            "Format your response STRICTLY as a raw JSON object containing the list key 'emotion_mappings'. "
-            "Do not include conversational notes, code blocks, or explanations. Only output raw JSON."
+            "You are an expert cinematic audio mixing engineer for a dark phonk and anime-style video production. "
+            "Analyze the voiceover script and match each frame with precise audio processing effects.\n"
+            "Return STRICTLY a JSON object containing a list named 'emotion_mappings'.\n"
+            "Parameters required per frame:\n"
+            "- 'frame_index': integer.\n"
+            "- 'character': string.\n"
+            "- 'tone_category': choose from ('whisper-menace', 'screaming-rage', 'cold-assertive', 'hype-buildup', 'cosmic-vibration').\n"
+            "- 'pitch_shift_semitones': integer (-4 to +2).\n"
+            "- 'delivery_speed_multiplier': float (0.85 to 1.15).\n"
+            "- 'reverb_mix': float (0.0 to 0.60).\n"
+            "- 'eq_preset': choose from ('heavy-bass-boost', 'radio-vocal-mid', 'crisp-air-treble').\n"
         )
+        
+        user_prompt = "Audio Tracks Metadata:\n" + json.dumps(tracks, indent=2)
 
-        user_prompt = f"Target Vibe: Aggressive Dark Phonk\nScript Dialogues:\n" + json.dumps(tracks, indent=2)
+        # 1st Priority: Gemini AI (Fastest and highly capable for JSON logic)
+        if GEMINI_AVAILABLE and self.gemini_api_key:
+            self.log("Querying Core 1: Gemini AI for audio emotion mapping...")
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(
+                    system_prompt + "\n\n" + user_prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                return json.loads(response.text.strip()).get("emotion_mappings", [])
+            except Exception as e:
+                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
 
+        # 2nd Priority: OpenAI (GPT-4o-mini)
         if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
+            self.log(f"Querying Core 2: OpenAI API [{self.model_cloud}]...")
             url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
             payload = {
                 "model": self.model_cloud,
                 "messages": [
@@ -126,88 +118,42 @@ class AudioToneEmotionMatcher:
                 ],
                 "response_format": {"type": "json_object"}
             }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "stream": False,
-                "format": "json"
-            }
+            try:
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_data = json.loads(response.read().decode("utf-8"))
+                    raw_text = res_data["choices"][0]["message"]["content"]
+                    return json.loads(self._clean_json_response(raw_text)).get("emotion_mappings", [])
+            except Exception as e:
+                self.log(f"OpenAI Engine failed: {e}. Switching to Ollama/Procedural.", "WARNING")
 
-        try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "source_topic": topic,
-                    "agent_executed": self.agent_name,
-                    "emotion_mappings": structured_output.get("emotion_mappings", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
+        # Fallback: Procedural Logic (If internet is down or keys are missing)
+        self.log("All AI API Cores failed or keys absent. Using Offline Procedural Logic Engine.", "STATUS")
+        return self._execute_procedural_fallback(tracks)
 
-        except urllib.error.URLError as e:
-            print(f"[{self.agent_name}] Engine Connection Offline: Executing procedural audio-emotion generation.")
-            return self._execute_procedural_fallback(topic, tracks)
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"[{self.agent_name}] Schema Alignment Error: Running clean procedural fallback styling.")
-            return self._execute_procedural_fallback(topic, tracks)
-
-    def _execute_procedural_fallback(self, topic, tracks):
-        """
-        Procedural sound staging engine to formulate complex audio metrics 
-        for vocal processing layers in the offline absence of AI models.
-        """
+    def _execute_procedural_fallback(self, tracks):
+        """Offline safety matrix for procedural cinematic audio mapping."""
         mappings = []
         total = len(tracks) if tracks else 1
 
         for idx, track in enumerate(tracks):
             frame_idx = track.get("frame_index", idx + 1)
-            file_name = track.get("audio_file", f"voiceover_frame_{frame_idx:02d}.mp3")
+            char_name = track.get("character", "Unknown").lower()
             progression = (idx + 1) / total
 
-            # Establish structured procedural cinematic timeline transitions
-            if progression < 0.3:
-                tone = "whisper-menace"
-                pitch = -2
-                speed = 0.95
-                reverb = 0.30
-                eq = "radio-vocal-mid"
-            elif progression < 0.7:
-                tone = "cold-assertive"
-                pitch = -1
-                speed = 1.0
-                reverb = 0.15
-                eq = "crisp-air-treble"
+            # Analyze character archetype or timeline progression for audio styling
+            if "gojo" in char_name or "hero" in char_name:
+                tone, pitch, speed, reverb, eq = "cold-assertive", 0, 1.0, 0.15, "crisp-air-treble"
+            elif "sukuna" in char_name or "villain" in char_name:
+                tone, pitch, speed, reverb, eq = "screaming-rage", -3, 1.05, 0.45, "heavy-bass-boost"
+            elif progression < 0.3:
+                tone, pitch, speed, reverb, eq = "whisper-menace", -1, 0.95, 0.30, "radio-vocal-mid"
             else:
-                tone = "screaming-rage"
-                pitch = -3  # Deep demonic growl vibe
-                speed = 1.05
-                reverb = 0.45
-                eq = "heavy-bass-boost"
+                tone, pitch, speed, reverb, eq = "hype-buildup", +1, 1.10, 0.20, "crisp-air-treble"
 
             mappings.append({
                 "frame_index": frame_idx,
-                "audio_file": file_name,
+                "character": track.get("character", "Unknown"),
                 "tone_category": tone,
                 "pitch_shift_semitones": pitch,
                 "delivery_speed_multiplier": speed,
@@ -215,18 +161,46 @@ class AudioToneEmotionMatcher:
                 "eq_preset": eq
             })
 
-        fallback_data = {
-            "source_topic": topic,
-            "agent_executed": f"{self.agent_name} (Procedural Fallback Mode)",
-            "emotion_mappings": mappings
-        }
-        self._save_to_workspace(fallback_data)
-        return fallback_data
+        return mappings
+
+    def process_emotions(self):
+        state = self._load_matrix_state()
+        audio_module = state.get("module_b_audio", {})
+        audio_timeline = audio_module.get("audio_timeline", [])
+        
+        if not audio_timeline:
+            self.log("No audio timeline found. Run Agent 09 first.", "ERROR")
+            return
+
+        self.log(f"Analyzing psychology and tone matrix for {len(audio_timeline)} audio tracks...")
+        
+        # Prepare lightweight dataset for the AI prompt to save tokens
+        lightweight_tracks = [
+            {"frame_index": t.get("frame_index"), "character": t.get("character"), "spoken_voiceover": t.get("spoken_voiceover")} 
+            for t in audio_timeline
+        ]
+        
+        ai_mappings = self.fetch_ai_mappings(lightweight_tracks)
+
+        # Merge the generated emotional logic back into the master state
+        for frame in audio_timeline:
+            for mapping in ai_mappings:
+                if frame.get("frame_index") == mapping.get("frame_index"):
+                    frame["audio_effects_processing"] = {
+                        "tone_category": mapping.get("tone_category", "neutral"),
+                        "pitch_shift_semitones": mapping.get("pitch_shift_semitones", 0),
+                        "delivery_speed_multiplier": mapping.get("delivery_speed_multiplier", 1.0),
+                        "reverb_mix": mapping.get("reverb_mix", 0.0),
+                        "eq_preset": mapping.get("eq_preset", "standard")
+                    }
+                    break
+        
+        state["module_b_audio"]["emotions_mapped"] = True
+        state["module_b_audio"]["audio_timeline"] = audio_timeline
+        self._save_matrix_state(state)
+        self.log("Module B - Agent 10 processing complete. Audio processing data merged.")
 
 if __name__ == "__main__":
-    matcher = AudioToneEmotionMatcher()
-    output = matcher.match_emotions()
-    
-    print("\n--- Z-NET VOCAL MODULE B: AGENT 10 AUDIO EMOTION COMPLETED ---")
-    print(json.dumps(output, indent=4))
-    print("----------------------------------------------------------------")
+    matcher = AiAgent10AudioToneEmotionMatcher()
+    matcher.process_emotions()
+    print("\n--- Z-NET VOCAL MODULE B: AGENT 10 COMPLETE ---")
