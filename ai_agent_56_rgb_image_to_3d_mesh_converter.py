@@ -3,8 +3,8 @@ import sys
 import json
 import urllib.request
 import shutil
+import glob
 
-# Manual .env loader utility
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r") as f:
@@ -16,153 +16,45 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-# Check for production dependencies
 try:
     from gradio_client import Client
     GRADIO_AVAILABLE = True
 except ImportError:
     GRADIO_AVAILABLE = False
 
-# Dynamic import of Agent 63 RAM Janitor
-try:
-    from agent_63_automated_background_ram_janitor import AutomatedBackgroundRamJanitor
-    RAM_JANITOR_AVAILABLE = True
-except ImportError:
-    RAM_JANITOR_AVAILABLE = False
-
 class RgbImageTo3dMeshConverter:
     def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 56: rgb_image_to_3d_mesh_converter"
-        
-        # Absolute portable path handling
+        self.agent_name = "Ai Agent 56: Smart Batch 3D Converter"
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
         
-        # Hugging Face Token for unlimited space requests
+        self.inputs_dir = os.path.join(self.workspace_dir, "outputs")
+        self.outputs_dir = os.path.join(self.workspace_dir, "3d_meshes") 
+        self.output_blueprint_path = os.path.join(self.outputs_dir, "56_master_mesh_blueprint.json")
+        
         self.hf_token = os.environ.get("HF_TOKEN", os.environ.get("HF_API_KEY", None))
         
-        # IO File Definitions
-        self.input_colorized_path = os.path.join(self.workspace_dir, "55_colorized_manga_panel.png")
-        self.output_mesh_path = os.path.join(self.workspace_dir, "56_3d_mesh.obj")
-        self.output_material_path = os.path.join(self.workspace_dir, "56_3d_mesh.mtl")
-        self.output_texture_path = os.path.join(self.workspace_dir, "56_3d_mesh.png")
-        self.output_blueprint_path = os.path.join(self.workspace_dir, "56_mesh_generator_blueprint.json")
-        self.log_file_path = os.path.join(self.workspace_dir, "agent_56_execution.log")
-        
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        # 3D Model Library Memory for Smart Bypass
+        self.model_library = {} 
 
-        # Initialize Memory Janitor Safeguard
-        if RAM_JANITOR_AVAILABLE:
-            self.janitor = AutomatedBackgroundRamJanitor(workspace_dir=self.workspace_dir)
-            self.log_message("Agent 63 RAM Janitor integrated successfully.", "INFO")
-        else:
-            self.janitor = None
-            self.log_message("Agent 63 RAM Janitor module not found. Memory cleanup bypassed.", "WARNING")
+        for d in [self.workspace_dir, self.inputs_dir, self.outputs_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
     def log_message(self, message, level="INFO"):
-        """Systematic logging utility for runtime execution debugging."""
-        formatted_msg = f"[{level}] [{self.agent_name}] {message}"
-        print(formatted_msg)
-        try:
-            with open(self.log_file_path, "a", encoding="utf-8") as log_f:
-                log_f.write(formatted_msg + "\n")
-        except Exception:
-            pass
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-    def _validate_input_integrity(self):
-        """Verifies if the input image exists, is non-empty, and valid."""
-        if not os.path.exists(self.input_colorized_path):
-            self.log_message(f"Input file missing at: {self.input_colorized_path}", "ERROR")
-            return False
-        if os.path.getsize(self.input_colorized_path) == 0:
-            self.log_message(f"Input image file is empty/corrupt.", "ERROR")
-            return False
-        return True
-
-    def _smart_fallback_by_image_style(self):
-        """Analyzes Agent 55's blueprint metadata to download a style-matched 3D asset if offline."""
-        self.log_message("Online API skipped or failed. Activating Smart Style Fallback System...", "WARNING")
-        
-        # Path to Agent 55's blueprint
-        agent_55_blueprint = os.path.join(self.workspace_dir, "55_manga_comprehend_blueprint.json")
-        is_character = False
-        character_name = "Unknown"
-        
-        # Step 1: Read metadata from Agent 55's output
-        if os.path.exists(agent_55_blueprint):
-            try:
-                with open(agent_55_blueprint, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    # Supports both schema formats: 'extracted_metadata' or 'analysis_metrics'
-                    metadata = data.get("extracted_metadata", data.get("analysis_metrics", {}))
-                    characters = metadata.get("detected_characters", [])
-                    
-                    if characters and len(characters) > 0:
-                        is_character = True
-                        character_name = characters[0].get("name", "Character")
-                        self.log_message(f"Agent 55 Blueprint confirmed character identity: {character_name}", "INFO")
-            except Exception as e:
-                self.log_message(f"Failed to parse Agent 55 blueprint metadata: {str(e)}", "WARNING")
-        
-        # Step 2: Backup filename-based check if blueprint reading failed/was empty
-        if not is_character:
-            img_name_lower = os.path.basename(self.input_colorized_path).lower()
-            if any(keyword in img_name_lower for keyword in ["char", "gojo", "sukuna", "naruto", "sasuke", "goku", "killua"]):
-                is_character = True
-                character_name = "Filename Matched Character"
-        
-        # Step 3: Decision Matrix
-        if is_character:
-            self.log_message(f"Character structure identified ('{character_name}'). Fetching humanoid mannequin...", "INFO")
-            url = "https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/mannequin.obj"
-        else:
-            self.log_message("No explicit character found. Fetching structural geometric mesh...", "INFO")
-            url = "https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/cube.obj"
-            
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=12) as response, open(self.output_mesh_path, "wb") as out_f:
-                out_f.write(response.read())
-            self.log_message("Style-matched fallback asset successfully downloaded.", "INFO")
-            return True
-        except Exception as e:
-            self.log_message(f"External fallback download failed: {str(e)}. Generating local core mesh...", "ERROR")
-            self._generate_local_core_mesh()
-            return False
-
-    def _generate_local_core_mesh(self):
-        """Completely offline geometric star shape generation when internet is absent."""
-        vertices = [
-            (0.0, 0.0, 1.2), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), 
-            (-1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, -1.2)
-        ]
-        faces = [
-            (1, 2, 3), (1, 3, 4), (1, 4, 5), (1, 5, 2),
-            (6, 3, 2), (6, 4, 3), (6, 5, 4), (6, 2, 5)
-        ]
-        try:
-            with open(self.output_mesh_path, "w", encoding="utf-8") as f:
-                f.write("# Z-Net Offline Procedural Core Geometry\n")
-                for v in vertices:
-                    f.write(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f}\n")
-                for face in faces:
-                    f.write(f"f {face[0]} {face[1]} {face[2]}\n")
-            self.log_message("Local core geometry created successfully.", "INFO")
-        except Exception as e:
-            self.log_message(f"Critical error writing local core geometry: {str(e)}", "CRITICAL")
-
-    def _normalize_mesh_coordinates(self):
-        """Parses the generated OBJ file, centers it on 0,0,0 and scales it."""
-        if not os.path.exists(self.output_mesh_path):
+    def _normalize_mesh_coordinates(self, mesh_path):
+        """Centers the 3D model on 0,0,0 and scales it properly."""
+        if not os.path.exists(mesh_path):
             return
 
-        self.log_message("Normalizing generated 3D mesh scale and position coordinates...", "INFO")
+        self.log_message(f"Normalizing coordinates for: {os.path.basename(mesh_path)}", "INFO")
         try:
             vertices = []
             other_lines = []
             
-            with open(self.output_mesh_path, "r", encoding="utf-8") as f:
+            with open(mesh_path, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.startswith("v "):
                         parts = line.strip().split()
@@ -171,25 +63,17 @@ class RgbImageTo3dMeshConverter:
                         other_lines.append(line)
                         
             if not vertices:
-                self.log_message("No vertices found in OBJ file. Normalization bypassed.", "WARNING")
                 return
 
             xs = [v[0] for v in vertices]
             ys = [v[1] for v in vertices]
             zs = [v[2] for v in vertices]
             
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            min_z, max_z = min(zs), max(zs)
+            cx = (min(xs) + max(xs)) / 2.0
+            cy = (min(ys) + max(ys)) / 2.0
+            cz = (min(zs) + max(zs)) / 2.0
             
-            cx = (min_x + max_x) / 2.0
-            cy = (min_y + max_y) / 2.0
-            cz = (min_z + max_z) / 2.0
-            
-            dx = max_x - min_x
-            dy = max_y - min_y
-            dz = max_z - min_z
-            max_dim = max(dx, dy, dz)
+            max_dim = max(max(xs)-min(xs), max(ys)-min(ys), max(zs)-min(zs))
             scale_factor = 1.0 if max_dim == 0 else (1.5 / max_dim)
 
             normalized_vertices = []
@@ -199,110 +83,111 @@ class RgbImageTo3dMeshConverter:
                 nz = (v[2] - cz) * scale_factor
                 normalized_vertices.append((nx, ny, nz))
 
-            with open(self.output_mesh_path, "w", encoding="utf-8") as f:
-                f.write("# Z-Net Vertex Auto-Normalized Mesh\n")
+            with open(mesh_path, "w", encoding="utf-8") as f:
+                f.write("# Z-Net Auto-Normalized Mesh\n")
                 for nv in normalized_vertices:
                     f.write(f"v {nv[0]:.6f} {nv[1]:.6f} {nv[2]:.6f}\n")
                 for line in other_lines:
                     f.write(line)
                     
-            self.log_message(f"Mesh centering successful. Normalized scale factor applied: {scale_factor:.4f}", "INFO")
-
         except Exception as e:
-            self.log_message(f"Failed to normalize mesh coordinates: {str(e)}", "ERROR")
+            self.log_message(f"Failed to normalize mesh: {str(e)}", "ERROR")
 
-    def execute_conversion_pipeline(self):
-        self.log_message("Initializing 3D Generation Pipeline...", "INFO")
-
-        # SAFEGUARD: Pre-execution memory purge
-        if self.janitor:
-            self.log_message("Running pre-execution memory cleanup sweep...", "INFO")
-            self.janitor.run_janitor_cleanup()
-
-        # 1. Image Validation Check
-        if not self._validate_input_integrity():
-            self._smart_fallback_by_image_style()
-            self._normalize_mesh_coordinates()
-            
-            # Post-execution clean on failure path
-            if self.janitor:
-                self.janitor.run_janitor_cleanup()
-                
-            return self._generate_blueprint(status="Fallback Active")
-
-        # 2. Universal API Generation Check
-        if GRADIO_AVAILABLE:
-            if self.hf_token:
-                self.log_message("Secure Hugging Face Token detected. Initiating authorized Gradio connection...", "INFO")
-            else:
-                self.log_message("Gradio connection initiating anonymously...", "WARNING")
-                
-            try:
-                # Connected to StabilityAI's TripoSR Space for high-quality single-image-to-3D
-                client = Client("stabilityai/TripoSR", hf_token=self.hf_token)
-                result = client.predict(
-                    image=self.input_colorized_path,
-                    api_name="/generate_3d"
-                )
-                
-                if isinstance(result, (list, tuple)) and len(result) > 0:
-                    temp_obj_path = str(result[0])
-                    if os.path.exists(temp_obj_path):
-                        shutil.copy(temp_obj_path, self.output_mesh_path)
-                    
-                    for temp_file in result[1:]:
-                        temp_file_str = str(temp_file)
-                        if os.path.exists(temp_file_str):
-                            if temp_file_str.endswith('.mtl'):
-                                shutil.copy(temp_file_str, self.output_material_path)
-                            elif temp_file_str.endswith('.png'):
-                                shutil.copy(temp_file_str, self.output_texture_path)
-                    
-                    self.log_message("Universal textured 3D mesh successfully downloaded.", "INFO")
-                elif isinstance(result, str) and os.path.exists(result):
-                    shutil.copy(result, self.output_mesh_path)
-                    self.log_message("Universal 3D geometry imported successfully.", "INFO")
-                else:
-                    raise ValueError("Unexpected API response format from TripoSR Space.")
-                
-                self._normalize_mesh_coordinates()
-
-            except Exception as e:
-                self.log_message(f"Hugging Face TripoSR Space connection failed: {str(e)}", "WARNING")
-                self._smart_fallback_by_image_style()
-                self._normalize_mesh_coordinates()
-        else:
-            self.log_message("Gradio Client dependency not found. Routing to fallback stream.", "WARNING")
-            self._smart_fallback_by_image_style()
-            self._normalize_mesh_coordinates()
-
-        # 3. Export Metadata Blueprint
-        blueprint = self._generate_blueprint(status="Success")
-
-        # SAFEGUARD: Post-execution memory purge to release allocated variables and buffers
-        if self.janitor:
-            self.log_message("Running post-execution memory cleanup sweep...", "INFO")
-            self.janitor.run_janitor_cleanup()
-
-        return blueprint
-
-    def _generate_blueprint(self, status="Success"):
-        blueprint = {
-            "agent": self.agent_name,
-            "status": status,
-            "mesh_path": self.output_mesh_path,
-            "materials_found": os.path.exists(self.output_material_path),
-            "textures_found": os.path.exists(self.output_texture_path)
-        }
+    def _generate_local_fallback_mesh(self, out_path):
+        """Creates a basic cube mesh if everything fails."""
+        vertices = [
+            (-0.5,-0.5,0.5), (0.5,-0.5,0.5), (0.5,0.5,0.5), (-0.5,0.5,0.5),
+            (-0.5,-0.5,-0.5), (0.5,-0.5,-0.5), (0.5,0.5,-0.5), (-0.5,0.5,-0.5)
+        ]
+        faces = [
+            (1,2,3), (1,3,4), (5,8,7), (5,7,6), (1,5,6), (1,6,2),
+            (2,6,7), (2,7,3), (3,7,8), (3,8,4), (5,1,4), (5,4,8)
+        ]
         try:
-            with open(self.output_blueprint_path, "w", encoding="utf-8") as blue_f:
-                json.dump(blueprint, blue_f, indent=4)
-            self.log_message("Agent blueprint metadata updated successfully.", "INFO")
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write("# Z-Net Offline Fallback Geometry\n")
+                for v in vertices: f.write(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f}\n")
+                for face in faces: f.write(f"f {face[0]} {face[1]} {face[2]}\n")
+            self.log_message("Local fallback geometry created.", "INFO")
         except Exception as e:
-            self.log_message(f"Failed to write blueprint metadata: {str(e)}", "ERROR")
-        return blueprint
+            self.log_message(f"Critical error writing local core geometry: {str(e)}", "CRITICAL")
+
+    def _process_single_character(self, image_path, char_name):
+        mesh_out = os.path.join(self.outputs_dir, f"{char_name}_mesh.obj")
+        mtl_out = os.path.join(self.outputs_dir, f"{char_name}_mesh.mtl")
+        tex_out = os.path.join(self.outputs_dir, f"{char_name}_texture.png")
+        
+        success = False
+        if GRADIO_AVAILABLE and self.hf_token:
+            self.log_message(f"Connecting to TripoSR API for: {char_name}", "INFO")
+            try:
+                client = Client("stabilityai/TripoSR", hf_token=self.hf_token)
+                result = client.predict(image=image_path, api_name="/generate_3d")
+                
+                if isinstance(result, (list, tuple)):
+                    for temp_file in result:
+                        temp_str = str(temp_file)
+                        if temp_str.endswith('.obj'): shutil.copy(temp_str, mesh_out)
+                        elif temp_str.endswith('.mtl'): shutil.copy(temp_str, mtl_out)
+                        elif temp_str.endswith('.png'): shutil.copy(temp_str, tex_out)
+                    success = True
+            except Exception as e:
+                self.log_message(f"TripoSR API failed: {str(e)}", "WARNING")
+
+        if not success:
+            self.log_message("Online API failed or unavailable. Generating local fallback...", "WARNING")
+            self._generate_local_fallback_mesh(mesh_out)
+        
+        self._normalize_mesh_coordinates(mesh_out)
+        return {"mesh": mesh_out, "material": mtl_out if os.path.exists(mtl_out) else "", "texture": tex_out if os.path.exists(tex_out) else ""}
+
+    def execute_batch_conversion(self):
+        self.log_message("Starting Smart Batch 3D Generation Pipeline...", "INFO")
+        
+        json_files = sorted(glob.glob(os.path.join(self.inputs_dir, "*_vision.json")))
+        if not json_files:
+            self.log_message("No vision JSON files found. Run Agent 55 first.", "ERROR")
+            return
+
+        master_blueprint = {}
+
+        for json_path in json_files:
+            base_scene_name = os.path.basename(json_path).replace("_vision.json", "")
+            char_image_path = os.path.join(self.inputs_dir, f"{base_scene_name}_02_character.png")
+            
+            try:
+                with open(json_path, "r") as jf:
+                    vision_data = json.load(jf)
+            except Exception as e:
+                self.log_message(f"Error reading {json_path}: {str(e)}. Skipping.", "ERROR")
+                continue
+            
+            char_name = vision_data.get("character_name", f"Unknown_{base_scene_name}").replace(" ", "_")
+            is_new_character = vision_data.get("is_new_character", True)
+
+            self.log_message(f"\n--- Scene: {base_scene_name} | Character: {char_name} ---", "INFO")
+
+            # SMART BYPASS LOGIC
+            if not is_new_character and char_name in self.model_library:
+                self.log_message(f"Smart Bypass Active. Reusing 3D model for: {char_name}.", "INFO")
+                master_blueprint[base_scene_name] = dict(self.model_library[char_name])
+                master_blueprint[base_scene_name]["is_reused"] = True
+            else:
+                if os.path.exists(char_image_path):
+                    self.log_message(f"Generating new 3D mesh for {char_name}...", "INFO")
+                    assets = self._process_single_character(char_image_path, char_name)
+                    
+                    self.model_library[char_name] = assets
+                    master_blueprint[base_scene_name] = dict(assets)
+                    master_blueprint[base_scene_name]["is_reused"] = False
+                else:
+                    self.log_message(f"Character image not found for {base_scene_name}", "ERROR")
+
+        with open(self.output_blueprint_path, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+        
+        self.log_message("Batch conversion complete! Blueprint saved.", "INFO")
 
 if __name__ == "__main__":
     converter = RgbImageTo3dMeshConverter()
-    converter.execute_conversion_pipeline()
-    print("\n--- Z-NET 3D GENERATOR SYSTEM: AGENT 56 COMPLETE ---")
+    converter.execute_batch_conversion()
