@@ -2,200 +2,216 @@ import os
 import re
 import sys
 import json
+import subprocess
 import urllib.request
 import urllib.error
 
-class DynamicSmearFrameGenerator:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 29: dynamic_smear_frame_generator"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
+class OmniMatrixMotionDynamicsDirector:
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 29: OmniMatrix Motion & Smear Director"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        # Directories
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        
+        # Outputs
+        self.output_blueprint = os.path.join(self.env_dir, "29_motion_dynamics_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        for d in [self.script_dir, self.env_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
-    def _load_upstream_animation_data(self):
-        # Puppet animator se high-speed keyframes aur movements load karta hai
-        anim_path = os.path.join(self.workspace_dir, "26_kinetic_rig_puppeteer_blueprint.json")
-        velocity_targets = []
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        if os.path.exists(anim_path):
+    def _load_upstream_context(self, scene_name):
+        """Load visual style and high-speed motion data."""
+        context = {
+            "visual_style": "omni_neutral",
+            "action_description": "Standard movement",
+            "fast_motion_frame": 0
+        }
+        
+        # Load Style Context
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
+        if os.path.exists(script_file):
             try:
-                with open(anim_path, "r", encoding="utf-8") as f:
+                with open(script_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                for seq in data.get("rig_animation_sequences", []):
-                    # Hum sirf un frames ko focus karte hain jo fast/kinetic hain
-                    velocity_targets.append({
-                        "timestamp_sec": seq.get("timestamp_sec", 0.0),
-                        "character_id": seq.get("character_id", "char_generic"),
-                        "pose_name": seq.get("action_pose_name", "idle"),
-                        "translation_offset": seq.get("translation_offset", [0.0, 0.0, 0.0])
-                    })
-            except Exception as e:
-                print(f"[{self.agent_name}] Upstream animation load warning: {str(e)}")
+                    context["visual_style"] = data.get("visual_style", "omni_neutral")
+                    context["action_description"] = data.get("action_description", "")
+            except:
+                pass
 
-        if not velocity_targets:
-            print(f"[{self.agent_name}] Workspace Alert: Animation data missing. Generating default smear points.")
-            velocity_targets = [
-                {"timestamp_sec": 1.2, "character_id": "char_001", "pose_name": "combat_ready_idle", "translation_offset": [0.0, 0.0, 0.0]},
-                {"timestamp_sec": 4.5, "character_id": "char_002", "pose_name": "aerial_combat_spin", "translation_offset": [0.0, 1.8, 2.5]}
-            ]
+        # Load Animation Keys (to find fast movement frames)
+        anim_file = os.path.join(self.env_dir, "26_animation_blueprint.json")
+        if os.path.exists(anim_file):
+            try:
+                with open(anim_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if scene_name in data:
+                        # Guessing the target frame based on puppet action
+                        context["fast_motion_frame"] = data[scene_name].get("target_frame", 24)
+            except:
+                pass
 
-        return velocity_targets
+        return context
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+    def _query_motion_brain(self, scene_name, context):
+        """Ask Gemini to decide between Realistic Motion Blur or Anime Smear Frames."""
+        if not self.gemini_api_key:
+            return self._fallback_motion()
 
-    def _save_to_workspace(self, data, filename="29_dynamic_smear_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Dynamic smear configurations saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save smear blueprint: {str(e)}")
-            return None
-
-    def design_dynamic_smears(self):
-        targets = self._load_upstream_animation_data()
-        print(f"[{self.agent_name}] Smear Engine active. Calculating lattice deformation matrices and ghost trails...")
-
-        system_prompt = (
-            "You are a master Technical Director specialized in 2D anime-style 3D mesh deformations (smear frames) in Blender.\n"
-            "Your job is to analyze high-speed character translations and design mesh-stretching and ghost-trail parameters.\n"
-            "For each animation target, generate exactly 1 smear modification block inside a list named 'mesh_smear_profiles' with these keys:\n"
-            "- 'timestamp_sec': float matching the movement timeline.\n"
-            "- 'target_mesh_name': string designating which part of the asset stretches (e.g., 'hand_R_mesh', 'weapon_sword_mesh', 'body_root_mesh').\n"
-            "- 'smear_stretch_vector': array of 3 floats [x, y, z] representing directional stretch scale (1.0 is normal size, 3.5 is heavily stretched along velocity path).\n"
-            "- 'smear_deform_taper': float (scale from 0.1 to 1.0; defines if the mesh narrows down at the tail of the stretch like a teardrop).\n"
-            "- 'trail_ghost_count': integer (number of transparent duplicate meshes spawned behind the main mesh to form a speed trail; scale from 0 to 5).\n"
-            "- 'trail_opacity_decay': float representing how fast the ghost trails fade out (scale from 0.2 to 0.8; lower values fade faster).\n"
-            "- 'shutter_substeps_override': integer (Blender motion blur override steps; set to 4 or 8 for clean renders).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'mesh_smear_profiles'. "
-            "Do not write conversational explanations, markdown code blocks, or backticks. Return valid JSON only."
+        ai_prompt = (
+            f"You are the Motion Dynamics Technical Director for the OmniMatrix Engine.\n"
+            f"Scene Name: {scene_name}\n"
+            f"Visual Style: {context['visual_style']}\n"
+            f"Action: {context['action_description']}\n\n"
+            "Decide how to render high-speed motion based on the visual style.\n"
+            "- Realistic/Cinematic: Use 'realistic_blur', high shutter speed, NO mesh stretching.\n"
+            "- Anime/Cartoon: Use 'stylized_smear', high stretch factor, ghost trails.\n"
+            "Return ONLY raw JSON:\n"
+            "{\n"
+            "  \"motion_handling_mode\": \"stylized_smear\",\n"
+            "  \"target_frame\": " + str(context['fast_motion_frame']) + ",\n"
+            "  \"camera_shutter_speed\": 0.5,\n"
+            "  \"motion_blur_steps\": 8,\n"
+            "  \"mesh_stretch_factor\": 2.5,\n"
+            "  \"ghost_trail_count\": 3,\n"
+            "  \"rationale\": \"Anime style requires exaggerated mesh stretching for fast sword slashes.\"\n"
+            "}"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Skeletal Trajectory Logs:\n{json.dumps(targets, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Skeletal Trajectory Logs:\n{json.dumps(targets, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "mesh_smear_profiles": structured_output.get("mesh_smear_profiles", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text)
         except Exception as e:
-            print(f"[{self.agent_name}] Network Exception: {str(e)}. Running procedural mesh-stretching math engine.")
-            return self._execute_procedural_fallback(targets)
+            self.log_message(f"AI Motion Director failed: {str(e)}. Using fallback.", "WARNING")
+            return self._fallback_motion(context["fast_motion_frame"])
 
-    def _execute_procedural_fallback(self, targets):
-        # Precise non-linear physics algorithms to warp meshes based on velocity change
-        profiles = []
-        for target in targets:
-            ts = float(target.get("timestamp_sec", 0.0))
-            pose = str(target.get("pose_name", "")).lower()
-
-            # Dynamic smear generation based on kinetic movements
-            if "spin" in pose or "slash" in pose or "combat" in pose:
-                # Heavy circular movement triggers radical stretch and long ghost trail
-                mesh = "weapon_sword_mesh"
-                stretch = [1.0, 3.2, 1.0] # Massive stretch on Y (velocity) axis
-                taper = 0.35 # Sharp tapered tail
-                ghosts = 4
-                decay = 0.5
-                substeps = 8
-            else:
-                # Subtle/normal movements
-                mesh = "body_root_mesh"
-                stretch = [1.0, 1.1, 1.0]
-                taper = 0.9
-                ghosts = 0
-                decay = 0.0
-                substeps = 4
-
-            profiles.append({
-                "timestamp_sec": ts,
-                "target_mesh_name": mesh,
-                "smear_stretch_vector": stretch,
-                "smear_deform_taper": taper,
-                "trail_ghost_count": ghosts,
-                "trail_opacity_decay": decay,
-                "shutter_substeps_override": substeps
-            })
-
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Smear Fallback)",
-            "mesh_smear_profiles": profiles
+    def _fallback_motion(self, frame=24):
+        return {
+            "motion_handling_mode": "realistic_blur", "target_frame": frame,
+            "camera_shutter_speed": 0.5, "motion_blur_steps": 4,
+            "mesh_stretch_factor": 0.0, "ghost_trail_count": 0,
+            "rationale": "Universal default motion blur."
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def _generate_blender_script(self, blend_file_path, motion_data):
+        """Python script to inject Motion Blur and Smear Deformations into Blender."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        
+        script_content = f"""
+import bpy
+
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+try:
+    mode = "{motion_data.get('motion_handling_mode', 'realistic_blur')}"
+    target_frame = {motion_data.get('target_frame', 24)}
+    shutter = {motion_data.get('camera_shutter_speed', 0.5)}
+    steps = {motion_data.get('motion_blur_steps', 4)}
+    stretch_factor = {motion_data.get('mesh_stretch_factor', 0.0)}
+
+    # 1. Universal Camera Motion Blur Setup
+    bpy.context.scene.render.use_motion_blur = True
+    bpy.context.scene.render.motion_blur_shutter = shutter
+    
+    # Eevee specific blur settings
+    if hasattr(bpy.context.scene.eevee, "use_motion_blur"):
+        bpy.context.scene.eevee.use_motion_blur = True
+        bpy.context.scene.eevee.motion_blur_steps = steps
+
+    # 2. Anime-Style Smear Deformation (If Stylized)
+    if mode == "stylized_smear" and stretch_factor > 0:
+        # Find character meshes (Assumed to be children of Armature)
+        char_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent and obj.parent.type == 'ARMATURE']
+        
+        for mesh in char_meshes:
+            # Add Simple Deform (Stretch) Modifier
+            mod = mesh.modifiers.new(name="Omni_Smear_Stretch", type='SIMPLE_DEFORM')
+            mod.deform_method = 'STRETCH'
+            
+            # Keyframe the stretch so it only happens at the exact frame of movement
+            mod.factor = 0.0
+            mod.keyframe_insert(data_path="factor", frame=target_frame - 1)
+            
+            mod.factor = stretch_factor
+            mod.keyframe_insert(data_path="factor", frame=target_frame)
+            
+            mod.factor = 0.0
+            mod.keyframe_insert(data_path="factor", frame=target_frame + 2)
+
+    bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+    print("SUCCESS: OmniMatrix Motion Dynamics (Blur/Smear) injected successfully.")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_motion_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def process_motion_dynamics(self):
+        self.log_message("Initializing OmniMatrix Motion Dynamics Director...", "INFO")
+        master_blueprint = {}
+        
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                scene_name = filename.replace("_stage.blend", "")
+                blend_file_path = os.path.join(self.env_dir, filename)
+                
+                context = self._load_upstream_context(scene_name)
+                
+                self.log_message(f"--- Processing Motion for: {scene_name} ---", "INFO")
+                motion_data = self._query_motion_brain(scene_name, context)
+                
+                self.log_message(f"AI Decision: {motion_data['rationale']} | Mode: {motion_data['motion_handling_mode']}", "INFO")
+                
+                script_path = self._generate_blender_script(blend_file_path, motion_data)
+                
+                command = [self.blender_path, "-b", "-P", script_path]
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        self.log_message(f"Motion Dynamics applied to {filename}", "INFO")
+                        master_blueprint[scene_name] = motion_data
+                    else:
+                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                except Exception as e:
+                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    
+                if os.path.exists(script_path):
+                    os.remove(script_path)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Agent 29 Pipeline Complete. Speed and Motion are now Omni-Optimized.", "INFO")
 
 if __name__ == "__main__":
-    generator = DynamicSmearFrameGenerator()
-    output = generator.design_dynamic_smears()
-    
-    print("\n--- Z-NET BLENDER ENGINE: AGENT 29 SMEAR FRAME DESIGN COMPLETE ---")
-    print(f"Total smear profiles calculated: {len(output['mesh_smear_profiles'])}")
-    for profile in output["mesh_smear_profiles"]:
-        print(f"Time: {profile['timestamp_sec']}s | Mesh: {profile['target_mesh_name']} | Stretch: {profile['smear_stretch_vector']} | Ghost Trail Count: {profile['trail_ghost_count']} (Decay: {profile['trail_opacity_decay']})")
-    print("------------------------------------------------------------------")
+    director = OmniMatrixMotionDynamicsDirector()
+    director.process_motion_dynamics()
