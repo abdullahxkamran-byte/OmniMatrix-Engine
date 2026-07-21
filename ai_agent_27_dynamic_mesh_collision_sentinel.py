@@ -2,229 +2,219 @@ import os
 import re
 import sys
 import json
+import subprocess
 import urllib.request
 import urllib.error
 
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    # Universal Uppercase API Keys
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
 class DynamicMeshCollisionSentinel:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 27: dynamic_mesh_collision_sentinel"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 27: OmniMatrix Dynamic Collision Sentinel"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _load_upstream_animation_and_assets(self):
-        # Puppet animator aur character maps load karta hai positions check karne ke liye
-        anim_path = os.path.join(self.workspace_dir, "26_kinetic_rig_puppeteer_blueprint.json")
-        char_path = os.path.join(self.workspace_dir, "23_character_asset_selector_blueprint.json")
+        # Upstream Inputs
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments") # Modifies existing _stage.blend files
         
-        simulation_inputs = {
-            "characters_in_scene": [],
-            "keyframes_detected": []
+        # Outputs
+        self.output_blueprint = os.path.join(self.env_dir, "27_collision_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+
+        for d in [self.script_dir, self.env_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
+
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _load_upstream_context(self, scene_name):
+        """Loads scene context to understand the intensity of collisions."""
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
+        context = {
+            "visual_style": "omni_neutral",
+            "action_description": "Characters interacting"
         }
-
-        # 1. Load active characters
-        if os.path.exists(char_path):
-            try:
-                with open(char_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for alloc in data.get("character_allocations", []):
-                    simulation_inputs["characters_in_scene"].append({
-                        "character_id": alloc.get("matched_local_asset_id", "char_generic"),
-                        "file_name": alloc.get("matched_file_name", "NONE")
-                    })
-            except Exception as e:
-                print(f"[{self.agent_name}] Upstream character data load warning: {str(e)}")
-
-        # 2. Load animations
-        if os.path.exists(anim_path):
-            try:
-                with open(anim_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for seq in data.get("rig_animation_sequences", []):
-                    simulation_inputs["keyframes_detected"].append({
-                        "timestamp_sec": seq.get("timestamp_sec", 0.0),
-                        "character_id": seq.get("character_id"),
-                        "action_pose": seq.get("action_pose_name"),
-                        "translation_offset": seq.get("translation_offset", [0.0, 0.0, 0.0])
-                    })
-            except Exception as e:
-                print(f"[{self.agent_name}] Upstream animation load warning: {str(e)}")
-
-        # Fallbacks if files are not fully populated
-        if not simulation_inputs["keyframes_detected"]:
-            print(f"[{self.agent_name}] Workspace Alert: Animation timeline missing. Using procedural default triggers.")
-            simulation_inputs["keyframes_detected"] = [
-                {"timestamp_sec": 0.0, "character_id": "char_001", "action_pose": "energy_charge_squat", "translation_offset": [0.0, 0.0, -0.3]},
-                {"timestamp_sec": 4.5, "character_id": "char_002", "action_pose": "aerial_combat_spin", "translation_offset": [0.0, 1.8, 2.5]}
-            ]
-
-        return simulation_inputs
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
         
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+        if os.path.exists(script_file):
+            try:
+                with open(script_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    context["visual_style"] = data.get("visual_style", "omni_neutral")
+                    context["action_description"] = data.get("action_description", "")
+            except Exception as e:
+                pass
+                
+        return context
 
-    def _save_to_workspace(self, data, filename="27_mesh_collision_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Collision matrix saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save collision metadata: {str(e)}")
-            return None
+    def _query_physics_brain(self, scene_name, context):
+        """Asks Gemini to estimate impact severity and particle styles."""
+        if not self.gemini_api_key:
+            return self._fallback_physics()
 
-    def audit_and_simulate_collisions(self):
-        inputs = self._load_upstream_animation_and_assets()
-        print(f"[{self.agent_name}] Collision Sentinel active. Auditing mesh boundaries and calculating impact points...")
-
-        system_prompt = (
-            "You are an AI 3D Physics and Collision TD specialized in character bounds simulation and impact effects in Blender.\n"
-            "Your job is to audit physical overlap conflicts between animated characters and environment assets.\n"
-            "For each keyframe segment where characters interact, output exactly 1 collision block inside a list named 'collision_resolution_events' with these properties:\n"
-            "- 'timestamp_sec': float matching the keyframe event.\n"
-            "- 'has_collision_conflict': boolean (true if meshes are overlapping or weapons collide, false otherwise).\n"
-            "- 'conflict_severity': string ('NONE', 'LOW_CLIP', 'HIGH_PENETRATION').\n"
-            "- 'pushback_offset_vector': array of 3 floats [x, y, z] to apply to the character to prevent clipping (e.g. [-0.15, 0.0, 0.0]).\n"
-            "- 'impact_point_coordinates': array of 3 floats [x, y, z] indicating where sparks/shockwaves should spawn in 3D space.\n"
-            "- 'sparks_particle_count': integer (scale from 0 to 150 based on impact velocity).\n"
-            "- 'impact_force_magnitude': float (scale from 0.0 to 50.0 representing physical impulse transfer).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'collision_resolution_events'. "
-            "Do not write conversational explanations, markdown code blocks, or backticks. Return valid JSON only."
+        ai_prompt = (
+            f"You are the Physics & FX Supervisor for the OmniMatrix Engine.\n"
+            f"Scene Name: {scene_name}\n"
+            f"Visual Style: {context['visual_style']}\n"
+            f"Action Required: {context['action_description']}\n\n"
+            "Analyze the action. Does it involve high impact (sword clash, punch) or just normal movement?\n"
+            "Return ONLY raw JSON:\n"
+            "{\n"
+            "  \"has_major_impact\": true,\n"
+            "  \"impact_frame\": 24,\n"
+            "  \"sparks_particle_count\": 150,\n"
+            "  \"particle_style\": \"realistic_sparks\",\n"
+            "  \"anti_clipping_pushback\": [0.0, -0.2, 0.0],\n"
+            "  \"rationale\": \"Sword clash requires sparks and a slight pushback to prevent mesh intersection.\"\n"
+            "}"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Skeletal Position Logs:\n{json.dumps(inputs, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Skeletal Position Logs:\n{json.dumps(inputs, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "collision_resolution_events": structured_output.get("collision_resolution_events", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text)
         except Exception as e:
-            print(f"[{self.agent_name}] Network Exception: {str(e)}. Triggering rigid-body mathematical collision solver.")
-            return self._execute_procedural_fallback(inputs)
+            self.log_message(f"AI Physics Prediction failed: {str(e)}. Using fallback.", "WARNING")
+            return self._fallback_physics()
 
-    def _execute_procedural_fallback(self, inputs):
-        # High speed procedural distance checking math
-        events = []
-        for key in inputs.get("keyframes_detected", []):
-            ts = float(key.get("timestamp_sec", 0.0))
-            pose = str(key.get("action_pose", "")).lower()
-            trans = key.get("translation_offset", [0.0, 0.0, 0.0])
-
-            # Simulating physical boundaries check
-            has_conflict = False
-            severity = "NONE"
-            pushback = [0.0, 0.0, 0.0]
-            impact_point = [0.0, 0.0, 0.0]
-            sparks = 0
-            force = 0.0
-
-            # Action poses are highly dynamic, raising collision likelihoods
-            if "combat" in pose or "spin" in pose or "slash" in pose:
-                has_conflict = True
-                severity = "HIGH_PENETRATION"
-                # Push back 0.25 units along Y axis to separate meshes
-                pushback = [0.0, -0.25, 0.0]
-                # Calculate mid-point impact coordinates based on translation
-                impact_point = [trans[0], trans[1] - 0.5, trans[2] - 0.2]
-                sparks = 120
-                force = 35.5
-            elif "charge" in pose or "squat" in pose:
-                has_conflict = True
-                severity = "LOW_CLIP"
-                pushback = [0.0, 0.0, 0.05]
-                impact_point = [trans[0], trans[1], trans[2] - 0.1]
-                sparks = 30
-                force = 8.0
-
-            events.append({
-                "timestamp_sec": ts,
-                "has_collision_conflict": has_conflict,
-                "conflict_severity": severity,
-                "pushback_offset_vector": pushback,
-                "impact_point_coordinates": impact_point,
-                "sparks_particle_count": sparks,
-                "impact_force_magnitude": force
-            })
-
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Physics Fallback)",
-            "collision_resolution_events": events
+    def _fallback_physics(self):
+        return {
+            "has_major_impact": False, "impact_frame": 0, "sparks_particle_count": 0,
+            "particle_style": "none", "anti_clipping_pushback": [0.0, 0.0, 0.0],
+            "rationale": "No impact detected."
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def _generate_blender_script(self, blend_file_path, physics_data):
+        """Python script to enable mesh collisions and particle systems in Blender."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        
+        script_content = f"""
+import bpy
+
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+try:
+    has_impact = {str(physics_data.get('has_major_impact', False))}
+    pushback = {physics_data.get('anti_clipping_pushback', [0,0,0])}
+    impact_frame = {physics_data.get('impact_frame', 24)}
+    particles = {physics_data.get('sparks_particle_count', 0)}
+    
+    # 1. Mesh Collision Sentinel (Anti-Clipping)
+    # Identify character armatures
+    armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
+    
+    for arm in armatures:
+        # Apply slight pushback if requested by AI to prevent clipping
+        if pushback != [0,0,0]:
+            arm.location[0] += pushback[0]
+            arm.location[1] += pushback[1]
+            arm.location[2] += pushback[2]
+            arm.keyframe_insert(data_path="location", frame=impact_frame)
+            
+    # 2. Add Rigid Body Collisions to Environment (So characters don't fall through floor)
+    env_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and not obj.name.startswith("CH_")]
+    for obj in env_objects:
+        if not obj.rigid_body:
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.rigidbody.object_add()
+            obj.rigid_body.type = 'PASSIVE' # Static environment
+            obj.rigid_body.collision_shape = 'MESH'
+            
+    # 3. Spawn Impact Particles (If impact exists)
+    if has_impact and particles > 0:
+        bpy.ops.mesh.primitive_ico_sphere_add(radius=0.1, location=(0, 0, 1))
+        emitter = bpy.context.active_object
+        emitter.name = "Omni_Impact_Emitter"
+        
+        # Move emitter to Focus Tracker
+        tracker = bpy.data.objects.get("Focus_Tracker")
+        if tracker:
+            emitter.location = tracker.location
+            
+        # Add Particle System
+        bpy.ops.object.particle_system_add()
+        psys = emitter.particle_systems[0]
+        psets = psys.settings
+        
+        psets.count = particles
+        psets.frame_start = impact_frame
+        psets.frame_end = impact_frame + 2 # Short burst
+        psets.lifetime = 15
+        psets.normal_factor = 10.0 # Explosive speed
+        psets.physics_type = 'NEWTON'
+        psets.mass = 0.5
+        
+        # Hide emitter mesh
+        emitter.show_instancer_for_render = False
+        emitter.show_instancer_for_viewport = False
+
+    bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+    print("SUCCESS: OmniMatrix Physics & Collisions secured.")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_physics_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def secure_mesh_collisions(self):
+        self.log_message("Initializing OmniMatrix Physics Sentinel...", "INFO")
+        master_blueprint = {}
+        
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                scene_name = filename.replace("_stage.blend", "")
+                blend_file_path = os.path.join(self.env_dir, filename)
+                
+                self.log_message(f"--- Scanning Physics for: {scene_name} ---", "INFO")
+                
+                context = self._load_upstream_context(scene_name)
+                physics_data = self._query_physics_brain(scene_name, context)
+                
+                self.log_message(f"Physics AI: {physics_data['rationale']}", "INFO")
+                
+                script_path = self._generate_blender_script(blend_file_path, physics_data)
+                
+                command = [self.blender_path, "-b", "-P", script_path]
+                
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        self.log_message(f"Collisions and Impacts baked into {filename}", "INFO")
+                        master_blueprint[scene_name] = physics_data
+                    else:
+                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                except Exception as e:
+                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    
+                if os.path.exists(script_path):
+                    os.remove(script_path)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Agent 27 Pipeline Complete. Environment is physically secure.", "INFO")
 
 if __name__ == "__main__":
     sentinel = DynamicMeshCollisionSentinel()
-    output = sentinel.audit_and_simulate_collisions()
-    
-    print("\n--- Z-NET BLENDER ENGINE: AGENT 27 COLLISION AUDIT COMPLETE ---")
-    print(f"Evaluated collision instances: {len(output['collision_resolution_events'])}")
-    for ev in output["collision_resolution_events"]:
-        conflict_status = f"WARNING! {ev['conflict_severity']} (Force: {ev['impact_force_magnitude']}N)" if ev["has_collision_conflict"] else "SECURE"
-        print(f"Time: {ev['timestamp_sec']}s | Conflict: {conflict_status} | Pushback: {ev['pushback_offset_vector']} | Sparks Count: {ev['sparks_particle_count']}")
-    print("----------------------------------------------------------------")
+    sentinel.secure_mesh_collisions()
