@@ -1,4 +1,3 @@
-
 import os
 import sys
 import json
@@ -49,7 +48,7 @@ class AiAgent10AudioToneEmotionMatcher:
     def _load_matrix_state(self):
         """Loads the central OmniMatrix state."""
         if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run Module A and Agent 09 first.", "ERROR")
+            self.log("matrix_state.json not found. Run Module A first.", "ERROR")
             sys.exit(1)
         with open(self.state_file, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -58,7 +57,7 @@ class AiAgent10AudioToneEmotionMatcher:
         """Updates the central OmniMatrix state with new emotional audio mappings."""
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(state_data, f, indent=4)
-        self.log("Matrix state successfully updated with Audio Emotion Metadata.")
+        self.log("Matrix state successfully updated with Emotion Tags & Audio Metadata.")
 
     def _clean_json_response(self, raw_text):
         """Sanitizes AI model outputs to extract raw JSON data safely."""
@@ -75,26 +74,30 @@ class AiAgent10AudioToneEmotionMatcher:
         return cleaned
 
     def fetch_ai_mappings(self, tracks):
-        """Queries the AI logic cores to determine pitch, reverb, and EQ for each audio track."""
+        """Queries the AI to rewrite text with emotion tags based on context."""
         system_prompt = (
-            "You are an expert cinematic audio mixing engineer for a dark phonk and anime-style video production. "
-            "Analyze the voiceover script and match each frame with precise audio processing effects.\n"
+            "You are an expert NLP audio director for a dark phonk/anime video. "
+            "Your job is to read the 'spoken_voiceover' and the scene context, and inject TTS emotion tags. "
+            "Rules:\n"
+            "1. If the scene is calm/normal, keep the text mostly normal.\n"
+            "2. If the scene has high tension/shock/rage, stretch vowels (e.g., 'what' -> 'whaaaaat!', 'no' -> 'nooooo!') and add TTS emotion tags like [gasps], [sigh], [laughs_evil].\n"
+            "3. Also define post-processing parameters for the final mix.\n\n"
             "Return STRICTLY a JSON object containing a list named 'emotion_mappings'.\n"
             "Parameters required per frame:\n"
             "- 'frame_index': integer.\n"
             "- 'character': string.\n"
-            "- 'tone_category': choose from ('whisper-menace', 'screaming-rage', 'cold-assertive', 'hype-buildup', 'cosmic-vibration').\n"
+            "- 'tagged_voiceover': string (The modified script with emotions/tags).\n"
+            "- 'tone_category': ('whisper-menace', 'screaming-rage', 'cold-assertive', 'hype-buildup', 'neutral').\n"
             "- 'pitch_shift_semitones': integer (-4 to +2).\n"
             "- 'delivery_speed_multiplier': float (0.85 to 1.15).\n"
             "- 'reverb_mix': float (0.0 to 0.60).\n"
-            "- 'eq_preset': choose from ('heavy-bass-boost', 'radio-vocal-mid', 'crisp-air-treble').\n"
         )
         
         user_prompt = "Audio Tracks Metadata:\n" + json.dumps(tracks, indent=2)
 
-        # 1st Priority: Gemini AI (Fastest and highly capable for JSON logic)
+        # 1st Priority: Gemini AI
         if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Querying Core 1: Gemini AI for audio emotion mapping...")
+            self.log("Querying Core 1: Gemini AI for script emotion tagging...")
             try:
                 model = genai.GenerativeModel("gemini-1.5-flash")
                 response = model.generate_content(
@@ -105,7 +108,7 @@ class AiAgent10AudioToneEmotionMatcher:
             except Exception as e:
                 self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
 
-        # 2nd Priority: OpenAI (GPT-4o-mini)
+        # 2nd Priority: OpenAI
         if self.openai_api_key:
             self.log(f"Querying Core 2: OpenAI API [{self.model_cloud}]...")
             url = self.openai_url
@@ -127,78 +130,101 @@ class AiAgent10AudioToneEmotionMatcher:
             except Exception as e:
                 self.log(f"OpenAI Engine failed: {e}. Switching to Ollama/Procedural.", "WARNING")
 
-        # Fallback: Procedural Logic (If internet is down or keys are missing)
-        self.log("All AI API Cores failed or keys absent. Using Offline Procedural Logic Engine.", "STATUS")
+        # Fallback: Procedural Logic
+        self.log("All AI API Cores failed. Using Offline Procedural Logic Engine.", "STATUS")
         return self._execute_procedural_fallback(tracks)
 
     def _execute_procedural_fallback(self, tracks):
-        """Offline safety matrix for procedural cinematic audio mapping."""
+        """Offline fallback that procedurally adds tags based on character/progression."""
         mappings = []
         total = len(tracks) if tracks else 1
 
         for idx, track in enumerate(tracks):
             frame_idx = track.get("frame_index", idx + 1)
             char_name = track.get("character", "Unknown").lower()
+            original_text = track.get("spoken_voiceover", "")
             progression = (idx + 1) / total
 
-            # Analyze character archetype or timeline progression for audio styling
-            if "gojo" in char_name or "hero" in char_name:
-                tone, pitch, speed, reverb, eq = "cold-assertive", 0, 1.0, 0.15, "crisp-air-treble"
-            elif "sukuna" in char_name or "villain" in char_name:
-                tone, pitch, speed, reverb, eq = "screaming-rage", -3, 1.05, 0.45, "heavy-bass-boost"
-            elif progression < 0.3:
-                tone, pitch, speed, reverb, eq = "whisper-menace", -1, 0.95, 0.30, "radio-vocal-mid"
+            tagged_text = original_text
+            
+            # Procedural logic for stretching words and tags
+            if "sukuna" in char_name or "villain" in char_name:
+                tone, pitch, speed, reverb = "screaming-rage", -3, 1.05, 0.45
+                tagged_text = f"[evil_laugh] {original_text.replace('what', 'whaaaaat').replace('no ', 'nooooo ')}!"
+            elif "gojo" in char_name or "hero" in char_name:
+                tone, pitch, speed, reverb = "cold-assertive", 0, 1.0, 0.15
+                tagged_text = f"[sigh] {original_text}"
+            elif progression > 0.7:  # Climax / High tension
+                tone, pitch, speed, reverb = "hype-buildup", +1, 1.10, 0.20
+                tagged_text = f"[gasps] {original_text.replace('what', 'whaaaat')}"
             else:
-                tone, pitch, speed, reverb, eq = "hype-buildup", +1, 1.10, 0.20, "crisp-air-treble"
+                tone, pitch, speed, reverb = "neutral", 0, 1.0, 0.10
 
             mappings.append({
                 "frame_index": frame_idx,
                 "character": track.get("character", "Unknown"),
+                "tagged_voiceover": tagged_text,
                 "tone_category": tone,
                 "pitch_shift_semitones": pitch,
                 "delivery_speed_multiplier": speed,
-                "reverb_mix": reverb,
-                "eq_preset": eq
+                "reverb_mix": reverb
             })
 
         return mappings
 
     def process_emotions(self):
         state = self._load_matrix_state()
+        
+        # Checking Module A / Base Timeline instead of purely Audio Generated Timeline
+        # Because this agent now runs BEFORE Agent 09 generates the actual audio files.
         audio_module = state.get("module_b_audio", {})
         audio_timeline = audio_module.get("audio_timeline", [])
         
+        # If audio_timeline doesn't exist yet, fetch storyboard from Module A
         if not audio_timeline:
-            self.log("No audio timeline found. Run Agent 09 first.", "ERROR")
-            return
+            self.log("No audio timeline found. Importing base storyboard from Module A...", "STATUS")
+            storyboard = state.get("module_a_concept", {}).get("storyboard", [])
+            if not storyboard:
+                self.log("Critical Error: No storyboard found in Module A. Cannot proceed.", "ERROR")
+                return
+            
+            # Initialize audio timeline structure from storyboard
+            audio_timeline = []
+            for frame in storyboard:
+                audio_timeline.append({
+                    "frame_index": frame.get("frame_index"),
+                    "character": frame.get("character", "Narrator"),
+                    "spoken_voiceover": frame.get("spoken_voiceover", "")
+                })
 
         self.log(f"Analyzing psychology and tone matrix for {len(audio_timeline)} audio tracks...")
         
-        # Prepare lightweight dataset for the AI prompt to save tokens
-        lightweight_tracks = [
-            {"frame_index": t.get("frame_index"), "character": t.get("character"), "spoken_voiceover": t.get("spoken_voiceover")} 
-            for t in audio_timeline
-        ]
-        
-        ai_mappings = self.fetch_ai_mappings(lightweight_tracks)
+        ai_mappings = self.fetch_ai_mappings(audio_timeline)
 
-        # Merge the generated emotional logic back into the master state
+        # Merge the generated emotional logic and tagged script back into the timeline
         for frame in audio_timeline:
             for mapping in ai_mappings:
                 if frame.get("frame_index") == mapping.get("frame_index"):
+                    # This is the most important part: Saving the TAGGED text for Agent 09
+                    frame["tagged_voiceover"] = mapping.get("tagged_voiceover", frame.get("spoken_voiceover"))
+                    
+                    # Saving post-processing data for Agent 19
                     frame["audio_effects_processing"] = {
                         "tone_category": mapping.get("tone_category", "neutral"),
                         "pitch_shift_semitones": mapping.get("pitch_shift_semitones", 0),
                         "delivery_speed_multiplier": mapping.get("delivery_speed_multiplier", 1.0),
-                        "reverb_mix": mapping.get("reverb_mix", 0.0),
-                        "eq_preset": mapping.get("eq_preset", "standard")
+                        "reverb_mix": mapping.get("reverb_mix", 0.0)
                     }
                     break
         
+        # Ensure module_b_audio exists in state
+        if "module_b_audio" not in state:
+            state["module_b_audio"] = {}
+            
         state["module_b_audio"]["emotions_mapped"] = True
         state["module_b_audio"]["audio_timeline"] = audio_timeline
         self._save_matrix_state(state)
-        self.log("Module B - Agent 10 processing complete. Audio processing data merged.")
+        self.log("Module B - Agent 10 processing complete. Tagged scripts ready for Voice Generator (Agent 09).")
 
 if __name__ == "__main__":
     matcher = AiAgent10AudioToneEmotionMatcher()
