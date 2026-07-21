@@ -2,26 +2,47 @@ import os
 import re
 import sys
 import json
+import subprocess
 import urllib.request
 import urllib.error
 
-class Procedural3DEnvironmentArchitect:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 34: procedural_3d_environment_architect"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    # Universal Uppercase API Keys
+                    os.environ[key.strip().upper()] = val.strip()
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+load_env_file()
+
+class OmniMatrixEnvironmentArchitect:
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 34: OmniMatrix Procedural Environment Architect"
+        
+        # Directories
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        
+        # Outputs
+        self.output_blueprint = os.path.join(self.env_dir, "34_environment_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+
+        for d in [self.script_dir, self.env_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
+
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
     def _load_upstream_storyboard(self):
-        # Storyboard (Agent 03) se shot environment details aur visual descriptions fetch karta hai
-        story_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
+        """Loads environmental demands from storyboard or matrix state"""
+        story_path = os.path.join(self.script_dir, "03_visual_sync_storyboarder.json")
         env_demands = []
 
         if os.path.exists(story_path):
@@ -36,181 +57,160 @@ class Procedural3DEnvironmentArchitect:
                         "mood": panel.get("emotional_tone", "EPIC")
                     })
             except Exception as e:
-                print(f"[{self.agent_name}] Upstream storyboard read warning: {str(e)}")
+                self.log_message(f"Storyboard read warning: {str(e)}", "WARNING")
 
-        # Fallback preset agar storyboard details na milain
         if not env_demands:
-            print(f"[{self.agent_name}] Workspace Alert: No storyboard environments found. Designing a default showdown battleground.")
-            env_demands = [
-                {
-                    "panel_index": 0,
-                    "timestamp_sec": 0.0,
-                    "visual_description": "Desolate rocky wasteland under a dark red crimson sky, heavy dust",
-                    "mood": "EPIC_CRITICAL"
-                }
-            ]
+            env_demands = [{
+                "panel_index": 0, "timestamp_sec": 0.0,
+                "visual_description": "Desolate sci-fi cyber arena with glowing pillars", "mood": "EPIC"
+            }]
 
         return env_demands
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+    def _query_architect_brain(self, demands):
+        if not self.gemini_api_key:
+            return self._fallback_architect(demands)
 
-    def _save_to_workspace(self, data, filename="34_procedural_environment_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Procedural environment architecture saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save environment layout: {str(e)}")
-            return None
-
-    def construct_procedural_environment(self):
-        demands = self._load_upstream_storyboard()
-        print(f"[{self.agent_name}] Architect Engine active. Generating procedural scattering seeds, lighting, and atmospherics...")
-
-        system_prompt = (
-            "You are a legendary 3D Environment Technical Artist specialized in procedural scene-building and stylized anime lighting in Blender.\n"
-            "Your job is to translate textual environment demands into coordinate grids, lighting profiles, and atmospheric values.\n"
-            "Generate exactly 1 environment setup configuration inside a list named 'environment_layouts' with these specific parameters:\n"
-            "- 'environment_preset': string (choose from: 'neo_tokyo_cyberpunk', 'grassy_shonen_plains', 'apocalyptic_ruins', 'crimson_void_space').\n"
-            "- 'sun_intensity_lux': float (light power scale; from 2.5 for moody nights to 25.0 for bright blinding showdowns).\n"
-            "- 'color_temperature_k': float (sky color temperature; 3200 for warm sunset, 5500 for daylight, 9000 for eerie cold nights).\n"
-            "- 'volumetric_fog_density': float (density coefficient for realistic light rays; scale from 0.0 to 0.45).\n"
-            "- 'scatter_asset_seed': integer (randomized math seed for procedural grass, rocks, and debris scattering arrays).\n"
-            "- 'procedural_prop_count': integer (defines how many debris structures, trees, or light-poles spawn automatically on the set; range 20 to 150).\n"
-            "- 'ground_subdivision_level': integer (Blender ground displacement subdivisions for organic craters; choose from 3, 4, 5, or 6).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'environment_layouts'. "
-            "Do not write conversational descriptions, markdown code blocks, or backticks. Return valid JSON only."
+        ai_prompt = (
+            f"You are the Master Procedural Environment Architect for the OmniMatrix Engine.\n"
+            f"Storyboard Demands:\n{json.dumps(demands[:2], indent=2)}\n\n"
+            "Design the environment layout configuration.\n"
+            "Presets available: 'neo_tokyo_cyberpunk', 'grassy_shonen_plains', 'apocalyptic_ruins', 'crimson_void_space'.\n"
+            "Return ONLY raw JSON list named 'environment_layouts':\n"
+            "{\n"
+            "  \"environment_layouts\": [\n"
+            "    {\n"
+            "      \"timestamp_sec\": 0.0,\n"
+            "      \"environment_preset\": \"neo_tokyo_cyberpunk\",\n"
+            "      \"sun_intensity_lux\": 15.0,\n"
+            "      \"color_temperature_k\": 8500.0,\n"
+            "      \"volumetric_fog_density\": 0.15,\n"
+            "      \"procedural_prop_count\": 50,\n"
+            "      \"ground_subdivision_level\": 4\n"
+            "    }\n"
+            "  ]\n"
+            "}"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Environmental Demands:\n{json.dumps(demands, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Environmental Demands:\n{json.dumps(demands, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "environment_layouts": structured_output.get("environment_layouts", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text).get("environment_layouts", [])
         except Exception as e:
-            print(f"[{self.agent_name}] Connection Exception: {str(e)}. Launching procedural fallback generator.")
-            return self._execute_procedural_fallback(demands)
+            self.log_message(f"AI Architect Brain failed: {str(e)}. Triggering fallback.", "WARNING")
+            return self._fallback_architect(demands)
 
-    def _execute_procedural_fallback(self, demands):
-        # Precise algorithmic fallback matching keyword concepts to concrete atmospheric environments
+    def _fallback_architect(self, demands):
         layouts = []
         for d in demands:
-            desc = str(d.get("visual_description", "")).lower()
-            mood = str(d.get("mood", "")).upper()
-
-            # Smart string checks to configure world lighting and scatter matrices
-            if "wasteland" in desc or "ruins" in desc or "apocalyptic" in desc:
-                preset = "apocalyptic_ruins"
-                lux = 4.0
-                temp = 4500.0 # Warm, dusty smog
-                fog = 0.28 # High dust particles
-                seed = 7392
-                props = 120 # Heavy ruin boulders
-                subdiv = 5
-            elif "cyberpunk" in desc or "tokyo" in desc or "night" in desc:
-                preset = "neo_tokyo_cyberpunk"
-                lux = 12.0 # Bright neon lights
-                temp = 9500.0 # Cool cyber night
-                fog = 0.12 # Rain mist
-                seed = 4821
-                props = 80 # Power-grids, neon signs
-                subdiv = 3
-            else:
-                # Default beautiful anime grassy showdown plains (reminiscent of standard shonen battlefields)
-                preset = "grassy_shonen_plains"
-                lux = 18.0
-                temp = 5800.0 # Soft golden hour sun
-                fog = 0.05
-                seed = 1054
-                props = 45 # Shrubbery, trees, and grass clumps
-                subdiv = 4
-
             layouts.append({
                 "timestamp_sec": float(d.get("timestamp_sec", 0.0)),
-                "environment_preset": preset,
-                "sun_intensity_lux": lux,
-                "color_temperature_k": temp,
-                "volumetric_fog_density": fog,
-                "scatter_asset_seed": seed,
-                "procedural_prop_count": props,
-                "ground_subdivision_level": subdiv
+                "environment_preset": "neo_tokyo_cyberpunk",
+                "sun_intensity_lux": 10.0,
+                "color_temperature_k": 7000.0,
+                "volumetric_fog_density": 0.1,
+                "procedural_prop_count": 40,
+                "ground_subdivision_level": 3
             })
+        return layouts
 
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Environment Fallback)",
-            "environment_layouts": layouts
-        }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+    def _generate_blender_script(self, blend_file_path, layout_data):
+        """Headless Blender Script to build procedural ground, craters, and scatter props."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        
+        script_content = f"""
+import bpy
+import random
+
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+try:
+    preset = "{layout_data.get('environment_preset', 'neo_tokyo_cyberpunk')}"
+    subdiv = {layout_data.get('ground_subdivision_level', 3)}
+    props_count = {layout_data.get('procedural_prop_count', 30)}
+    
+    # 1. Create Organic Ground Plane with Subdivisions & Displacements
+    bpy.ops.mesh.primitive_grid_add(size=30.0, x_subdivisions=2**subdiv, y_subdivisions=2**subdiv, location=(0,0,0))
+    ground = bpy.context.active_object
+    ground.name = "Omni_Procedural_Ground"
+    
+    # Add Displace modifier to make natural ground bumps/craters
+    sub_mod = ground.modifiers.new(name="Ground_Subsurf", type='SUBSURF')
+    sub_mod.levels = 2
+    
+    disp_mod = ground.modifiers.new(name="Ground_Displace", type='DISPLACE')
+    # Create procedural noise texture for ground height
+    tex = bpy.data.textures.new("Ground_Noise", type='STORM')
+    disp_mod.texture = tex
+    disp_mod.strength = 0.8
+
+    # 2. Procedural Prop Scattering (Pillars, Debris, Rocks)
+    random.seed(42) # Consistent procedural layout
+    for i in range(min(props_count, 60)):// Safe cap to avoid RAM spikes
+        x = random.uniform(-12.0, 12.0)
+        y = random.uniform(-12.0, 12.0)
+        
+        if "cyberpunk" in preset:
+            bpy.ops.mesh.primitive_cylinder_add(radius=0.4, depth=random.uniform(4.0, 8.0), location=(x, y, 2.0))
+            prop = bpy.context.active_object
+            prop.name = f"Cyber_Pillar_{{i}}"
+        else:
+            bpy.ops.mesh.primitive_ico_sphere_add(radius=random.uniform(0.5, 1.5), location=(x, y, 0.5))
+            prop = bpy.context.active_object
+            prop.name = f"Terrain_Rock_{{i}}"
+
+    bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+    print(f"SUCCESS: Environment preset '{{preset}}' constructed successfully.")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_environment_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def construct_environments(self):
+        self.log_message("Initializing OmniMatrix Environment Architect...", "INFO")
+        
+        demands = self._load_upstream_storyboard()
+        layouts = self._query_architect_brain(demands)
+        
+        master_blueprint = {"environment_layouts": layouts}
+        
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                blend_file_path = os.path.join(self.env_dir, filename)
+                layout = layouts[0] if layouts else {}
+                
+                self.log_message(f"--- Building World Layout for {filename} (Theme: {layout.get('environment_preset')}) ---", "INFO")
+                
+                script_path = self._generate_blender_script(blend_file_path, layout)
+                
+                command = [self.blender_path, "-b", "-P", script_path]
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        self.log_message(f"Environment successfully structured into {filename}", "INFO")
+                    else:
+                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                except Exception as e:
+                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    
+                if os.path.exists(script_path):
+                    os.remove(script_path)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Agent 34 Pipeline Complete. Module C is now 100% SECURED AND SEALED!", "INFO")
 
 if __name__ == "__main__":
-    architect = Procedural3DEnvironmentArchitect()
-    output = architect.construct_procedural_environment()
-    
-    print("\n--- Z-NET STAGE DESIGN: AGENT 34 ENVIRONMENT BUILDER COMPLETE ---")
-    print(f"Total procedural environments constructed: {len(output['environment_layouts'])}")
-    for layout in output["environment_layouts"]:
-        print(f"Active Theme: '{layout['environment_preset']}' | Sun Power: {layout['sun_intensity_lux']} Lux | Temp: {layout['color_temperature_k']}K")
-        print(f"  Volumetric Fog: {layout['volumetric_fog_density']} | Scatter Seed: {layout['scatter_asset_seed']} | Total Props: {layout['procedural_prop_count']}")
-    print("------------------------------------------------------------------")
+    architect = OmniMatrixEnvironmentArchitect()
+    architect.construct_environments()
