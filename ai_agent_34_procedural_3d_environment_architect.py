@@ -19,7 +19,7 @@ def load_env_file(filepath=".env"):
 load_env_file()
 
 class OmniMatrixEnvironmentArchitect:
-    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+    def __init__(self, drive_temp_dir="G:/My Drive/OMNIMATRIX_Temp", local_library_dir="D:/OMNIMATRIX_Local_Assets", blender_path="blender"):
         self.agent_name = "Ai Agent 34: OmniMatrix Procedural Environment Architect"
         
         # Directories
