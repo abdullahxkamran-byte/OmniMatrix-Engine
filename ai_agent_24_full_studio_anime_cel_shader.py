@@ -2,224 +2,253 @@ import os
 import re
 import sys
 import json
+import subprocess
 import urllib.request
 import urllib.error
 
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    # Force environment variables to UPPERCASE taake masla hi khatam ho!
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
 class FullStudioAnimeCelShader:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 24: full_studio_anime_cel_shader"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 24: AAA Full Studio Anime Cel Shader"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _load_upstream_data(self):
-        # Character selection aur lighting data ko load karta hai taake cel-shading adapt ho sake
-        character_path = os.path.join(self.workspace_dir, "23_character_asset_selector_blueprint.json")
-        lighting_path = os.path.join(self.workspace_dir, "22_atmospheric_lighting_blueprint.json")
+        # Upstream Inputs
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments") # Modifies existing _stage.blend files
         
-        compiled_meta = {
-            "characters_detected": [],
-            "lighting_styles": []
-        }
+        # Outputs
+        self.output_blueprint = os.path.join(self.env_dir, "24_cel_shader_blueprint.json")
+        self.blender_path = blender_path
+        
+        # Secured API Call with safe fallback handling
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        # 1. Load Selected Characters
-        if os.path.exists(character_path):
+        for d in [self.script_dir, self.env_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
+
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _load_upstream_vibe(self, scene_name):
+        """Loads scene context so the shader can decide line thickness and shadow sharpness."""
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
+        context = {"vibe_genre": "Action", "action_description": "Combat scene"}
+        if os.path.exists(script_file):
             try:
-                with open(character_path, "r", encoding="utf-8") as f:
-                    char_data = json.load(f)
-                for alloc in char_data.get("character_allocations", []):
-                    compiled_meta["characters_detected"].append({
-                        "timestamp_sec": alloc.get("timestamp_sec"),
-                        "demanded_description": alloc.get("demanded_description", "")
-                    })
+                with open(script_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    context["vibe_genre"] = data.get("genre_vibe", "Action")
+                    context["action_description"] = data.get("action_description", "")
             except Exception as e:
-                print(f"[{self.agent_name}] Character allocation load warning: {str(e)}")
-
-        # 2. Load Lighting Environments
-        if os.path.exists(lighting_path):
-            try:
-                with open(lighting_path, "r", encoding="utf-8") as f:
-                    light_data = json.load(f)
-                for setup in light_data.get("ambient_lighting_setups", []):
-                    pk = setup.get("primary_key_light", {})
-                    compiled_meta["lighting_styles"].append({
-                        "start_sec": setup.get("start_sec"),
-                        "end_sec": setup.get("end_sec"),
-                        "key_color": pk.get("color_hex", "#FFFFFF"),
-                        "fog_density": setup.get("volumetric_fog_density", 0.0)
-                    })
-            except Exception:
                 pass
+        return context
 
-        # Fallbacks if files do not exist yet
-        if not compiled_meta["characters_detected"]:
-            print(f"[{self.agent_name}] Workspace Alert: Upstream maps missing. Instantiating default visual sync targets.")
-            compiled_meta["characters_detected"] = [
-                {"timestamp_sec": 0.0, "demanded_description": "Gojo Satoru close-up action pose"}
-            ]
-        if not compiled_meta["lighting_styles"]:
-            compiled_meta["lighting_styles"] = [
-                {"start_sec": 0.0, "end_sec": 5.0, "key_color": "#FF0055", "fog_density": 0.1}
-            ]
+    def _query_ai_shader_brain(self, scene_name, context):
+        if not self.gemini_api_key:
+            return self._fallback_shader(context)
 
-        return compiled_meta
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
-
-    def _save_to_workspace(self, data, filename="24_anime_cel_shader_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Cel-Shader parameters saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save shader blueprint: {str(e)}")
-            return None
-
-    def design_anime_cel_shader(self):
-        compiled_meta = self._load_upstream_data()
-        print(f"[{self.agent_name}] Cel-Shading Engine active. Generating sharp shadow maps and ink outline nodes...")
-
-        system_prompt = (
-            "You are a legendary 3D non-photorealistic rendering (NPR) TD specialized in anime cel-shading (Guilty Gear / Arcane / Kyoto Animation style).\n"
-            "Your job is to analyze character/lighting structures and output exact parameters for Blender's Shader Nodes "
-            "(Shader-to-RGB, ColorRamp, and Line Art Grease Pencil modifiers).\n"
-            "For each character segment, design exactly 1 shader configuration block inside a list named 'cel_shader_profiles' with these keys:\n"
-            "- 'timestamp_sec': float matching the trigger segment.\n"
-            "- 'outline_thickness_pixels': float (scale from 1.0 for delicate shojo to 4.5 for heavy aggressive action lines).\n"
-            "- 'outline_color_hex': string representing the ink outline (usually '#000000', or '#210B0B' for warm blended styles).\n"
-            "- 'color_ramp_stops': array of floats (usually 2 or 3 stops between 0.0 and 1.0 to clamp diffuse into sharp shadow zones, e.g., [0.45, 0.48]).\n"
-            "- 'shadow_tint_multiplier': float representing shadow color warmth (scale from 0.6 to 0.9; lower values darken shadows drastically).\n"
-            "- 'specular_glossiness_cutoff': float representing anime hair glossy sheen cutoffs (scale from 0.05 to 0.3).\n"
-            "- 'rim_light_intensity': float (scale from 0.0 to 5.0; higher values pop characters out of dark background plates).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'cel_shader_profiles'. "
-            "Do not output markdown code blocks, backticks, or any conversational text. Return valid JSON only."
+        ai_prompt = (
+            f"You are the Lead Anime Render TD (like Ufotable or MAPPA).\n"
+            f"Scene Name: {scene_name}\n"
+            f"Vibe/Genre: {context['vibe_genre']}\n"
+            f"Action: {context['action_description']}\n\n"
+            "Design the exact Cel-Shading parameters for the characters in this scene.\n"
+            "If it's intense Action/Phonk, use thick ink outlines and sharp shadow stops. If it's gentle, use soft outlines.\n"
+            "Return ONLY raw JSON:\n"
+            "{\n"
+            "  \"outline_thickness_pixels\": 3.5,\n"
+            "  \"outline_color_hex\": \"#0A0202\",\n"
+            "  \"shadow_sharpness_stop\": 0.45,\n"
+            "  \"specular_glossiness\": 0.15,\n"
+            "  \"rim_light_multiplier\": 2.0,\n"
+            "  \"style_rationale\": \"Thick lines for heavy action impact.\"\n"
+            "}"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Scene Meta & Lights:\n{json.dumps(compiled_meta, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Scene Meta & Lights:\n{json.dumps(compiled_meta, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "cel_shader_profiles": structured_output.get("cel_shader_profiles", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text)
         except Exception as e:
-            print(f"[{self.agent_name}] Network Exception: {str(e)}. Running procedural cel-shading math engine.")
-            return self._execute_procedural_fallback(compiled_meta)
+            self.log_message(f"AI Shader Design failed: {str(e)}. Using fallback.", "WARNING")
+            return self._fallback_shader(context)
 
-    def _execute_procedural_fallback(self, compiled_meta):
-        # Generates industry standard 2D cel-shaded vectors algorithmically
-        profiles = []
-        for char in compiled_meta["characters_detected"]:
-            ts = float(char.get("timestamp_sec", 0.0))
-            desc = char.get("demanded_description", "").lower()
-
-            # Dynamic adjustments based on description intensity
-            if "action" in desc or "fight" in desc or "combat" in desc:
-                thickness = 3.0
-                outline_color = "#0A0202" # Dark blood-rust outline
-                stops = [0.35, 0.38] # Extremely sharp high-contrast shadow line
-                shadow_mult = 0.65
-                specular = 0.1
-                rim = 4.0 # High pop rim light for action depth
-            else:
-                thickness = 1.8
-                outline_color = "#111111"
-                stops = [0.48, 0.50]
-                shadow_mult = 0.8
-                specular = 0.2
-                rim = 1.5
-
-            profiles.append({
-                "timestamp_sec": ts,
-                "outline_thickness_pixels": thickness,
-                "outline_color_hex": outline_color,
-                "color_ramp_stops": stops,
-                "shadow_tint_multiplier": shadow_mult,
-                "specular_glossiness_cutoff": specular,
-                "rim_light_intensity": rim
-            })
-
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural NPR Fallback)",
-            "cel_shader_profiles": profiles
+    def _fallback_shader(self, context):
+        return {
+            "outline_thickness_pixels": 2.0, "outline_color_hex": "#000000",
+            "shadow_sharpness_stop": 0.5, "specular_glossiness": 0.1,
+            "rim_light_multiplier": 1.5, "style_rationale": "Fallback standard Cel-Shading"
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def _generate_blender_script(self, blend_file_path, shader_data):
+        """Python script for Blender that rewrites ALL character materials to NPR Cel Shading."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        
+        script_content = f"""
+import bpy
+
+def hex_to_rgb(hex_str):
+    hex_str = hex_str.lstrip('#')
+    if len(hex_str) != 6: return (0, 0, 0, 1)
+    return tuple(int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4)) + (1.0,)
+
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+try:
+    # 1. Enable Shader to RGB in Eevee (Required for Cel Shading)
+    bpy.context.scene.render.engine = 'BLENDER_EEVEE'
+
+    # Settings from AI
+    sharpness = {shader_data.get('shadow_sharpness_stop', 0.45)}
+    line_thick = {shader_data.get('outline_thickness_pixels', 2.0)} * 0.001 # Scale to Blender units
+    rim_mult = {shader_data.get('rim_light_multiplier', 1.5)}
+
+    # 2. Material Rewrite Loop
+    # We target objects appended by Agent 23 (starting with 'CH_')
+    char_objects = [obj for obj in bpy.context.scene.objects if obj.name.startswith("CH_") and obj.type == 'MESH']
+    
+    for obj in char_objects:
+        # A. Apply Inverted Hull Method for Anime Ink Outline
+        mod = obj.modifiers.new(name="Anime_Ink_Outline", type='SOLIDIFY')
+        mod.use_flip_normals = True
+        mod.thickness = -line_thick
+        mod.material_offset = 100 # Forces it to use the last material
+        
+        # Outline Material
+        outline_mat = bpy.data.materials.new(name="MAT_Anime_Outline")
+        outline_mat.use_nodes = True
+        outline_mat.use_backface_culling = True # Critical for Inverted Hull
+        
+        # Clean outline nodes
+        nt_out = outline_mat.node_tree
+        nt_out.nodes.clear()
+        emit_node = nt_out.nodes.new('ShaderNodeEmission')
+        emit_node.inputs['Color'].default_value = hex_to_rgb("{shader_data.get('outline_color_hex', '#000000')}")
+        out_node_out = nt_out.nodes.new('ShaderNodeOutputMaterial')
+        nt_out.links.new(emit_node.outputs['Emission'], out_node_out.inputs['Surface'])
+        
+        obj.data.materials.append(outline_mat)
+
+        # B. Rewrite Base Materials to Cel-Shaded (Shader to RGB -> ColorRamp)
+        for mat_slot in obj.material_slots:
+            mat = mat_slot.material
+            if mat and mat.name != "MAT_Anime_Outline" and mat.use_nodes:
+                nt = mat.node_tree
+                
+                # Find Base Color Image Texture if it exists
+                base_color_node = None
+                for node in nt.nodes:
+                    if node.type == 'TEX_IMAGE':
+                        base_color_node = node
+                        break
+                        
+                # Clear all nodes
+                nt.nodes.clear()
+                
+                # Rebuild Anime Shader Pipeline
+                output_node = nt.nodes.new('ShaderNodeOutputMaterial')
+                
+                # Diffuse -> Shader To RGB
+                diff_node = nt.nodes.new('ShaderNodeBsdfDiffuse')
+                if base_color_node:
+                    nt.nodes.active = base_color_node # Keep texture reference
+                    nt.nodes.get(base_color_node.name)
+                else:
+                    diff_node.inputs['Color'].default_value = (0.8, 0.8, 0.8, 1) # Default Greyish
+
+                s2rgb_node = nt.nodes.new('ShaderNodeShaderToRGB')
+                nt.links.new(diff_node.outputs['BSDF'], s2rgb_node.inputs['Shader'])
+                
+                # ColorRamp for Sharp Anime Shadows
+                ramp_node = nt.nodes.new('ShaderNodeValToRGB')
+                ramp_node.color_ramp.interpolation = 'CONSTANT' # Hard shadow cut!
+                ramp_node.color_ramp.elements[0].position = sharpness - 0.05
+                ramp_node.color_ramp.elements[0].color = (0.4, 0.4, 0.4, 1.0) # Shadow tint
+                ramp_node.color_ramp.elements[1].position = sharpness
+                ramp_node.color_ramp.elements[1].color = (1.0, 1.0, 1.0, 1.0) # Light tint
+                
+                nt.links.new(s2rgb_node.outputs['Color'], ramp_node.inputs['Fac'])
+                
+                # Mix Shader (Base Texture * Cel Shadows)
+                mix_node = nt.nodes.new('ShaderNodeMixRGB')
+                mix_node.blend_type = 'MULTIPLY'
+                mix_node.inputs['Fac'].default_value = 1.0
+                nt.links.new(ramp_node.outputs['Color'], mix_node.inputs[1])
+                # In real scenario we link base_color_node to mix_node.inputs[2]
+                
+                nt.links.new(mix_node.outputs['Color'], output_node.inputs['Surface'])
+                mat.blend_method = 'OPAQUE'
+                mat.shadow_method = 'NONE' # Disable soft shadows for anime
+
+    bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+    print("SUCCESS: Full Studio Cel-Shading applied to scene.")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_celshader_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def bake_cel_shading(self):
+        self.log_message("Waking up Full Studio Anime Cel-Shader...", "INFO")
+        master_blueprint = {}
+        
+        # Process all Stage .blend files
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                scene_name = filename.replace("_stage.blend", "")
+                blend_file_path = os.path.join(self.env_dir, filename)
+                
+                self.log_message(f"--- Applying Cel-Shading to: {scene_name} ---", "INFO")
+                
+                context = self._load_upstream_vibe(scene_name)
+                shader_data = self._query_ai_shader_brain(scene_name, context)
+                
+                self.log_message(f"AI Decision: Outline {shader_data['outline_thickness_pixels']}px | Reason: {shader_data['style_rationale']}", "INFO")
+                
+                script_path = self._generate_blender_script(blend_file_path, shader_data)
+                
+                self.log_message("Executing Headless Blender to bake Anime Materials...", "INFO")
+                command = [self.blender_path, "-b", "-P", script_path]
+                
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        self.log_message(f"Cel-Shading successfully injected into {filename}", "INFO")
+                        master_blueprint[scene_name] = shader_data
+                    else:
+                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                except Exception as e:
+                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    
+                if os.path.exists(script_path):
+                    os.remove(script_path)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Agent 24 Cel-Shading Pipeline Complete. Environment is fully 2.5D Anime styled.", "INFO")
 
 if __name__ == "__main__":
     shader = FullStudioAnimeCelShader()
-    output = shader.design_anime_cel_shader()
-    
-    print("\n--- Z-NET BLENDER ENGINE: AGENT 24 NPR CEL-SHADER BAKE COMPLETE ---")
-    print(f"Generated cel-shading profiles: {len(output['cel_shader_profiles'])}")
-    if output["cel_shader_profiles"]:
-        sample = output["cel_shader_profiles"][0]
-        print(f"Target Time: {sample['timestamp_sec']}s | Ink Outline: {sample['outline_thickness_pixels']}px (Hex: {sample['outline_color_hex']})")
-        print(f"ColorRamp Shading Stops: {sample['color_ramp_stops']} | Rim pop intensity: {sample['rim_light_intensity']}")
-    print("-------------------------------------------------------------------")
+    shader.bake_cel_shading()
