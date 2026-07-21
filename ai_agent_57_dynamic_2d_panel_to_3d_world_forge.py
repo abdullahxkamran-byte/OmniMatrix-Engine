@@ -1,145 +1,69 @@
 import os
 import sys
 import json
+import re
 import urllib.request
 import urllib.error
 
-class Dynamic2dPanelTo3DWorldForge:
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
+
+class DynamicBatchWorldForge:
     def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 57: dynamic_2d_panel_to_3d_world_forge"
-        self.workspace_dir = workspace_dir
+        self.agent_name = "Ai Agent 57: Dynamic Batch 3D World Forge"
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
         
-        # Upstream Inputs
-        self.input_mesh_path = os.path.join(self.workspace_dir, "56_3d_mesh.obj")
-        self.input_blueprint_path = os.path.join(self.workspace_dir, "55_manga_comprehend_blueprint.json")
+        # Upstream Inputs from Agent 55 and 56
+        self.vision_outputs_dir = os.path.join(self.workspace_dir, "outputs")
+        self.meshes_dir = os.path.join(self.workspace_dir, "3d_meshes")
+        self.input_mesh_blueprint = os.path.join(self.meshes_dir, "56_master_mesh_blueprint.json")
         
-        # Outputs
-        self.output_world_blueprint = os.path.join(self.workspace_dir, "57_3d_world_forge_blueprint.json")
-        self.output_blender_script = os.path.join(self.workspace_dir, "57_blender_setup.py")
+        # Current Outputs
+        self.output_dir = os.path.join(self.workspace_dir, "world_forge")
+        self.output_world_blueprint = os.path.join(self.output_dir, "57_master_world_blueprint.json")
+        self.output_blender_script = os.path.join(self.output_dir, "57_blender_batch_setup.py")
         
-        # [SECURE] No hardcoded secret keys to prevent repo block
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        for d in [self.workspace_dir, self.output_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
-    def _load_upstream_data(self):
-        manga_context = {}
-        if os.path.exists(self.input_blueprint_path):
-            try:
-                with open(self.input_blueprint_path, "r", encoding="utf-8") as f:
-                    manga_context = json.load(f)
-                print(f"[{self.agent_name}] Successfully imported upstream manga context from Agent 55.")
-            except Exception as e:
-                print(f"[{self.agent_name}] Warning: Failed to read Agent 55 blueprint: {str(e)}")
-        else:
-            print(f"[{self.agent_name}] Notice: No upstream manga context blueprint found. Using defaults.")
-        return manga_context
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-    def forge_3d_world(self):
-        print(f"[{self.agent_name}] Initializing 3D World Forge and Scene Layout Engine...")
-        manga_context = self._load_upstream_data()
+    def _load_mesh_blueprint(self):
+        if not os.path.exists(self.input_mesh_blueprint):
+            self.log_message("Agent 56 Blueprint not found. Please run Agent 56 first.", "ERROR")
+            return {}
+        try:
+            with open(self.input_mesh_blueprint, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            self.log_message(f"Failed to read Mesh blueprint: {str(e)}", "ERROR")
+            return {}
 
-        # Extract character/color details for lighting decisions
-        analysis_metrics = manga_context.get("analysis_metrics", {})
-        palette = analysis_metrics.get("colorization_palette", {})
-        aura_color_hex = palette.get("aura", "#FF00FF") # Default Magenta
-
-        ai_prompt_instructions = (
-            "You are a 3D Environment Director for Anime and Cinematic CGI.\n"
-            f"Analyze this 2D-to-3D scene context. Main active aura color is '{aura_color_hex}'.\n"
-            "Design a cinematic 3D lighting, camera, and world setup in JSON format.\n"
-            "Return ONLY a valid JSON object with absolutely no markdown wrapping, code blocks, or backticks. Format:\n"
-            "{\n"
-            "  \"camera\": {\n"
-            "    \"location\": [0.0, -5.0, 1.5],\n"
-            "    \"rotation_euler\": [80.0, 0.0, 0.0],\n"
-            "    \"focal_length\": 50.0\n"
-            "  },\n"
-            "  \"lights\": [\n"
-            "    {\"type\": \"SUN\", \"energy\": 4.0, \"color_hex\": \"#FFFFFF\", \"direction\": [0.2, -0.5, -1.0]},\n"
-            "    {\"type\": \"POINT\", \"energy\": 15.0, \"color_hex\": \"#FF00FF\", \"location\": [1.5, -1.0, 2.0]}\n"
-            "  ],\n"
-            "  \"world_ambient\": {\n"
-            "    \"background_color_hex\": \"#0A0A0F\",\n"
-            "    \"ambient_strength\": 0.2\n"
-            "  }\n"
-            "}"
-        )
-
-        world_config = None
-
-        if self.gemini_api_key:
-            print(f"[{self.agent_name}] Consulting Gemini AI for optimized dramatic lighting angles...")
-            try:
-                payload = {
-                    "contents": [{
-                        "parts": [{"text": ai_prompt_instructions}]
-                    }],
-                    "generationConfig": {
-                        "responseMimeType": "application/json"
-                    }
-                }
-                data_bytes = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(
-                    self.gemini_url, 
-                    data=data_bytes, 
-                    headers={"Content-Type": "application/json"}
-                )
-
-                with urllib.request.urlopen(req, timeout=15) as response:
-                    res_body = response.read().decode("utf-8")
-                    raw_response = json.loads(res_body)
-                    raw_text = raw_response["candidates"][0]["content"]["parts"][0]["text"]
-                    world_config = json.loads(raw_text.strip())
-                    print(f"[{self.agent_name}] Success: Custom cinematic camera and lighting parameters generated.")
-            except Exception as e:
-                print(f"[{self.agent_name}] Cloud dynamic layout bypass ({str(e)}). Building procedural rig...")
-                world_config = self._get_procedural_world_config(aura_color_hex)
-        else:
-            print(f"[{self.agent_name}] No API Key. Generating default high-fidelity 3D anime layout...")
-            world_config = self._get_procedural_world_config(aura_color_hex)
-
-        # Save World Forge Blueprint JSON
-        self._save_world_blueprint(world_config)
-
-        # Write out the magic Blender setup script
-        self._generate_blender_python_script(world_config)
-
-        return {
-            "agent_executed": self.agent_name,
-            "status": "Complete",
-            "world_blueprint": self.output_world_blueprint,
-            "blender_setup_script": self.output_blender_script
-        }
-
-    def _get_procedural_world_config(self, aura_color):
+    def _get_procedural_fallback_config(self, scene_name):
         return {
             "camera": {
                 "location": [0.0, -6.5, 1.2],
                 "rotation_euler": [85.0, 0.0, 0.0],
-                "focal_length": 35.0 # Cinematic wide lens
+                "focal_length": 35.0
             },
             "lights": [
-                {
-                    "type": "SUN",
-                    "energy": 5.0,
-                    "color_hex": "#FFEFE0", # Warm sunlight
-                    "direction": [0.5, -0.3, -1.0]
-                },
-                {
-                    "type": "POINT",
-                    "energy": 25.0,
-                    "color_hex": aura_color, # Active character aura color
-                    "location": [-1.0, -1.5, 1.8]
-                },
-                {
-                    "type": "POINT",
-                    "energy": 12.0,
-                    "color_hex": "#00FFFF", # Neon Rim Fill Light
-                    "location": [1.5, -0.5, 0.8]
-                }
+                {"type": "SUN", "energy": 5.0, "color_hex": "#FFEFE0", "direction": [0.5, -0.3, -1.0]},
+                {"type": "POINT", "energy": 25.0, "color_hex": "#FF00FF", "location": [-1.0, -1.5, 1.8]},
+                {"type": "POINT", "energy": 12.0, "color_hex": "#00FFFF", "location": [1.5, -0.5, 0.8]}
             ],
             "world_ambient": {
                 "background_color_hex": "#07070B",
@@ -147,109 +71,235 @@ class Dynamic2dPanelTo3DWorldForge:
             }
         }
 
-    def _generate_blender_python_script(self, config):
-        camera_cfg = config.get("camera", {})
-        lights_cfg = config.get("lights", [])
-        ambient_cfg = config.get("world_ambient", {})
+    def _query_gemini_lighting(self, vision_data, scene_name):
+        if not self.gemini_api_key:
+            return self._get_procedural_fallback_config(scene_name)
+
+        bg_desc = vision_data.get("background_description", "Dark empty space")
+        char_name = vision_data.get("character_name", "Unknown Character")
+
+        ai_prompt = (
+            f"You are a 3D Cinematic Lighting Director. Design a lighting and camera setup for a scene named '{scene_name}'.\n"
+            f"Character Focus: {char_name}\n"
+            f"Background Context: {bg_desc}\n"
+            "Return ONLY raw JSON, no markdown blocks. Format exactly like this:\n"
+            "{\n"
+            "  \"camera\": {\"location\": [0.0, -5.0, 1.5], \"rotation_euler\": [80.0, 0.0, 0.0], \"focal_length\": 50.0},\n"
+            "  \"lights\": [\n"
+            "    {\"type\": \"SUN\", \"energy\": 4.0, \"color_hex\": \"#FFFFFF\", \"direction\": [0.2, -0.5, -1.0]},\n"
+            "    {\"type\": \"POINT\", \"energy\": 15.0, \"color_hex\": \"#FF5500\", \"location\": [1.5, -1.0, 2.0]}\n"
+            "  ],\n"
+            "  \"world_ambient\": {\"background_color_hex\": \"#0A0A0F\", \"ambient_strength\": 0.2}\n"
+            "}"
+        )
+
+        try:
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text)
+        except Exception as e:
+            self.log_message(f"Gemini layout bypass for {scene_name} ({str(e)}). Using fallback.", "WARNING")
+            return self._get_procedural_fallback_config(scene_name)
+
+    def _generate_blender_python_script(self, master_world_config):
+        self.log_message("Compiling Master Blender setup script...", "INFO")
         
-        # Convert hex colors to RGB values (0.0 to 1.0) for Blender
-        def hex_to_rgb(hex_str):
-            hex_str = hex_str.lstrip('#')
-            return [int(hex_str[i:i+2], 16)/255.0 for i in (0, 2, 4)]
-
-        # Relative mesh path safe for blender execution
-        relative_mesh_path = os.path.abspath(self.input_mesh_path).replace("\\", "\\\\")
-
-        script_content = f"""# ==========================================
-# Blender Automation Script (Z-NET Agent 57)
-# Run this inside Blender Scripting Workspace!
+        script_content = """# ==========================================
+# Blender Master Automation Script (Agent 57)
+# Architecture: AAA Smart Studio Workflow
 # ==========================================
 import bpy
 import os
+import math
+import mathutils
 
-# 1. Clear existing objects to start fresh
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.object.delete(use_global=False)
+def hex_to_rgb(hex_str):
+    hex_str = hex_str.lstrip('#')
+    return [int(hex_str[i:i+2], 16)/255.0 for i in (0, 2, 4)] + [1.0]
 
-# 2. Import generated 3D Mesh
-mesh_path = "{relative_mesh_path}"
+def clear_scene():
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete(use_global=False)
+    for collection in bpy.data.collections:
+        bpy.data.collections.remove(collection)
+
+def create_2point5d_background(collection, bg_path, depth_path, location=(0, 5, 1)):
+    if not os.path.exists(bg_path):
+        return
+        
+    bpy.ops.mesh.primitive_plane_add(size=10, location=location)
+    plane = bpy.context.active_object
+    plane.name = "PopUp_Background"
+    plane.rotation_euler = (math.radians(90), 0, 0)
+    collection.objects.link(plane)
+    bpy.context.scene.collection.objects.unlink(plane)
+
+    # Subdivide for depth displacement
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.subdivide(number_cuts=50)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Material Setup
+    mat = bpy.data.materials.new(name="BG_Material")
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    tex_image = mat.node_tree.nodes.new('ShaderNodeTexImage')
+    
+    try:
+        tex_image.image = bpy.data.images.load(bg_path)
+        mat.node_tree.links.new(bsdf.inputs['Base Color'], tex_image.outputs['Color'])
+    except:
+        pass
+    plane.data.materials.append(mat)
+
+    # Displacement Setup
+    if os.path.exists(depth_path):
+        disp_mod = plane.modifiers.new(name="DepthDisplacement", type='DISPLACE')
+        disp_tex = bpy.data.textures.new("DepthTexture", type='IMAGE')
+        try:
+            disp_tex.image = bpy.data.images.load(depth_path)
+            disp_mod.texture = disp_tex
+            disp_mod.strength = 1.5
+            disp_mod.mid_level = 0.5
+        except:
+            pass
+
+clear_scene()
+
+"""
+        # Iterate over all scenes in the config
+        for scene_name, scene_data in master_world_config.items():
+            safe_mesh_path = scene_data["mesh"].replace("\\", "/")
+            safe_bg_path = scene_data["bg_image"].replace("\\", "/")
+            safe_depth_path = scene_data["depth_image"].replace("\\", "/")
+            
+            cam = scene_data["layout"]["camera"]
+            lights = scene_data["layout"]["lights"]
+            ambient = scene_data["layout"]["world_ambient"]
+            bg_color = ambient.get("background_color_hex", "#050505")
+
+            script_content += f"""
+# ------------------------------------------
+# SCENE SETUP: {scene_name}
+# ------------------------------------------
+scene_col = bpy.data.collections.new("{scene_name}")
+bpy.context.scene.collection.children.link(scene_col)
+
+# 1. Import Mesh
+mesh_path = "{safe_mesh_path}"
 if os.path.exists(mesh_path):
-    # Support for both older and newer Blender OBJ importers
     try:
         bpy.ops.wm.obj_import(filepath=mesh_path)
     except AttributeError:
         bpy.ops.import_scene.obj(filepath=mesh_path)
-    print("3D Mesh successfully imported!")
-else:
-    print("Warning: Mesh file not found at path: " + mesh_path)
+    
+    # Move imported objects to scene collection
+    for obj in bpy.context.selected_objects:
+        scene_col.objects.link(obj)
+        try:
+            bpy.context.scene.collection.objects.unlink(obj)
+        except:
+            pass
 
-# 3. Setup Cinematic Camera
-cam_data = bpy.data.cameras.new(name="Cinematic_Camera_Data")
-cam_obj = bpy.data.objects.new("Cinematic_Camera", cam_data)
-bpy.context.collection.objects.link(cam_obj)
-cam_obj.location = {camera_cfg.get('location', [0.0, -6.5, 1.2])}
-# Degrees to Radians translation
-import math
-rot = {camera_cfg.get('rotation_euler', [85.0, 0.0, 0.0])}
-cam_obj.rotation_euler = [math.radians(r) for r in rot]
-cam_data.lens = {camera_cfg.get('focal_length', 35.0)}
+# 2. Setup 2.5D Pop-Up Background
+create_2point5d_background(scene_col, "{safe_bg_path}", "{safe_depth_path}")
 
-# Set active camera
-bpy.context.scene.camera = cam_obj
+# 3. Camera Setup
+cam_data = bpy.data.cameras.new(name="{scene_name}_Camera")
+cam_obj = bpy.data.objects.new("{scene_name}_CamObj", cam_data)
+scene_col.objects.link(cam_obj)
+cam_obj.location = {cam.get('location', [0.0, -6.5, 1.2])}
+cam_obj.rotation_euler = [math.radians(r) for r in {cam.get('rotation_euler', [85.0, 0.0, 0.0])}]
+cam_data.lens = {cam.get('focal_length', 35.0)}
 
-# 4. Spawning Lights Rig
+# 4. Lights Setup
 """
-        for i, light in enumerate(lights_cfg):
-            l_type = light.get("type", "POINT").upper()
-            l_energy = light.get("energy", 10.0)
-            rgb = hex_to_rgb(light.get("color_hex", "#FFFFFF"))
-            
-            if l_type == "SUN":
-                script_content += f"""
-# Spawn Sun Light
-sun_data = bpy.data.lights.new(name="Sun_Light_{i}", type='SUN')
+            for i, light in enumerate(lights):
+                l_type = light.get("type", "POINT").upper()
+                l_energy = light.get("energy", 10.0)
+                color_hex = light.get("color_hex", "#FFFFFF")
+                
+                if l_type == "SUN":
+                    direction = light.get('direction', [0.0, 0.0, -1.0])
+                    script_content += f"""
+sun_data = bpy.data.lights.new(name="{scene_name}_Sun_{i}", type='SUN')
 sun_data.energy = {l_energy}
-sun_data.color = {rgb}
-sun_obj = bpy.data.objects.new("Sun_Light_{i}", sun_data)
-bpy.context.collection.objects.link(sun_obj)
-# Align Sun direction
-direction = {light.get('direction', [0.0, 0.0, -1.0])}
-import mathutils
-sun_obj.rotation_euler = mathutils.Vector(direction).to_track_quat('-Z', 'Y').to_euler()
+sun_data.color = hex_to_rgb("{color_hex}")[:3]
+sun_obj = bpy.data.objects.new("{scene_name}_SunObj_{i}", sun_data)
+scene_col.objects.link(sun_obj)
+sun_obj.rotation_euler = mathutils.Vector({direction}).to_track_quat('-Z', 'Y').to_euler()
 """
-            else:
-                loc = light.get("location", [0.0, 0.0, 2.0])
-                script_content += f"""
-# Spawn Point Light
-point_data = bpy.data.lights.new(name="Point_Light_{i}", type='POINT')
+                else:
+                    loc = light.get("location", [0.0, 0.0, 2.0])
+                    script_content += f"""
+point_data = bpy.data.lights.new(name="{scene_name}_Point_{i}", type='POINT')
 point_data.energy = {l_energy}
-point_data.color = {rgb}
-point_obj = bpy.data.objects.new("Point_Light_{i}", point_data)
-bpy.context.collection.objects.link(point_obj)
+point_data.color = hex_to_rgb("{color_hex}")[:3]
+point_obj = bpy.data.objects.new("{scene_name}_PointObj_{i}", point_data)
+scene_col.objects.link(point_obj)
 point_obj.location = {loc}
 """
 
-        # World Background Setup
-        bg_rgb = hex_to_rgb(ambient_cfg.get("background_color_hex", "#050505"))
         script_content += f"""
-# 5. Set Environment background color
+# Set World Ambient Color
 world = bpy.context.scene.world
 if world:
     world.use_nodes = False
-    world.color = {bg_rgb}
+    world.color = hex_to_rgb("{bg_color}")[:3]
 
-print("Z-NET 3D World built successfully! Check Layout Viewport.")
+print("Batch Z-NET 3D World built successfully! Check Collections.")
 """
-
         with open(self.output_blender_script, "w", encoding="utf-8") as f:
             f.write(script_content)
-        print(f"[{self.agent_name}] Success: Blender Setup automation script generated at '{self.output_blender_script}'")
+        self.log_message(f"Blender Setup automation script generated at '{self.output_blender_script}'", "INFO")
 
-    def _save_world_blueprint(self, data):
+    def forge_batch_world(self):
+        self.log_message("Initializing Batch 3D World Forge...", "INFO")
+        
+        mesh_blueprint = self._load_mesh_blueprint()
+        if not mesh_blueprint:
+            return
+            
+        master_world_config = {}
+
+        for scene_name, mesh_data in mesh_blueprint.items():
+            self.log_message(f"Processing Scene layout for: {scene_name}", "INFO")
+            
+            vision_json_path = os.path.join(self.vision_outputs_dir, f"{scene_name}_vision.json")
+            bg_path = os.path.join(self.vision_outputs_dir, f"{scene_name}_04_bg.png")
+            depth_path = os.path.join(self.vision_outputs_dir, f"{scene_name}_05_bg_depth.png")
+            
+            vision_data = {}
+            if os.path.exists(vision_json_path):
+                try:
+                    with open(vision_json_path, "r", encoding="utf-8") as vf:
+                        vision_data = json.load(vf)
+                except Exception as e:
+                    self.log_message(f"Error reading vision data for {scene_name}: {e}", "WARNING")
+
+            layout_config = self._query_gemini_lighting(vision_data, scene_name)
+            
+            master_world_config[scene_name] = {
+                "mesh": mesh_data.get("mesh", ""),
+                "is_reused": mesh_data.get("is_reused", False),
+                "bg_image": bg_path if os.path.exists(bg_path) else "",
+                "depth_image": depth_path if os.path.exists(depth_path) else "",
+                "layout": layout_config
+            }
+
         with open(self.output_world_blueprint, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
-        print(f"[{self.agent_name}] 3D layout coordinates saved to '{self.output_world_blueprint}'")
+            json.dump(master_world_config, f, indent=4)
+        
+        self.log_message(f"Master World Blueprint saved to '{self.output_world_blueprint}'", "INFO")
+
+        self._generate_blender_python_script(master_world_config)
+        
+        self.log_message("Agent 57 Pipeline Complete. Ready for Blender Execution.", "INFO")
 
 if __name__ == "__main__":
-    forger = Dynamic2dPanelTo3DWorldForge()
-    forger.forge_3d_world()
+    forger = DynamicBatchWorldForge()
+    forger.forge_batch_world()
