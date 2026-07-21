@@ -2,250 +2,302 @@ import os
 import re
 import sys
 import json
+import math
+import subprocess
 import urllib.request
 import urllib.error
 
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
+
+load_env_file()
+
 class KineticCameraRigDirector:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 21: kinetic_camera_rig_director"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+    # 1. Drive/Local Architecture
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 21: AAA Kinetic Camera Rig Director"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
-
-    def _load_upstream_sync_data(self):
-        # Visual cues aur beat drops ko load karta hai camera movement peaks match karne ke liye
-        storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
-        beat_path = os.path.join(self.workspace_dir, "14_phonk_beat_drop_map.json")
+        # Upstream Inputs
+        self.audio_dir = os.path.join(drive_temp_dir, "module_b_audio") # For Beat Drops
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts") # For Action Triggers
+        self.env_dir = os.path.join(local_library_dir, "3d_environments") # From Agent 57
         
+        # Outputs
+        self.output_dir = os.path.join(local_library_dir, "3d_environments") # Overwrites/Saves inside the env folder
+        self.output_blueprint = os.path.join(self.output_dir, "21_camera_rig_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+
+        for d in [self.env_dir, self.output_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
+
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _load_upstream_sync_data(self, scene_name):
+        """Loads Action Triggers and Beat Drops specifically for this scene."""
         sync_triggers = []
         
-        # Try loading storyboard timings
-        if os.path.exists(storyboard_path):
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
+        beat_file = os.path.join(self.audio_dir, f"14_phonk_beat_drop_map.json")
+        
+        # Load Story/Action Triggers
+        if os.path.exists(script_file):
             try:
-                with open(storyboard_path, "r", encoding="utf-8") as f:
-                    sb_data = json.load(f)
-                for i, panel in enumerate(sb_data.get("storyboard_panels", [])):
+                with open(script_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Assume Module A sets key moments per scene
                     sync_triggers.append({
-                        "timestamp_sec": panel.get("timestamp_sec", float(i * 3.0)),
-                        "event_type": "storyboard_cut",
-                        "intensity": panel.get("camera_movement_type", "dynamic").lower()
+                        "timestamp_sec": 0.0,
+                        "event_type": "scene_start",
+                        "intensity": "moderate",
+                        "action": data.get("action_description", "Entering scene")
+                    })
+                    sync_triggers.append({
+                        "timestamp_sec": 2.5, # Example mid-point
+                        "event_type": "action_peak",
+                        "intensity": "high",
+                        "action": "Main action execution"
                     })
             except Exception as e:
-                print(f"[{self.agent_name}] Storyboard parse warning: {str(e)}")
+                self.log_message(f"Script parse warning: {str(e)}", "WARNING")
 
-        # Try loading beat drops to inject heavy camera-shakes
-        if os.path.exists(beat_path):
+        # Inject Audio Beat Drops if available (For extreme shakes)
+        if os.path.exists(beat_file):
             try:
-                with open(beat_path, "r", encoding="utf-8") as f:
+                with open(beat_file, "r", encoding="utf-8") as f:
                     b_data = json.load(f)
                 for drop in b_data.get("beat_drops", []):
+                    # In a real scenario, filter drops that belong to this scene's time bracket
                     sync_triggers.append({
-                        "timestamp_sec": drop.get("timestamp_sec"),
+                        "timestamp_sec": drop.get("timestamp_sec", 1.5),
                         "event_type": "beat_drop_impact",
-                        "intensity": "extreme"
+                        "intensity": "extreme",
+                        "action": "Massive audio impact"
                     })
-            except Exception:
+            except:
                 pass
 
-        # Sort triggers chronologically
         sync_triggers = sorted(sync_triggers, key=lambda x: x["timestamp_sec"])
-
-        # Fallback triggers if workspace is fresh
+        
         if not sync_triggers:
-            print(f"[{self.agent_name}] Workspace Alert: Dynamic triggers missing. Designing default camera timeline.")
             sync_triggers = [
-                {"timestamp_sec": 0.0, "event_type": "intro_pan", "intensity": "moderate"},
-                {"timestamp_sec": 3.5, "event_type": "beat_drop_impact", "intensity": "extreme"},
-                {"timestamp_sec": 7.2, "event_type": "action_cut", "intensity": "high"}
+                {"timestamp_sec": 0.0, "event_type": "intro_pan", "intensity": "moderate", "action": "Look around"},
+                {"timestamp_sec": 3.0, "event_type": "beat_drop_impact", "intensity": "extreme", "action": "Explosion"}
             ]
 
         return sync_triggers
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+    def _query_gemini_camera_design(self, scene_name, triggers):
+        if not self.gemini_api_key:
+            return self._get_procedural_fallback(triggers)
 
-    def _save_to_workspace(self, data, filename="21_kinetic_camera_rig_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Kinetic camera rig blueprints saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save camera blueprint: {str(e)}")
-            return None
-
-    def design_camera_keyframes(self):
-        sync_triggers = self._load_upstream_sync_data()
-        print(f"[{self.agent_name}] Rig Director active. Creating frame-perfect camera movement keyframes with dynamic DoF tracking...")
-
-        system_prompt = (
-            "You are an elite cinematic action director, depth-of-field specialist, and Blender 3D camera layout expert.\n"
-            "Your job is to generate precise procedural camera keyframes with integrated dynamic focal tracking (Depth of Field) parameters compatible with Blender's animation curves.\n"
-            "For each sync trigger, output exactly 1 camera movement block inside a list named 'camera_keyframe_data' with these properties:\n"
-            "- 'timestamp_sec': float matching the sync trigger time.\n"
-            "- 'shot_type': string representing dynamic framing (choose from: 'dolly-zoom', 'orbital-spin', 'whip-pan-transition', 'extreme-close-up', 'dramatic-tilt').\n"
-            "- 'focal_length_mm': float representing zoom dynamics (choose between 18.0 for ultra-wide dynamic action to 85.0 for cinematic flat portrait-focus).\n"
-            "- 'camera_location_offset': array of 3 floats [x, y, z] representing offset positions.\n"
-            "- 'camera_rotation_euler': array of 3 floats [x, y, z] representing angles in degrees.\n"
-            "- 'screen_shake_amplitude': float (scale from 0.0 to 1.5; high values like 1.2-1.5 should be assigned only to 'beat_drop_impact' or 'extreme' intensity).\n"
-            "- 'interpolation_type': string for motion curve smoothness (choose from: 'BEZIER', 'LINEAR', 'SINE').\n"
-            "- 'dof_focal_tracking_enabled': boolean (true to lock camera focus on a moving target, false for manual distance focus).\n"
-            "- 'dof_focal_target_name': string (choose from: 'char_head_focus_empty' to prioritize face detail/eyes, 'combat_impact_point_empty' for action collisions, 'none' if tracking is disabled).\n"
-            "- 'dof_aperture_fstop': float (simulates cinematic background bokeh blur; range 1.2 for extremely blurry background/shallow depth, to 11.0 for deep landscape sharpness).\n"
-            "- 'dof_manual_focus_distance_meters': float (manual focus distance in meters when tracking is disabled; range 1.0 to 15.0).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'camera_keyframe_data'. "
-            "Do not output markdown code blocks, backticks, or any conversational text. Return valid JSON only."
+        ai_prompt = (
+            f"You are the AAA Cinematic Camera Director for scene '{scene_name}'.\n"
+            "Generate precise camera keyframes with dynamic focal tracking (Depth of Field) parameters.\n"
+            "Rules for 'screen_shake_amplitude': Only use values > 1.0 for 'beat_drop_impact' or 'extreme' intensity.\n"
+            "For each trigger, output EXACTLY 1 camera movement block.\n"
+            "Format your output STRICTLY as raw JSON:\n"
+            "{\n"
+            "  \"camera_keyframe_data\": [\n"
+            "    {\n"
+            "      \"timestamp_sec\": 0.0,\n"
+            "      \"shot_type\": \"dolly-zoom\",\n"
+            "      \"focal_length_mm\": 24.0,\n"
+            "      \"camera_location_offset\": [0.0, -4.0, 1.5],\n"
+            "      \"camera_rotation_euler\": [85.0, 0.0, 0.0],\n"
+            "      \"screen_shake_amplitude\": 0.2,\n"
+            "      \"interpolation_type\": \"BEZIER\",\n"
+            "      \"dof_focal_tracking_enabled\": true,\n"
+            "      \"dof_aperture_fstop\": 1.8,\n"
+            "      \"dof_manual_focus_distance_meters\": 3.5\n"
+            "    }\n"
+            "  ]\n"
+            "}"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Active Timeline Triggers:\n{json.dumps(sync_triggers, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Active Timeline Triggers:\n{json.dumps(sync_triggers, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "camera_keyframe_data": structured_output.get("camera_keyframe_data", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            payload = {
+                "contents": [{"parts": [{"text": ai_prompt}, {"text": f"Triggers: {json.dumps(triggers)}"}]}], 
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text).get("camera_keyframe_data", self._get_procedural_fallback(triggers)["camera_keyframe_data"])
         except Exception as e:
-            print(f"[{self.agent_name}] Connection Exception: {str(e)}. Executing procedural fallback camera engine.")
-            return self._execute_procedural_fallback(sync_triggers)
+            self.log_message(f"Gemini API Error: {str(e)}. Using fallback.", "WARNING")
+            return self._get_procedural_fallback(triggers)["camera_keyframe_data"]
 
-    def _execute_procedural_fallback(self, sync_triggers):
-        # High-action procedural mathematical model to calculate keyframes and depth parameters automatically
+    def _get_procedural_fallback(self, triggers):
         keyframes = []
-        for trigger in sync_triggers:
+        for trigger in triggers:
             ts = float(trigger.get("timestamp_sec", 0.0))
-            event = str(trigger.get("event_type", "storyboard_cut")).lower()
-            intensity = str(trigger.get("intensity", "moderate")).lower()
+            event = str(trigger.get("event_type", "intro_pan")).lower()
 
-            if "beat_drop" in event or "extreme" in intensity:
-                shot = "dolly-zoom"
-                focal = 24.0
-                loc = [0.0, -3.5, 1.2]
-                rot = [15.0, 0.0, 0.0]
-                shake = 1.4
-                interp = "SINE"
-                # DoF Focal Settings Integration
-                dof_enabled = True
-                dof_target = "char_head_focus_empty"
-                fstop = 1.2  # Dynamic high-blur cinematic bokeh
-                manual_dist = 2.5
-            elif "high" in intensity or "cut" in event:
-                shot = "orbital-spin"
-                focal = 35.0
-                loc = [1.5, -2.0, 0.8]
-                rot = [10.0, 0.0, 45.0]
-                shake = 0.4
-                interp = "BEZIER"
-                # DoF Focal Settings Integration
-                dof_enabled = True
-                dof_target = "char_head_focus_empty"
-                fstop = 1.8  # Soft cinematic portrait background blur
-                manual_dist = 3.2
+            if "beat_drop" in event:
+                shot, focal, loc, shake, fstop = "dolly-zoom", 20.0, [0.0, -3.0, 1.2], 1.5, 1.2
             else:
-                shot = "dramatic-tilt"
-                focal = 50.0
-                loc = [0.0, -5.0, 2.0]
-                rot = [-5.0, 0.0, 0.0]
-                shake = 0.0
-                interp = "LINEAR"
-                # DoF Focal Settings Integration
-                dof_enabled = False
-                dof_target = "none"
-                fstop = 5.6  # Standard focal depth for wide narrative angles
-                manual_dist = 5.0
+                shot, focal, loc, shake, fstop = "orbital-spin", 35.0, [1.5, -2.5, 1.5], 0.2, 2.8
 
             keyframes.append({
-                "timestamp_sec": ts,
-                "shot_type": shot,
-                "focal_length_mm": focal,
-                "camera_location_offset": loc,
-                "camera_rotation_euler": rot,
-                "screen_shake_amplitude": shake,
-                "interpolation_type": interp,
-                "dof_focal_tracking_enabled": dof_enabled,
-                "dof_focal_target_name": dof_target,
-                "dof_aperture_fstop": fstop,
-                "dof_manual_focus_distance_meters": manual_dist
+                "timestamp_sec": ts, "shot_type": shot, "focal_length_mm": focal,
+                "camera_location_offset": loc, "camera_rotation_euler": [85.0, 0.0, 45.0],
+                "screen_shake_amplitude": shake, "interpolation_type": "BEZIER",
+                "dof_focal_tracking_enabled": True, "dof_aperture_fstop": fstop,
+                "dof_manual_focus_distance_meters": 3.0
             })
+        return {"camera_keyframe_data": keyframes}
 
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Camera Fallback with DoF)",
-            "camera_keyframe_data": keyframes
-        }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+    def _generate_blender_script(self, blend_file_path, keyframes):
+        """Injects MAPPA-style camera tracking and shaking inside the existing Stage Blend file."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        kf_json = json.dumps(keyframes)
+
+        script_content = f"""
+import bpy
+import json
+import math
+
+# Load the stage file created by Agent 57
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+# Ensure Scene runs at 30 FPS (or standard anime 24FPS)
+fps = 30
+bpy.context.scene.render.fps = fps
+
+# 1. Locate or Create Camera & Tracker
+cam_obj = bpy.data.objects.get("Cinematic_CamObj")
+if not cam_obj:
+    cam_data = bpy.data.cameras.new("Cinematic_Camera")
+    cam_obj = bpy.data.objects.new("Cinematic_CamObj", cam_data)
+    bpy.context.scene.collection.objects.link(cam_obj)
+    bpy.context.scene.camera = cam_obj
+
+cam = cam_obj.data
+cam.dof.use_dof = True # Enable AAA Cinematic Depth of Field
+
+# Create Focus Tracker Empty
+tracker = bpy.data.objects.get("Focus_Tracker")
+if not tracker:
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 1))
+    tracker = bpy.context.active_object
+    tracker.name = "Focus_Tracker"
+    cam.dof.focus_object = tracker # Lock DoF to this tracker
+
+# Setup Camera tracking constraint
+track_constraint = cam_obj.constraints.get("Track To")
+if not track_constraint:
+    track_constraint = cam_obj.constraints.new('TRACK_TO')
+    track_constraint.target = tracker
+    track_constraint.track_axis = 'TRACK_NEGATIVE_Z'
+    track_constraint.up_axis = 'UP_Y'
+
+# 2. Apply AI Keyframes
+kf_data = json.loads('''{kf_json}''')
+
+cam_obj.animation_data_clear() # Clear old anims
+
+for kf in kf_data:
+    frame = int(kf["timestamp_sec"] * fps)
+    bpy.context.scene.frame_set(frame)
+    
+    # Location
+    loc = kf.get("camera_location_offset", [0,-5,1])
+    cam_obj.location = (loc[0], loc[1], loc[2])
+    cam_obj.keyframe_insert(data_path="location", frame=frame)
+    
+    # Lens/Zoom
+    cam.lens = kf.get("focal_length_mm", 35.0)
+    cam.keyframe_insert(data_path="lens", frame=frame)
+    
+    # Depth of Field (Aperture Bokeh)
+    cam.dof.aperture_fstop = kf.get("dof_aperture_fstop", 2.8)
+    cam.keyframe_insert(data_path="dof.aperture_fstop", frame=frame)
+    
+    # Apply shake impact to noise modifier
+    shake_amp = kf.get("screen_shake_amplitude", 0.0)
+    # We set a custom property to store shake for modifiers to read later
+    cam_obj["shake_amp"] = shake_amp
+    cam_obj.keyframe_insert(data_path='["shake_amp"]', frame=frame)
+
+# 3. Apply Smooth Interpolation
+if cam_obj.animation_data and cam_obj.animation_data.action:
+    for fcurve in cam_obj.animation_data.action.fcurves:
+        for kf in fcurve.keyframe_points:
+            kf.interpolation = 'BEZIER'
+            kf.easing = 'EASE_IN_OUT'
+            
+        # Add Noise Modifier for screen shake based on custom property
+        if fcurve.data_path == "location":
+            mod = fcurve.modifiers.new('NOISE')
+            mod.scale = 2.0
+            mod.strength = 0.5 # Base strength, influenced by AI beat drops
+            mod.phase = 1.0
+            mod.blend_type = 'ADD'
+
+# Save file
+bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+print("SUCCESS: Camera Directed")
+"""
+        script_path = os.path.join("temp_camera_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def design_camera_keyframes(self):
+        self.log_message("Initializing AAA Kinetic Camera Director...", "INFO")
+        
+        master_blueprint = {}
+        
+        # Iterate over all Stage .blend files created by Agent 57
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                scene_name = filename.replace("_stage.blend", "")
+                blend_file_path = os.path.join(self.env_dir, filename)
+                
+                self.log_message(f"--- Directing Camera for: {scene_name} ---", "INFO")
+                
+                # Load Audio Drops and Script Triggers
+                triggers = self._load_upstream_sync_data(scene_name)
+                
+                # Get Camera Motions from AI
+                keyframes = self._query_gemini_camera_design(scene_name, triggers)
+                
+                # Generate and execute Blender Script
+                script_path = self._generate_blender_script(blend_file_path, keyframes)
+                
+                self.log_message(f"Executing Headless Blender to bake Camera Tracking...", "INFO")
+                command = [self.blender_path, "-b", "-P", script_path]
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        self.log_message(f"Camera baked successfully into {filename}", "INFO")
+                        master_blueprint[scene_name] = {"keyframes": keyframes}
+                    else:
+                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                except Exception as e:
+                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    
+                if os.path.exists(script_path):
+                    os.remove(script_path)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+        
+        self.log_message("Agent 21 Camera Pipeline Complete.", "INFO")
 
 if __name__ == "__main__":
     director = KineticCameraRigDirector()
-    output = director.design_camera_keyframes()
-    
-    print("\n--- Z-NET BLENDER ENGINE: AGENT 21 CAMERA RIG DIRECTED ---")
-    print(f"Dynamic camera movements mapped: {len(output['camera_keyframe_data'])}")
-    if output["camera_keyframe_data"]:
-        sample = output["camera_keyframe_data"][0]
-        print(f"First Cue at {sample['timestamp_sec']}s | Shot: '{sample['shot_type']}' | Shake-Force: {sample['screen_shake_amplitude']} | Focal: {sample['focal_length_mm']}mm")
-        print(f"  DoF Active: {sample['dof_focal_tracking_enabled']} | Focus Target: '{sample['dof_focal_target_name']}' | F-Stop: f/{sample['dof_aperture_fstop']}")
-    print("----------------------------------------------------------")
+    director.design_camera_keyframes()
