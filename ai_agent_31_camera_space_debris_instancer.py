@@ -2,211 +2,251 @@ import os
 import re
 import sys
 import json
+import subprocess
 import urllib.request
 import urllib.error
 
-class CameraSpaceDebrisInstancer:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 31: camera_space_debris_instancer"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    # Universal Uppercase API Keys
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
+class OmniMatrixDebrisInstancer:
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 31: OmniMatrix Camera Space Debris Instancer"
         
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        # Directories
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        
+        # Outputs
+        self.output_blueprint = os.path.join(self.env_dir, "31_camera_debris_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        for d in [self.script_dir, self.env_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
-    def _load_upstream_fractures(self):
-        # Fracture Engine (Agent 30) se destruction points aur intensity load karta hai
-        fracture_path = os.path.join(self.workspace_dir, "30_environment_fracture_blueprint.json")
-        destruction_anchors = []
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        if os.path.exists(fracture_path):
+    def _load_upstream_context(self, scene_name):
+        """Loads visual style and destruction data from Agent 30"""
+        context = {
+            "visual_style": "omni_neutral",
+            "has_destruction": False,
+            "impact_frame": 0,
+            "fracture_center_xyz": [0.0, 0.0, 0.0]
+        }
+        
+        # Load Style
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
+        if os.path.exists(script_file):
             try:
-                with open(fracture_path, "r", encoding="utf-8") as f:
+                with open(script_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                for ev in data.get("fracture_events", []):
-                    destruction_anchors.append({
-                        "timestamp_sec": ev.get("timestamp_sec", 0.0),
-                        "epicenter": ev.get("fracture_center_xyz", [0.0, 0.0, 0.0]),
-                        "chunk_count": ev.get("shatter_chunk_count", 50),
-                        "radius": ev.get("fracture_radius_meters", 2.0)
-                    })
+                    context["visual_style"] = data.get("visual_style", "omni_neutral")
+            except:
+                pass
+
+        # Load Destruction Data (Agent 30)
+        dest_file = os.path.join(self.env_dir, "30_destruction_blueprint.json")
+        if os.path.exists(dest_file):
+            try:
+                with open(dest_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if scene_name in data:
+                        scene_data = data[scene_name]
+                        context["has_destruction"] = scene_data.get("shatter_chunk_count", 0) > 0
+                        context["impact_frame"] = scene_data.get("impact_frame", 0)
+                        context["fracture_center_xyz"] = scene_data.get("fracture_center_xyz", [0.0, 0.0, 0.0])
             except Exception as e:
-                print(f"[{self.agent_name}] Upstream fracture data load warning: {str(e)}")
+                self.log_message(f"Destruction data read error: {e}", "WARNING")
+                
+        return context
 
-        # Fallback agar fracture data na mile
-        if not destruction_anchors:
-            print(f"[{self.agent_name}] Workspace Alert: No fracture points found. Initializing default camera fly-by parameters.")
-            destruction_anchors = [
-                {"timestamp_sec": 4.5, "epicenter": [0.0, 1.5, -2.0], "chunk_count": 80, "radius": 3.0}
-            ]
+    def _query_debris_brain(self, scene_name, context):
+        if not context["has_destruction"]:
+            return self._fallback_debris(False)
 
-        return destruction_anchors
+        if not self.gemini_api_key:
+            return self._fallback_debris(True, context)
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
-
-    def _save_to_workspace(self, data, filename="31_camera_space_debris_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Camera debris instances written to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save debris metadata: {str(e)}")
-            return None
-
-    def design_camera_debris_instances(self):
-        anchors = self._load_upstream_fractures()
-        print(f"[{self.agent_name}] Debris Instancer active. Calculating camera-relative frustum depth projections...")
-
-        system_prompt = (
-            "You are an expert VFX technical director specialized in camera-frustum particle simulation and screen-space optimization in Blender.\n"
-            "Your job is to generate lightweight debris particle instances that fly directly towards the active camera space to simulate intense impact proximity.\n"
-            "Assume a standard camera positioned at coordinates [0.0, -5.0, 1.5] looking at the scene center.\n"
-            "For each fracture anchor, design exactly 1 camera-relative debris instance sequence inside a list named 'camera_space_debris_profiles' with these parameters:\n"
-            "- 'timestamp_sec': float matching the impact time.\n"
-            "- 'debris_instance_type': string (choose from: 'micro_pebbles', 'coarse_dust_cloud', 'screen_crack_glass', 'shattered_concrete_chunks').\n"
-            "- 'velocity_towards_camera_vector': array of 3 floats [x, y, z] pointing directly from the fracture epicenter towards the camera lens path.\n"
-            "- 'debris_scale_multiplier': float (defines visual size; scale from 0.1 for subtle dust to 2.5 for massive chunks flying past the camera lens).\n"
-            "- 'depth_proximity_limit_meters': float (stops rendering or fades out particles when they get too close to prevent lens clipping; default 0.15).\n"
-            "- 'turbulence_noise_frequency': float (adds wild anime-style aerodynamic wobbling/turbulence to debris path; scale from 0.0 to 12.0 Hz).\n"
-            "- 'motion_blur_trail_length': float (how much speed-streak the particles leave behind; range 0.05 to 0.50).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'camera_space_debris_profiles'. "
-            "Do not write conversational explanations, markdown code blocks, or backticks. Return valid JSON only."
+        ai_prompt = (
+            f"You are the VFX Debris TD for the OmniMatrix Engine.\n"
+            f"Scene Name: {scene_name}\n"
+            f"Visual Style: {context['visual_style']}\n"
+            f"Impact Frame: {context['impact_frame']}\n\n"
+            "Design camera-facing particle debris based on the style.\n"
+            "- 'anime': Large chunks, zero gravity (straight line to camera), high speed.\n"
+            "- 'realistic': Fine dust, normal gravity (arc trajectory), medium speed.\n"
+            "- LIMIT particle count to 150 max to save RAM.\n"
+            "Return ONLY raw JSON:\n"
+            "{\n"
+            "  \"impact_frame\": " + str(context['impact_frame']) + ",\n"
+            "  \"epicenter_xyz\": " + str(context['fracture_center_xyz']) + ",\n"
+            "  \"debris_type\": \"heavy_chunks\",\n"
+            "  \"particle_count\": 100,\n"
+            "  \"velocity_towards_camera\": 25.0,\n"
+            "  \"gravity_influence\": 0.0,\n"
+            "  \"rationale\": \"Anime style needs chunks shooting straight at the lens without falling.\"\n"
+            "}"
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Fracture Anchor Logs:\n{json.dumps(anchors, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Fracture Anchor Logs:\n{json.dumps(anchors, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                output = json.loads(res_text)
                 
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
+                # HARD SAFEGUARD FOR COLAB RAM
+                if output.get("particle_count", 0) > 150:
+                    output["particle_count"] = 150
+                return output
                 
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "camera_space_debris_profiles": structured_output.get("camera_space_debris_profiles", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
         except Exception as e:
-            print(f"[{self.agent_name}] Connection Exception: {str(e)}. Triggering procedural frustum particle projector.")
-            return self._execute_procedural_fallback(anchors)
+            self.log_message(f"AI Debris Director failed: {str(e)}. Using fallback.", "WARNING")
+            return self._fallback_debris(True, context)
 
-    def _execute_procedural_fallback(self, anchors):
-        # Computes direct translation vectors from impact point straight to camera coordinate [0, -5, 1.5]
-        profiles = []
-        for anc in anchors:
-            ts = float(anc.get("timestamp_sec", 0.0))
-            epi = anc.get("epicenter", [0.0, 0.0, 0.0])
-            count = int(anc.get("chunk_count", 50))
-
-            # Direct vector pointing towards standard camera placement
-            cam_pos = [0.0, -5.0, 1.5]
-            dir_x = cam_pos[0] - epi[0]
-            dir_y = cam_pos[1] - epi[1]
-            dir_z = cam_pos[2] - epi[2]
-            
-            # Normalize vector to simulate constant speed force
-            length = (dir_x**2 + dir_y**2 + dir_z**2)**0.5
-            norm_vector = [dir_x/length * 8.5, dir_y/length * 8.5, dir_z/length * 8.5] if length > 0 else [0.0, -5.0, 1.5]
-
-            # Assign debris parameters dynamically based on chunk counts
-            if count > 80:
-                dtype = "shattered_concrete_chunks"
-                scale = 1.8
-                turb = 6.5
-                trail = 0.35
-            elif count > 40:
-                dtype = "micro_pebbles"
-                scale = 0.6
-                turb = 4.0
-                trail = 0.20
-            else:
-                dtype = "coarse_dust_cloud"
-                scale = 0.15
-                turb = 10.0
-                trail = 0.12
-
-            profiles.append({
-                "timestamp_sec": ts,
-                "debris_instance_type": dtype,
-                "velocity_towards_camera_vector": norm_vector,
-                "debris_scale_multiplier": scale,
-                "depth_proximity_limit_meters": 0.12,
-                "turbulence_noise_frequency": turb,
-                "motion_blur_trail_length": trail
-            })
-
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Frustum Fallback)",
-            "camera_space_debris_profiles": profiles
+    def _fallback_debris(self, has_impact, context=None):
+        if not has_impact:
+            return {
+                "impact_frame": 0, "particle_count": 0, "debris_type": "none",
+                "velocity_towards_camera": 0.0, "gravity_influence": 1.0, "rationale": "No impact."
+            }
+        return {
+            "impact_frame": context.get("impact_frame", 24), "particle_count": 80, 
+            "epicenter_xyz": context.get("fracture_center_xyz", [0,0,0]), "debris_type": "coarse_dust",
+            "velocity_towards_camera": 15.0, "gravity_influence": 0.5, "rationale": "Fallback standard debris."
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def _generate_blender_script(self, blend_file_path, debris_data):
+        """Python script to generate camera-facing particle systems in Headless Blender."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        
+        script_content = f"""
+import bpy
+import mathutils
+
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+try:
+    count = {debris_data.get('particle_count', 0)}
+    frame = {debris_data.get('impact_frame', 0)}
+    vel = {debris_data.get('velocity_towards_camera', 0.0)}
+    grav = {debris_data.get('gravity_influence', 1.0)}
+    epicenter = {debris_data.get('epicenter_xyz', [0.0, 0.0, 0.0])}
+
+    if count > 0:
+        cam = bpy.context.scene.camera
+        if cam:
+            # 1. Create Emitter at Impact Location
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=epicenter)
+            emitter = bpy.context.active_object
+            emitter.name = "Omni_Debris_Emitter"
+            emitter.hide_render = True # Hide emitter, only show particles
+            
+            # 2. Add Particle System
+            bpy.ops.object.particle_system_add()
+            ps = emitter.particle_systems[0]
+            pset = ps.settings
+            
+            pset.count = count
+            pset.frame_start = frame
+            pset.frame_end = frame + 2 # Burst emission
+            pset.lifetime = 100
+            
+            # 3. Calculate Vector to Camera
+            cam_loc = cam.location
+            emit_loc = mathutils.Vector(epicenter)
+            direction = (cam_loc - emit_loc).normalized()
+            
+            # 4. Apply Velocity and Physics
+            pset.physics_type = 'NEWTON'
+            pset.normal_factor = 0.0 # Don't shoot along normals
+            
+            # We use an empty force field to pull particles towards camera, 
+            # or simply set the emitter's velocity towards the camera.
+            # Easiest way in Blender script is to rotate the emitter to face the camera 
+            # and use Object Z-Velocity.
+            
+            rot_quat = direction.to_track_quat('Z', 'Y')
+            emitter.rotation_euler = rot_quat.to_euler()
+            pset.object_factor = vel # Shoot along object Z axis
+            pset.factor_random = vel * 0.3 # Add chaos
+            
+            # 5. OmniMatrix Gravity Influence (Anime = 0, Realistic = 1)
+            pset.effector_weights.gravity = grav
+
+        bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+        print("SUCCESS: OmniMatrix Camera Debris initialized.")
+    else:
+        print("INFO: No debris needed for this scene.")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_debris_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def process_camera_debris(self):
+        self.log_message("Initializing OmniMatrix Camera Debris Instancer...", "INFO")
+        master_blueprint = {}
+        
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                scene_name = filename.replace("_stage.blend", "")
+                blend_file_path = os.path.join(self.env_dir, filename)
+                
+                context = self._load_upstream_context(scene_name)
+                
+                if context["has_destruction"]:
+                    self.log_message(f"--- Processing Debris for: {scene_name} ---", "INFO")
+                    debris_data = self._query_debris_brain(scene_name, context)
+                    
+                    self.log_message(f"AI Decision: {debris_data['rationale']} | Type: {debris_data['debris_type']} | Count: {debris_data['particle_count']}", "INFO")
+                    
+                    script_path = self._generate_blender_script(blend_file_path, debris_data)
+                    
+                    command = [self.blender_path, "-b", "-P", script_path]
+                    try:
+                        result = subprocess.run(command, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            self.log_message(f"Camera Debris applied to {filename}", "INFO")
+                            master_blueprint[scene_name] = debris_data
+                        else:
+                            self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                    except Exception as e:
+                        self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                        
+                    if os.path.exists(script_path):
+                        os.remove(script_path)
+                else:
+                    self.log_message(f"Scene '{scene_name}' has no destruction. Skipping Debris.", "INFO")
+                    master_blueprint[scene_name] = self._fallback_debris(False)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Agent 31 Pipeline Complete. Debris is flying towards the lens!", "INFO")
 
 if __name__ == "__main__":
-    instancer = CameraSpaceDebrisInstancer()
-    output = instancer.design_camera_debris_instances()
-    
-    print("\n--- Z-NET RENDER ENGINE: AGENT 31 DEBRIS INSTANCER COMPLETE ---")
-    print(f"Debris profiles successfully projected to camera space: {len(output['camera_space_debris_profiles'])}")
-    for profile in output["camera_space_debris_profiles"]:
-        print(f"Time: {profile['timestamp_sec']}s | Particle Type: '{profile['debris_instance_type']}' | Projectile Vector: {profile['velocity_towards_camera_vector']}")
-        print(f"Proximity Limit: {profile['depth_proximity_limit_meters']}m | Turb. Freq: {profile['turbulence_noise_frequency']}Hz | Motion Streak: {profile['motion_blur_trail_length']}")
-    print("----------------------------------------------------------------")
+    instancer = OmniMatrixDebrisInstancer()
+    instancer.process_camera_debris()
