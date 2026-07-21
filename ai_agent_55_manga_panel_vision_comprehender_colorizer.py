@@ -4,285 +4,225 @@ import json
 import base64
 import urllib.request
 import urllib.parse
-import urllib.error
+import zipfile
+import shutil
+from io import BytesIO
 
 try:
-    from PIL import Image, ImageDraw, ImageEnhance, ImageStat
+    from PIL import Image, ImageDraw, ImageEnhance, ImageStat, ImageOps
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
-class UniversalMangaPanelVisionColorizer:
+try:
+    from rembg import remove
+    REMBG_AVAILABLE = True
+except ImportError:
+    REMBG_AVAILABLE = False
+
+class UniversalVisionComprehender:
     def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 55: universal_manga_panel_vision_colorizer"
+        self.agent_name = "Ai Agent 55: vision_comprehender_and_splitter"
         self.workspace_dir = workspace_dir
-        self.input_manga_path = os.path.join(self.workspace_dir, "input_manga_panel.png")
-        self.output_colorized_path = os.path.join(self.workspace_dir, "55_colorized_manga_panel.png")
-        self.output_blueprint_path = os.path.join(self.workspace_dir, "55_manga_comprehend_blueprint.json")
+        
+        # Directories for Batch Processing
+        self.inputs_dir = os.path.join(self.workspace_dir, "inputs")
+        self.outputs_dir = os.path.join(self.workspace_dir, "outputs")
         
         # API Keys loading from environment
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.hf_api_key = os.environ.get("HF_API_KEY", "") # Hugging Face Token
+        self.hf_api_key = os.environ.get("HF_API_KEY", "") 
         
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
-        # Using a popular community controlnet/lineart anime colorization model endpoint
-        self.hf_url = "https://api-inference.huggingface.co/models/lllyasviel/control_v11p_sd15_lineart"
+        self.hf_colorize_url = "https://api-inference.huggingface.co/models/lllyasviel/control_v11p_sd15_lineart"
+        self.hf_inpaint_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-inpainting"
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        for directory in [self.inputs_dir, self.outputs_dir]:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
 
+    # ==========================================
+    # INPUT MODE 1: MANGADEX FETCHER
+    # ==========================================
     def fetch_panel_from_mangadex(self, manga_title, chapter_num="1", page_num=0):
-        """Dynamically searches and fetches any manga panel from MangaDex without hardcoding."""
-        print(f"[{self.agent_name}] Searching MangaDex for title: '{manga_title}', Chapter: {chapter_num}")
+        print(f"[{self.agent_name}] Searching MangaDex for: '{manga_title}', Chapter: {chapter_num}")
         try:
-            # 1. Search Manga ID
             search_url = f"https://api.mangadex.org/manga?title={urllib.parse.quote(manga_title)}&limit=1"
             req = urllib.request.Request(search_url, headers={'User-Agent': 'ZNetBot/1.0'})
             with urllib.request.urlopen(req, timeout=15) as resp:
-                search_data = json.loads(resp.read().decode("utf-8"))
-                if not search_data.get("data"):
-                    print(f"[{self.agent_name}] Manga title not found on MangaDex.")
-                    return False
-                manga_id = search_data["data"][0]["id"]
+                manga_id = json.loads(resp.read().decode("utf-8"))["data"][0]["id"]
 
-            # 2. Get Chapter ID
             feed_url = f"https://api.mangadex.org/manga/{manga_id}/feed?chapter[]={chapter_num}&translatedLanguage[]=en&limit=1"
             req = urllib.request.Request(feed_url, headers={'User-Agent': 'ZNetBot/1.0'})
             with urllib.request.urlopen(req, timeout=15) as resp:
-                feed_data = json.loads(resp.read().decode("utf-8"))
-                if not feed_data.get("data"):
-                    print(f"[{self.agent_name}] Chapter {chapter_num} not found.")
-                    return False
-                chapter_id = feed_data["data"][0]["id"]
+                chapter_id = json.loads(resp.read().decode("utf-8"))["data"][0]["id"]
 
-            # 3. Get Base URL and Filenames
             server_url = f"https://api.mangadex.org/at-home/server/{chapter_id}"
             req = urllib.request.Request(server_url, headers={'User-Agent': 'ZNetBot/1.0'})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 server_data = json.loads(resp.read().decode("utf-8"))
                 base_url = server_data["baseUrl"]
-                chapter_hash = server_data["chapter"]["hash"]
-                data_pages = server_data["chapter"]["data"] # High quality pages list
-
-                if page_num >= len(data_pages):
-                    page_num = 0 # Fallback to first page
+                hash_id = server_data["chapter"]["hash"]
+                pages = server_data["chapter"]["data"]
                 
-                target_page_file = data_pages[page_num]
-                page_download_url = f"{base_url}/data/{chapter_hash}/{target_page_file}"
+                target_page = pages[page_num] if page_num < len(pages) else pages[0]
+                download_url = f"{base_url}/data/{hash_id}/{target_page}"
 
-            # 4. Download to Workspace
-            print(f"[{self.agent_name}] Downloading panel image from MangaDex...")
-            req = urllib.request.Request(page_download_url, headers={'User-Agent': 'ZNetBot/1.0'})
-            with urllib.request.urlopen(req, timeout=30) as resp, open(self.input_manga_path, "wb") as out_f:
+            save_path = os.path.join(self.inputs_dir, f"mangadex_{manga_title.replace(' ', '_')}.png")
+            req = urllib.request.Request(download_url, headers={'User-Agent': 'ZNetBot/1.0'})
+            with urllib.request.urlopen(req, timeout=30) as resp, open(save_path, "wb") as out_f:
                 out_f.write(resp.read())
-            
-            print(f"[{self.agent_name}] Manga panel fetched successfully at: {self.input_manga_path}")
-            return True
-
+            return [save_path]
         except Exception as e:
-            print(f"[{self.agent_name}] MangaDex Fetch Failed: {str(e)}. Using fallback/existing asset.")
-            return False
+            print(f"[{self.agent_name}] MangaDex Fetch Failed: {str(e)}")
+            return []
 
-    def _is_panel_already_colored(self):
-        """Smart Manhwa Bypass: Analyzes saturation to detect if panel is already colored."""
-        if not PIL_AVAILABLE or not os.path.exists(self.input_manga_path):
-            return False
-        try:
-            img = Image.open(self.input_manga_path).convert("HSV")
-            _, s, _ = img.split() # Split into Hue, Saturation, Value
-            stat = ImageStat.Stat(s)
-            avg_saturation = stat.mean[0]
-            
-            print(f"[{self.agent_name}] Image Saturation Analysis Metric: {avg_saturation:.2f}")
-            # If average saturation is high, it's a colored Manhwa/Webtoon panel
-            return avg_saturation > 15.0 
-        except Exception as e:
-            print(f"[{self.agent_name}] Saturation check failed: {str(e)}")
-            return False
+    # ==========================================
+    # INPUT MODE 2: ZIP EXTRACTOR
+    # ==========================================
+    def process_zip_upload(self, zip_filepath):
+        print(f"[{self.agent_name}] Extracting ZIP file: {zip_filepath}")
+        extracted_images = []
+        extract_folder = os.path.join(self.inputs_dir, "extracted_zip")
+        if not os.path.exists(extract_folder):
+            os.makedirs(extract_folder)
 
-    def _get_image_base64(self):
-        try:
-            with open(self.input_manga_path, "rb") as img_file:
-                return base64.b64encode(img_file.read()).decode('utf-8')
-        except Exception as e:
-            return None
-
-    def execute_universal_pipeline(self, search_title=None, chapter="1", page=0):
-        print(f"[{self.agent_name}] Starting Universal Production Engine Execution...")
+        with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:
+            zip_ref.extractall(extract_folder)
         
-        # Step 1: Dynamic Download if Title is passed
-        if search_title:
-            self.fetch_panel_from_mangadex(search_title, chapter, page)
-        
-        # Ensure we have a panel file to work with
-        if not os.path.exists(self.input_manga_path):
-            print(f"[{self.agent_name}] Processing workspace setup anomalies...")
-            # If no file exists, use custom procedural fallback generator
-            # (Matches your previous script logic)
-            self._generate_procedural_mock_panel()
+        for root, _, files in os.walk(extract_folder):
+            for file in files:
+                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    extracted_images.append(os.path.join(root, file))
+        return extracted_images
 
-        # Step 2: Check for Manhwa Bypass
-        is_colored = self._is_panel_already_colored()
-        if is_colored:
-            print(f"[{self.agent_name}] [MANHWA DETECTED] Panel is already colored! Activating automatic bypass pipeline...")
-            # Bypass Hugging Face colorization entirely, copy input direct to colorized output
+    # ==========================================
+    # INPUT MODE 3: DRIVE / FOLDER BATCH
+    # ==========================================
+    def get_images_from_folder(self, folder_path):
+        print(f"[{self.agent_name}] Scanning Drive/Folder: {folder_path}")
+        images = []
+        if os.path.exists(folder_path):
+            for file in os.listdir(folder_path):
+                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    images.append(os.path.join(folder_path, file))
+        return images
+
+    # ==========================================
+    # CORE AI PIPELINE (Runs for each image)
+    # ==========================================
+    def _process_single_image(self, img_path, file_index):
+        print(f"\n[{self.agent_name}] --- Processing Image {file_index} ---")
+        base_name = f"scene_{file_index:03d}"
+        
+        out_color = os.path.join(self.outputs_dir, f"{base_name}_01_color.png")
+        out_char = os.path.join(self.outputs_dir, f"{base_name}_02_character.png")
+        out_mask = os.path.join(self.outputs_dir, f"{base_name}_03_mask.png")
+        out_bg = os.path.join(self.outputs_dir, f"{base_name}_04_bg.png")
+        out_json = os.path.join(self.outputs_dir, f"{base_name}_vision.json")
+
+        # 1. Gemini Vision Analysis
+        vision_data = self._query_gemini(img_path)
+        
+        # 2. Colorization or Direct Copy
+        if vision_data.get("is_black_and_white", False) and self.hf_api_key:
+            self._hf_colorize(img_path, out_color, vision_data.get("colorization_prompt", ""))
+        else:
+            shutil.copy(img_path, out_color)
+
+        # 3. Local Background Removal & Masking
+        if REMBG_AVAILABLE and PIL_AVAILABLE:
             try:
-                img = Image.open(self.input_manga_path)
-                img.save(self.output_colorized_path, "PNG")
-            except Exception:
-                pass
-            
-            # Request Gemini context mapping only for metadata structure extraction
-            structured_data = self._query_gemini_vision(manhwa_mode=True)
-            self._save_blueprint_state(structured_data, bypass_active=True)
-            return
+                img = Image.open(out_color)
+                isolated = remove(img)
+                isolated.save(out_char, "PNG")
+                
+                alpha = isolated.split()[3]
+                ImageOps.invert(alpha).save(out_mask, "PNG")
+                
+                # 4. Inpaint Black Hole
+                if self.hf_api_key:
+                    self._hf_inpaint(out_color, out_mask, out_bg, vision_data.get("background_description", ""))
+            except Exception as e:
+                print(f"[{self.agent_name}] Split/Mask failed: {str(e)}")
 
-        # Step 3: Core B&W Manga Path - Run Gemini Brain
-        print(f"[{self.agent_name}] [MANGA DETECTED] Black & White asset identified. Querying Gemini Vision Brain...")
-        structured_data = self._query_gemini_vision(manhwa_mode=False)
+        with open(out_json, "w") as f:
+            json.dump(vision_data, f, indent=4)
+        print(f"[{self.agent_name}] Finished Processing {base_name}.")
+
+    def _query_gemini(self, img_path):
+        # (Same logic as before for Gemini API)
+        with open(img_path, "rb") as img_file:
+            img_b64 = base64.b64encode(img_file.read()).decode('utf-8')
         
-        # Step 4: Run Hugging Face AI Generation using Gemini's dynamic prompt
-        self._colorize_via_huggingface(structured_data)
-        self._save_blueprint_state(structured_data, bypass_active=False)
-
-    def _query_gemini_vision(self, manhwa_mode=False):
-        if not self.gemini_api_key:
-            print(f"[{self.agent_name}] Gemini API Key missing. Executing local procedural visualization.")
-            return self._procedural_vision_data()
-
-        base64_image = self._get_image_base64()
-        if not base64_image:
-            return self._procedural_vision_data()
-
-        mode_instruction = (
-            "This is a pre-colored Manhwa panel. Identify characters and extract lighting metadata."
-            if manhwa_mode else
-            "This is a black and white Manga panel. Identify characters and construct a highly detailed, descriptive dynamic coloring prompt for an Image-to-Image AI model."
-        )
-
-        system_prompt = (
-            f"You are a master universal anime vision comprehension machine. {mode_instruction}\n"
-            "Analyze the character elements, hair profiles, actions, and weapon structures dynamically without hardcoded limits.\n"
-            "Return ONLY a clean JSON object. No markdown backticks, no wrapping code enclosures. Structure:\n"
-            "{\n"
-            "  \"detected_universe_context\": \"Extracted manga/anime style series concept\",\n"
-            "  \"detected_characters\": [\n"
-            "    {\"name\": \"Character Identity\", \"pose_description\": \"Action state description\", \"depth_index\": 0.9}\n"
-            "  ],\n"
-            "  \"dynamic_coloring_prompt\": \"Master digital anime cell-shading colorization prompt detailing exact outfit colors, vibrant hair shading, precise element layers, clean 4k high quality anime output\",\n"
-            "  \"vfx_glow_layers\": {\"type\": \"aura_glow\", \"hex_code\": \"#00FFFF\"}\n"
-            "}"
-        )
-
-        try:
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": system_prompt},
-                        {"inlineData": {"mimeType": "image/png", "data": base64_image}}
-                    ]
-                }],
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            data_bytes = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(self.gemini_url, data=data_bytes, headers={"Content-Type": "application/json"})
-            
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_body = response.read().decode("utf-8")
-                raw_text = json.loads(res_body)["candidates"][0]["content"]["parts"][0]["text"]
-                return json.loads(raw_text.strip())
-        except Exception as e:
-            print(f"[{self.agent_name}] Gemini Vision Call exception encountered: {str(e)}")
-            return self._procedural_vision_data()
-
-    def _colorize_via_huggingface(self, vision_data):
-        """Uses Hugging Face AI Inference Node to render production grade color details."""
-        prompt = vision_data.get("dynamic_coloring_prompt", "Masterpiece anime colorized panel, highly detailed coloring")
-        print(f"[{self.agent_name}] Sending dynamic prompt to Hugging Face: '{prompt}'")
+        system_prompt = "Analyze this image. JSON format: {\"is_black_and_white\": bool, \"character_description\": \"\", \"background_description\": \"\", \"colorization_prompt\": \"\"}"
+        payload = {"contents": [{"parts": [{"text": system_prompt}, {"inlineData": {"mimeType": "image/png", "data": img_b64}}]}], "generationConfig": {"responseMimeType": "application/json"}}
         
-        if not self.hf_api_key:
-            print(f"[{self.agent_name}] Hugging Face API Token missing. Executing procedural fallback painting.")
-            self._execute_procedural_painting(vision_data)
-            return
-
         try:
-            # Load raw B&W file bytes to pass to the Image-to-Image / Lineart model
-            with open(self.input_manga_path, "rb") as f:
-                img_bytes = f.read()
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(json.loads(resp.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip())
+        except:
+            return {"is_black_and_white": False, "background_description": "A scenic view"}
 
-            headers = {
-                "Authorization": f"Bearer {self.hf_api_key}",
-                "Content-Type": "application/octet-stream",
-                "X-Prompt": prompt # Passes custom generated script cues inside header metadata context if supported by model routing
-            }
+    def _hf_colorize(self, img_path, out_path, prompt):
+        # (Same HuggingFace ControlNet logic)
+        with open(img_path, "rb") as f:
+            req = urllib.request.Request(self.hf_colorize_url, data=f.read(), headers={"Authorization": f"Bearer {self.hf_api_key}", "Content-Type": "application/octet-stream", "X-Prompt": prompt})
+            try:
+                with urllib.request.urlopen(req, timeout=40) as resp, open(out_path, "wb") as out:
+                    out.write(resp.read())
+            except:
+                shutil.copy(img_path, out_path)
 
-            req = urllib.request.Request(self.hf_url, data=img_bytes, headers=headers)
-            with urllib.request.urlopen(req, timeout=40) as response:
-                output_bytes = response.read()
-                with open(self.output_colorized_path, "wb") as out_f:
-                    out_f.write(output_bytes)
-            print(f"[{self.agent_name}] Production Grade Colorized Image saved successfully via Hugging Face!")
+    def _hf_inpaint(self, img_path, mask_path, out_path, prompt):
+        # (Same HuggingFace Inpainting logic)
+        with open(img_path, "rb") as i, open(mask_path, "rb") as m:
+            payload = {"inputs": prompt, "image": base64.b64encode(i.read()).decode(), "mask_image": base64.b64encode(m.read()).decode()}
+        req = urllib.request.Request(self.hf_inpaint_url, data=json.dumps(payload).encode(), headers={"Authorization": f"Bearer {self.hf_api_key}", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp, open(out_path, "wb") as out:
+                out.write(resp.read())
         except Exception as e:
-            print(f"[{self.agent_name}] Hugging Face Node processing exception: {str(e)}. Triggering procedural safe painting.")
-            self._execute_procedural_painting(vision_data)
+            print(f"Inpaint failed: {e}")
 
-    def _execute_procedural_painting(self, vision_data):
-        """Procedural execution matrix when Hugging Face API is unlinked or offline."""
-        if not PIL_AVAILABLE or not os.path.exists(self.input_manga_path):
+    # ==========================================
+    # MASTER ORCHESTRATOR
+    # ==========================================
+    def execute_engine(self, mode="folder", source_data=""):
+        print(f"[{self.agent_name}] Initializing Engine in '{mode}' mode...")
+        images_to_process = []
+
+        if mode == "mangadex":
+            # source_data = {"title": "Naruto", "chapter": "1", "page": 0}
+            images_to_process = self.fetch_panel_from_mangadex(source_data["title"], source_data.get("chapter", "1"), source_data.get("page", 0))
+        elif mode == "zip":
+            images_to_process = self.process_zip_upload(source_data)
+        elif mode == "folder":
+            images_to_process = self.get_images_from_folder(source_data)
+        elif mode == "single":
+            images_to_process = [source_data]
+
+        if not images_to_process:
+            print(f"[{self.agent_name}] No images found to process. Aborting.")
             return
-        try:
-            img = Image.open(self.input_manga_path).convert("RGBA")
-            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-            draw = ImageDraw.Draw(overlay)
+
+        print(f"[{self.agent_name}] Found {len(images_to_process)} images. Starting batch processing...")
+        for idx, img_path in enumerate(images_to_process, start=1):
+            self._process_single_image(img_path, idx)
             
-            # Extract dynamic color parameters from Gemini response fallback arrays
-            glow = vision_data.get("vfx_glow_layers", {}).get("hex_code", "#00FFFF")
-            # Parse hex to RGBA tuple
-            h = glow.lstrip('#')
-            rgb_glow = tuple(int(h[i:i+2], 16) for i in (0, 2, 4)) + (50,)
-
-            # Add procedural visual tint layers across panel dimensions
-            draw.rectangle([0, 0, img.size[0], img.size[1]], fill=rgb_glow)
-            final_img = Image.alpha_composite(img, overlay).convert("RGB")
-            final_img.save(self.output_colorized_path, "PNG")
-            print(f"[{self.agent_name}] Procedural asset rendering complete.")
-        except Exception as e:
-            print(f"[{self.agent_name}] Procedural fallback painter failed: {str(e)}")
-
-    def _procedural_vision_data(self):
-        return {
-            "detected_universe_context": "Universal Fallback Matrix",
-            "detected_characters": [{"name": "Dynamic Hero Profile", "pose_description": "Combat stance active", "depth_index": 0.95}],
-            "dynamic_coloring_prompt": "Vibrant anime cell shading, high quality cinematic tones, clean digital paint work",
-            "vfx_glow_layers": {"type": "ambient_glow", "hex_code": "#FF00FF"}
-        }
-
-    def _generate_procedural_mock_panel(self):
-        if not PIL_AVAILABLE: return
-        manga_img = Image.new("RGB", (800, 1000), (255, 255, 255))
-        draw = ImageDraw.Draw(manga_img)
-        draw.rectangle([20, 20, 780, 980], outline=(0, 0, 0), width=8)
-        draw.line([(40, 40), (760, 960)], fill=(0, 0, 0), width=4)
-        manga_img.save(self.input_manga_path, "PNG")
-
-    def _save_blueprint_state(self, vision_data, bypass_active=False):
-        blueprint = {
-            "agent_executed": self.agent_name,
-            "pipeline_mode": "Manhwa Bypass Extraction" if bypass_active else "Full Manga Colorization Engine",
-            "source_asset": self.input_manga_path,
-            "output_colorized_asset": self.output_colorized_path,
-            "extracted_metadata": vision_data
-        }
-        with open(self.output_blueprint_path, "w", encoding="utf-8") as f:
-            json.dump(blueprint, f, indent=4)
-        print(f"[{self.agent_name}] State tracking ledger successfully updated: '{self.output_blueprint_path}'")
+        print(f"[{self.agent_name}] Batch Processing Complete! All assets are in '{self.outputs_dir}'.")
 
 if __name__ == "__main__":
-    colorizer = UniversalMangaPanelVisionColorizer()
+    agent = UniversalVisionComprehender()
     
-    # SYSTEM TEST RUN EXAMPLES:
-    # Example A: Pass title dynamically to fetch from MangaDex
-    # colorizer.execute_universal_pipeline(search_title="Jujutsu Kaisen", chapter="1", page=3)
+    # SYSTEM TEST EXAMPLES (UI/Engine will call like this):
     
-    # Example B: Run locally on whichever asset is currently placed inside workspace
-    colorizer.execute_universal_pipeline()
+    # 1. Drive/Folder Mode:
+    # agent.execute_engine(mode="folder", source_data="C:/MyDriveSync/AnimeScenes")
+    
+    # 2. ZIP Mode:
+    # agent.execute_engine(mode="zip", source_data="C:/Downloads/manga_chapter.zip")
+    
+    # 3. MangaDex Mode:
+    # agent.execute_engine(mode="mangadex", source_data={"title": "Jujutsu Kaisen", "chapter": "1", "page": 3})
