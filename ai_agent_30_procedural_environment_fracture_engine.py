@@ -2,11 +2,10 @@ import os
 import re
 import sys
 import json
+import subprocess
 import urllib.request
-import urllib.parse
 import urllib.error
 
-# Manual .env loader utility (in case python-dotenv is not installed)
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r") as f:
@@ -14,205 +13,256 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
+                    # Universal Uppercase API Keys
+                    os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
-class ProceduralEnvironmentFractureEngine:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 30: procedural_environment_fracture_engine"
-        self.workspace_dir = workspace_dir
+class OmniMatrixDestructionEngine:
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 30: OmniMatrix Procedural Destruction Engine"
         
-        # Gemini API Configs
-        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        # Directories
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments")
         
-        # Fallback local config
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_local = "llama3"
+        # Outputs
+        self.output_blueprint = os.path.join(self.env_dir, "30_destruction_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+        for d in [self.script_dir, self.env_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
-    def _load_upstream_collisions(self):
-        collision_path = os.path.join(self.workspace_dir, "27_mesh_collision_blueprint.json")
-        active_impacts = []
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        if os.path.exists(collision_path):
+    def _load_upstream_context(self, scene_name):
+        """Loads visual style and heavy collision impact data."""
+        context = {
+            "visual_style": "omni_neutral",
+            "has_heavy_impact": False,
+            "impact_frame": 0,
+            "impact_force": 0.0,
+            "impact_point": [0.0, 0.0, 0.0]
+        }
+        
+        # 1. Load Style Context
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
+        if os.path.exists(script_file):
             try:
-                with open(collision_path, "r", encoding="utf-8") as f:
+                with open(script_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                for ev in data.get("collision_resolution_events", []):
-                    if ev.get("has_collision_conflict", False) and ev.get("impact_force_magnitude", 0.0) > 15.0:
-                        active_impacts.append({
-                            "timestamp_sec": ev.get("timestamp_sec", 0.0),
-                            "impact_point": ev.get("impact_point_coordinates", [0.0, 0.0, 0.0]),
-                            "force": ev.get("impact_force_magnitude", 15.0)
-                        })
+                    context["visual_style"] = data.get("visual_style", "omni_neutral")
+            except:
+                pass
+
+        # 2. Load Collision Data (from Agent 27)
+        collision_file = os.path.join(self.env_dir, "27_collision_blueprint.json")
+        if os.path.exists(collision_file):
+            try:
+                with open(collision_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if scene_name in data:
+                        scene_data = data[scene_name]
+                        context["has_heavy_impact"] = scene_data.get("has_major_impact", False)
+                        context["impact_frame"] = scene_data.get("impact_frame", 0)
+                        # Derive a pseudo-force if not directly available
+                        context["impact_force"] = 45.0 if context["has_heavy_impact"] else 0.0
+                        context["impact_point"] = scene_data.get("impact_point_coordinates", [0.0, 0.0, 0.0])
             except Exception as e:
-                print(f"[{self.agent_name}] Upstream collision data load warning: {str(e)}")
-
-        if not active_impacts:
-            print(f"[{self.agent_name}] Workspace Alert: No heavy collision data. Injecting default destruction anchor.")
-            active_impacts = [
-                {"timestamp_sec": 4.5, "impact_point": [0.0, 1.5, 0.0], "force": 45.0}
-            ]
-
-        return active_impacts
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
-
-    def _save_to_workspace(self, data, filename="30_environment_fracture_blueprint.json"):
-        # SAFEGUARD: Enforce RAM limits directly on output data
-        for event in data.get("fracture_events", []):
-            if event.get("shatter_chunk_count", 0) > 60:
-                print(f"[{self.agent_name}] Safeguard Active: Capping chunks from {event['shatter_chunk_count']} to 60 to prevent Colab RAM freeze!")
-                event["shatter_chunk_count"] = 60
+                self.log_message(f"Collision data read error: {e}", "WARNING")
                 
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: Fracture configurations saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save fracture blueprint: {str(e)}")
-            return None
+        return context
 
-    def design_procedural_fracture(self):
-        impacts = self._load_upstream_collisions()
-        print(f"[{self.agent_name}] Destruction Engine active. Calculating cell fracture cuts and debris physics...")
+    def _query_destruction_brain(self, scene_name, context):
+        if not context["has_heavy_impact"] or context["impact_force"] < 15.0:
+            return self._fallback_destruction(False)
 
-        system_prompt = (
-            "You are a master Technical Director specialized in procedural environmental destruction and physics simulation for anime.\n"
-            "Your job is to generate parameters for Blender's Cell Fracture modifier and physics rigid bodies based on impact points.\n"
-            "For each heavy impact point, design exactly 1 destruction config block inside a list named 'fracture_events' with these keys:\n"
-            "- 'timestamp_sec': float matching the impact time.\n"
-            "- 'fracture_center_xyz': array of 3 floats representing the impact epicenter.\n"
-            "- 'crack_pattern_type': string (choose from: 'radial_spiderweb', 'linear_split', 'shattered_crust').\n"
-            "- 'shatter_chunk_count': integer (defines how many mesh pieces are cut; SAFE LIMIT: 15 to 60 chunks max).\n"
-            "- 'fracture_radius_meters': float (impact blast range scale; from 0.5 to 6.5 meters).\n"
-            "- 'debris_mass_kg': float representing physical mass of individual chunks (scale from 1.0 to 25.0 kg).\n"
-            "- 'has_secondary_smoke_particles': boolean (set to true if the impact force is above 30.0).\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key 'fracture_events'. "
-            "Do not write conversational text, markdown blocks, or backticks. Return pure JSON only."
+        if not self.gemini_api_key:
+            return self._fallback_destruction(True, context)
+
+        ai_prompt = (
+            f"You are the Procedural Destruction TD for the OmniMatrix Engine.\n"
+            f"Scene Name: {scene_name}\n"
+            f"Visual Style: {context['visual_style']}\n"
+            f"Impact Force: {context['impact_force']}\n\n"
+            "Determine the Blender Cell Fracture and physics settings based on the style.\n"
+            "- If style is 'anime', use 'anti_gravity_float' (rocks floating up), radial chunks.\n"
+            "- If style is 'realistic' or 'cinematic', use 'heavy_gravity_crumble', linear splits, realistic debris.\n"
+            "- MAX CHUNK COUNT MUST NOT EXCEED 50 (to save Colab RAM).\n"
+            "Return ONLY raw JSON:\n"
+            "{\n"
+            "  \"fracture_center_xyz\": " + str(context['impact_point']) + ",\n"
+            "  \"impact_frame\": " + str(context['impact_frame']) + ",\n"
+            "  \"shatter_chunk_count\": 40,\n"
+            "  \"physics_behavior\": \"anti_gravity_float\",\n"
+            "  \"debris_mass_kg\": 5.0,\n"
+            "  \"rationale\": \"Anime style impact requires chunks to shatter and float momentarily.\"\n"
+            "}"
         )
 
-        if self.gemini_key:
-            print(f"[{self.agent_name}] Status: Querying Google Gemini Cloud AI Node")
-            url = f"{self.gemini_url}?key={self.gemini_key}"
-            headers = {"Content-Type": "application/json"}
-            
-            # Formulating structure for Gemini
-            payload = {
-                "contents": [{
-                    "parts": [{
-                        "text": f"{system_prompt}\n\nActive Impact Logs to analyze:\n{json.dumps(impacts, indent=2)}"
-                    }]
-                }],
-                "generationConfig": {
-                    "responseMimeType": "application/json"
-                }
-            }
-        else:
-            print(f"[{self.agent_name}] Warning: Gemini API key missing! Trying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Active Impact Logs:\n{json.dumps(impacts, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                output = json.loads(res_text)
                 
-                if self.gemini_key:
-                    raw_ai_message = response_json["candidates"][0]["content"]["parts"][0]["text"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
+                # HARD SAFEGUARD FOR COLAB RAM
+                if output.get("shatter_chunk_count", 0) > 50:
+                    output["shatter_chunk_count"] = 50
+                return output
                 
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "fracture_events": structured_output.get("fracture_events", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
         except Exception as e:
-            print(f"[{self.agent_name}] Network/API Exception: {str(e)}. Running procedural fracture physics fallback math.")
-            return self._execute_procedural_fallback(impacts)
+            self.log_message(f"AI Destruction Director failed: {str(e)}. Using fallback.", "WARNING")
+            return self._fallback_destruction(True, context)
 
-    def _execute_procedural_fallback(self, impacts):
-        events = []
-        for imp in impacts:
-            ts = float(imp.get("timestamp_sec", 0.0))
-            pt = imp.get("impact_point", [0.0, 0.0, 0.0])
-            force = float(imp.get("force", 15.0))
-
-            # Strictly limit chunks in fallback as well
-            if force > 35.0:
-                pattern = "shattered_crust"
-                chunks = 55 # Safe Colab cap
-                radius = 4.2
-                mass = 18.5
-                smoke = True
-            elif force > 20.0:
-                pattern = "radial_spiderweb"
-                chunks = 35
-                radius = 2.0
-                mass = 8.0
-                smoke = True
-            else:
-                pattern = "linear_split"
-                chunks = 15
-                radius = 0.8
-                mass = 2.0
-                smoke = False
-
-            events.append({
-                "timestamp_sec": ts,
-                "fracture_center_xyz": pt,
-                "crack_pattern_type": pattern,
-                "shatter_chunk_count": chunks,
-                "fracture_radius_meters": radius,
-                "debris_mass_kg": mass,
-                "has_secondary_smoke_particles": smoke
-            })
-
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Fracture Fallback)",
-            "fracture_events": events
+    def _fallback_destruction(self, has_impact, context=None):
+        if not has_impact:
+            return {
+                "impact_frame": 0, "shatter_chunk_count": 0, "physics_behavior": "none",
+                "fracture_center_xyz": [0,0,0], "debris_mass_kg": 0.0, "rationale": "No destruction needed."
+            }
+        return {
+            "impact_frame": context.get("impact_frame", 24), "shatter_chunk_count": 30, 
+            "physics_behavior": "heavy_gravity_crumble", "fracture_center_xyz": context.get("impact_point", [0,0,0]),
+            "debris_mass_kg": 15.0, "rationale": "Fallback standard fracture applied."
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def _generate_blender_script(self, blend_file_path, dest_data):
+        """Python script to execute Cell Fracture and Rigid Body Physics Headless."""
+        safe_blend_path = blend_file_path.replace("\\", "/")
+        
+        script_content = f"""
+import bpy
+import addon_utils
+
+bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
+try:
+    chunks = {dest_data.get('shatter_chunk_count', 0)}
+    frame = {dest_data.get('impact_frame', 0)}
+    behavior = "{dest_data.get('physics_behavior', 'none')}"
+    mass = {dest_data.get('debris_mass_kg', 1.0)}
+
+    if chunks > 0:
+        # 1. Enable Cell Fracture Addon
+        addon_utils.enable("object_fracture_cell")
+        
+        # 2. Find Environment/Floor to fracture (Simplification: targeting active or largest mesh)
+        env_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and not obj.name.startswith("CH_") and "Environment" in obj.name or "Floor" in obj.name]
+        
+        if not env_meshes:
+            # Fallback: Just grab any static mesh that isn't a character
+            env_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and not obj.parent]
+
+        if env_meshes:
+            target_obj = env_meshes[0]
+            bpy.context.view_layer.objects.active = target_obj
+            target_obj.select_set(True)
+            
+            # 3. Apply Cell Fracture (Limit source limit to prevent crashes)
+            bpy.ops.object.add_fracture_cell_objects(source_limit=chunks, use_materials=True)
+            
+            # Hide original object
+            target_obj.hide_render = True
+            target_obj.hide_viewport = True
+            
+            # 4. Apply Rigid Body Dynamics
+            bpy.ops.object.select_all(action='DESELECT')
+            # Select all newly created fractured chunks
+            fractured = [obj for obj in bpy.context.scene.objects if target_obj.name + "_cell" in obj.name]
+            
+            for chunk in fractured:
+                chunk.select_set(True)
+                bpy.context.view_layer.objects.active = chunk
+                
+                if not chunk.rigid_body:
+                    bpy.ops.rigidbody.object_add()
+                
+                chunk.rigid_body.mass = mass
+                chunk.rigid_body.type = 'ACTIVE'
+                chunk.rigid_body.kinematic = True # Hold in place until impact
+                
+                # Keyframe kinematics (Release physics at impact frame)
+                chunk.rigid_body.keyframe_insert(data_path="kinematic", frame=frame - 1)
+                chunk.rigid_body.kinematic = False
+                chunk.rigid_body.keyframe_insert(data_path="kinematic", frame=frame)
+                
+            # 5. OmniMatrix Stylized Physics (Anime float vs Realistic fall)
+            scene = bpy.context.scene
+            if behavior == "anti_gravity_float":
+                # Reverse/Zero gravity at impact for floating effect
+                scene.use_gravity = True
+                scene.gravity[2] = -9.81
+                scene.keyframe_insert(data_path="gravity", index=2, frame=frame - 5)
+                scene.gravity[2] = 1.5 # Slight float up
+                scene.keyframe_insert(data_path="gravity", index=2, frame=frame)
+                scene.gravity[2] = -9.81 # Return to normal later
+                scene.keyframe_insert(data_path="gravity", index=2, frame=frame + 30)
+
+        bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+        print("SUCCESS: OmniMatrix Procedural Destruction (Cell Fracture) baked.")
+    else:
+        print("INFO: No major destruction detected for this scene.")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_destruction_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def process_environment_destruction(self):
+        self.log_message("Initializing OmniMatrix Procedural Destruction Engine...", "INFO")
+        master_blueprint = {}
+        
+        for filename in os.listdir(self.env_dir):
+            if filename.endswith("_stage.blend"):
+                scene_name = filename.replace("_stage.blend", "")
+                blend_file_path = os.path.join(self.env_dir, filename)
+                
+                context = self._load_upstream_context(scene_name)
+                
+                if context["has_heavy_impact"]:
+                    self.log_message(f"--- Processing Destruction for: {scene_name} ---", "INFO")
+                    dest_data = self._query_destruction_brain(scene_name, context)
+                    
+                    self.log_message(f"AI Decision: {dest_data['rationale']} | Physics: {dest_data['physics_behavior']} | Chunks: {dest_data['shatter_chunk_count']}", "INFO")
+                    
+                    script_path = self._generate_blender_script(blend_file_path, dest_data)
+                    
+                    command = [self.blender_path, "-b", "-P", script_path]
+                    try:
+                        result = subprocess.run(command, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            self.log_message(f"Cell Fracture and Physics applied to {filename}", "INFO")
+                            master_blueprint[scene_name] = dest_data
+                        else:
+                            self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                    except Exception as e:
+                        self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                        
+                    if os.path.exists(script_path):
+                        os.remove(script_path)
+                else:
+                    self.log_message(f"Scene '{scene_name}' has no heavy impacts. Skipping Fracture.", "INFO")
+                    master_blueprint[scene_name] = self._fallback_destruction(False)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Agent 30 Pipeline Complete. Environment destruction physics applied.", "INFO")
 
 if __name__ == "__main__":
-    fracturer = ProceduralEnvironmentFractureEngine()
-    output = fracturer.design_procedural_fracture()
-    
-    print("\n--- Z-NET DESTRUCTION ENGINE COMPLETE ---")
+    director = OmniMatrixDestructionEngine()
+    director.process_environment_destruction()
