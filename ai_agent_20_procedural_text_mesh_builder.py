@@ -1,210 +1,239 @@
 import os
-import re
 import sys
 import json
+import re
+import subprocess
 import urllib.request
 import urllib.error
 
-class ProceduralTextMeshBuilder:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 20: procedural_text_mesh_builder"
-        self.workspace_dir = workspace_dir
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip()
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+load_env_file()
 
-    def _load_upstream_hook_data(self):
-        # Stage 1 (Scripting) ya Stage 2 ke hook points se dynamic text read karta hai
-        storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
+class AutonomousTextMeshBuilder:
+    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 20: Autonomous 3D Typography Director"
         
+        # Upstream Inputs (Reads script, audio vibe, and context)
+        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        
+        # Outputs
+        self.output_dir = os.path.join(local_library_dir, "3d_text_assets")
+        self.output_blueprint = os.path.join(self.output_dir, "20_autonomous_text_blueprint.json")
+        self.blender_path = blender_path
+        
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+
+        for d in [self.script_dir, self.output_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
+
+    def log_message(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _load_upstream_context(self):
+        """Gathers all available scene context so the AI can make an autonomous decision."""
         text_nodes = []
-        
-        if os.path.exists(storyboard_path):
-            try:
-                with open(storyboard_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for i, panel in enumerate(data.get("storyboard_panels", [])):
-                    # Extracting potential title keywords or dialogue highlights
-                    raw_desc = panel.get("visual_prompt", "")
-                    words = [w.strip(".,!?\"'") for w in raw_desc.split() if len(w) > 4]
-                    highlight_word = words[0].upper() if words else "IMPACT"
-                    
-                    text_nodes.append({
-                        "timestamp_sec": panel.get("timestamp_sec", float(i * 3.0)),
-                        "raw_text_string": highlight_word,
-                        "intensity": panel.get("camera_movement_type", "dynamic")
-                    })
-            except Exception as e:
-                print(f"[{self.agent_name}] Storyboard parse warning: {str(e)}")
+        if not os.path.exists(self.script_dir):
+            return text_nodes
 
-        # Fallback dummy text triggers if no upstream storyboard exists
+        for filename in os.listdir(self.script_dir):
+            if filename.endswith("_matrix_state.json"):
+                filepath = os.path.join(self.script_dir, filename)
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        text_nodes.append({
+                            "scene_name": filename.replace("_matrix_state.json", ""),
+                            "dialogue_or_lyrics": data.get("dialogue", ""),
+                            "action_context": data.get("action_description", ""),
+                            "vibe_genre": data.get("genre_vibe", "Unknown") # E.g., Phonk, Sad, Action, Commentary
+                        })
+                except Exception as e:
+                    self.log_message(f"Error reading {filename}: {e}", "WARNING")
+
+        # Fallback for testing if no upstream data exists
         if not text_nodes:
-            print(f"[{self.agent_name}] Workspace Alert: Storyboard text hooks missing. Creating default 3D text nodes.")
-            text_nodes = [
-                {"timestamp_sec": 0.0, "raw_text_string": "WARNING", "intensity": "high"},
-                {"timestamp_sec": 4.5, "raw_text_string": "UNLEASHED", "intensity": "extreme"},
-                {"timestamp_sec": 8.0, "raw_text_string": "OVERLORD", "intensity": "high"}
-            ]
-
+             text_nodes = [
+                 {"scene_name": "test_short_hook", "dialogue_or_lyrics": "Wait till the end!", "action_context": "Fast paced commentary video hook", "vibe_genre": "YouTube Shorts / High Retention"},
+                 {"scene_name": "test_song_lyric", "dialogue_or_lyrics": "I walk alone...", "action_context": "Slow camera pan across a dark street", "vibe_genre": "Dark Cinematic Music"}
+             ]
         return text_nodes
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+    def _query_autonomous_typography_brain(self, context):
+        """Gives Gemini full freedom to design the 3D text based on the vibe and context."""
+        if not self.gemini_api_key:
+            return self._get_fallback_design()
 
-    def _save_to_workspace(self, data, filename="20_procedural_text_mesh_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Success: 3D text mesh blueprint saved to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Critical Error: Unable to save 3D text blueprint: {str(e)}")
-            return None
-
-    def design_procedural_text_meshes(self):
-        nodes = self._load_upstream_hook_data()
-        print(f"[{self.agent_name}] Mesh Engine active. Formatting procedural Blender Python API variables...")
-
-        system_prompt = (
-            "You are an expert Blender technical artist and Python API script writer.\n"
-            "Your task is to analyze raw text nodes and output exact 3D geometry settings "
-            "compatible with bpy.ops.curve.primitive_text_add() in Blender.\n"
-            "For each text node, generate exactly 1 text geometry design block inside a list named '3d_text_mesh_blueprints' with these parameters:\n"
-            "- 'timestamp_sec': float matching the trigger timestamp.\n"
-            "- 'text_content': string representing the actual word/sentence to spawn.\n"
-            "- 'font_thickness_depth': float (scale from 0.05 to 0.45 meters based on intensity).\n"
-            "- 'extrusion_depth': float (scale from 0.1 to 0.5 meters to give real 3D volume).\n"
-            "- 'bevel_depth': float representing bevel smooth edges (scale from 0.01 to 0.04 meters).\n"
-            "- 'geometry_resolution': integer (choose from: 12, 16, 24, 32 for vertex counts on curves).\n"
-            "- 'alignment_x': string (set to 'CENTER' for layout alignment).\n"
-            "- 'letter_spacing': float (scale from 0.90 to 1.35 based on typography impact style).\n"
-            "- 'target_blender_collection': string (set to 'Cinematic_3D_Text_Collection').\n"
-            "Format your output STRICTLY as a raw JSON object containing only the list key '3d_text_mesh_blueprints'. "
-            "No small talks, no explanations, no markdown backticks, no code blocks. Output only valid JSON."
+        ai_prompt = (
+            f"You are the Autonomous 3D Typography Director for a AAA Video Engine.\n"
+            f"Analyze the following scene context and decide the BEST way to render 3D text for it.\n"
+            f"Scene Name: {context['scene_name']}\n"
+            f"Dialogue/Lyrics: {context['dialogue_or_lyrics']}\n"
+            f"Action/Context: {context['action_context']}\n"
+            f"Vibe/Genre: {context['vibe_genre']}\n\n"
+            "Decide the text style. Is it a massive 'Retention Hook' for Shorts? A sleek '3D Lyric' for a song? A '3D Subtitle'? Or an 'Anime SFX'?\n"
+            "Return ONLY raw JSON. Format exactly like this:\n"
+            "{\n"
+            "  \"text_content\": \"The exact words to display\",\n"
+            "  \"style_type\": \"Retention_Hook\",\n"
+            "  \"extrusion_depth\": 0.35,\n"
+            "  \"bevel_depth\": 0.04,\n"
+            "  \"letter_spacing\": 1.0,\n"
+            "  \"alignment\": \"CENTER\",\n"
+            "  \"position_offset\": [0.0, 0.0, 0.0],\n" 
+            "  \"material_vibe\": \"Neon_Glow\" \n"
+            "}\n"
+            "Note: Use position_offset [0, -2, 0] for subtitles, [0, 0, 0] for center hooks. material_vibe can be: Neon_Glow, Metallic, Matte, Bold_Color."
         )
 
-        if self.openai_api_key:
-            print(f"[{self.agent_name}] Status: Querying Cloud API Node [{self.model_cloud}]")
-            url = self.openai_url
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.openai_api_key}"
-            }
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Text Hook Triggers:\n{json.dumps(nodes, indent=2)}"}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        else:
-            print(f"[{self.agent_name}] Status: Querying Local LLM Instance [{self.model_local}]")
-            url = self.ollama_url
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Text Hook Triggers:\n{json.dumps(nodes, indent=2)}"}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-
         try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = response.read().decode("utf-8")
-                response_json = json.loads(result)
-                
-                if self.openai_api_key:
-                    raw_ai_message = response_json["choices"][0]["message"]["content"]
-                else:
-                    raw_ai_message = response_json["message"]["content"]
-                
-                cleaned_message = self._clean_json_response(raw_ai_message)
-                structured_output = json.loads(cleaned_message)
-                
-                final_output = {
-                    "agent_executed": self.agent_name,
-                    "3d_text_mesh_blueprints": structured_output.get("3d_text_mesh_blueprints", [])
-                }
-                
-                self._save_to_workspace(final_output)
-                return final_output
-
+            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
+                res_text = re.sub(r'```$', '', res_text).strip()
+                return json.loads(res_text)
         except Exception as e:
-            print(f"[{self.agent_name}] Network Exception: {str(e)}. Triggering procedural fallback calculations.")
-            return self._execute_procedural_fallback(nodes)
+            self.log_message(f"AI Decision failed ({str(e)}). Using fallback.", "WARNING")
+            return self._get_fallback_design()
 
-    def _execute_procedural_fallback(self, nodes):
-        # Math-based fallback which translates text strings into robust geometric definitions directly
-        mesh_blueprints = []
-        for node in nodes:
-            ts = float(node.get("timestamp_sec", 0.0))
-            text = node.get("raw_text_string", "IMPACT")
-            intensity = str(node.get("intensity", "high")).lower()
-
-            # Dynamic spacing & depth adjustments
-            if "extreme" in intensity or "high" in intensity:
-                thickness = 0.35
-                extrusion = 0.40
-                bevel = 0.03
-                resolution = 24
-                spacing = 1.15
-            else:
-                thickness = 0.15
-                extrusion = 0.20
-                bevel = 0.015
-                resolution = 12
-                spacing = 1.0
-
-            mesh_blueprints.append({
-                "timestamp_sec": ts,
-                "text_content": text,
-                "font_thickness_depth": thickness,
-                "extrusion_depth": extrusion,
-                "bevel_depth": bevel,
-                "geometry_resolution": resolution,
-                "alignment_x": "CENTER",
-                "letter_spacing": spacing,
-                "target_blender_collection": "Cinematic_3D_Text_Collection"
-            })
-
-        fallback_output = {
-            "agent_executed": f"{self.agent_name} (Procedural Geometry Fallback)",
-            "3d_text_mesh_blueprints": mesh_blueprints
+    def _get_fallback_design(self):
+        return {
+            "text_content": "TEXT MISSING",
+            "style_type": "Fallback",
+            "extrusion_depth": 0.2,
+            "bevel_depth": 0.02,
+            "letter_spacing": 1.0,
+            "alignment": "CENTER",
+            "position_offset": [0.0, 0.0, 0.0],
+            "material_vibe": "Matte"
         }
-        self._save_to_workspace(fallback_output)
-        return fallback_output
+
+    def _generate_blender_script(self, text_design, out_blend_path):
+        """Translates the AI's creative decision into procedural Blender geometry & shaders."""
+        safe_blend_path = out_blend_path.replace("\\", "/")
+        pos = text_design.get('position_offset', [0, 0, 0])
+        mat_vibe = text_design.get('material_vibe', 'Matte')
+        
+        script_content = f"""
+import bpy
+
+def clear_scene():
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete(use_global=False)
+
+try:
+    clear_scene()
+
+    # 1. Create 3D Text Curve
+    font_curve = bpy.data.curves.new(type="FONT", name="Auto_Text_Curve")
+    font_curve.body = "{text_design.get('text_content', 'TEXT')}"
+    font_curve.align_x = '{text_design.get('alignment', 'CENTER')}'
+    font_curve.align_y = 'CENTER'
+    
+    # 2. Apply AI Geometry Decisions
+    font_curve.extrude = {text_design.get('extrusion_depth', 0.2)}
+    font_curve.bevel_depth = {text_design.get('bevel_depth', 0.02)}
+    font_curve.bevel_resolution = 6
+    font_curve.space_character = {text_design.get('letter_spacing', 1.0)}
+
+    font_obj = bpy.data.objects.new("Procedural_3D_Text", font_curve)
+    bpy.context.scene.collection.objects.link(font_obj)
+    font_obj.location = ({pos[0]}, {pos[1]}, {pos[2]})
+    
+    # 3. Autonomous Material Engine
+    mat = bpy.data.materials.new(name="AutoText_Material")
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    vibe = "{mat_vibe}"
+    
+    if bsdf:
+        if "Neon" in vibe or "Glow" in vibe:
+            bsdf.inputs['Emission'].default_value = (0.0, 0.8, 1.0, 1.0) # Cyan Glow
+            bsdf.inputs['Emission Strength'].default_value = 8.0
+            bsdf.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+        elif "Metallic" in vibe:
+            bsdf.inputs['Metallic'].default_value = 1.0
+            bsdf.inputs['Roughness'].default_value = 0.2
+            bsdf.inputs['Base Color'].default_value = (0.8, 0.8, 0.8, 1.0) # Silver/Chrome
+        elif "Bold" in vibe:
+            bsdf.inputs['Base Color'].default_value = (1.0, 0.8, 0.0, 1.0) # Warning Yellow
+            bsdf.inputs['Roughness'].default_value = 0.4
+        else:
+            bsdf.inputs['Base Color'].default_value = (1.0, 1.0, 1.0, 1.0) # Clean White Matte
+
+    font_obj.data.materials.append(mat)
+
+    # 4. Save the Asset
+    bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+    print("SUCCESS")
+
+except Exception as e:
+    print("ERROR:", str(e))
+    import sys
+    sys.exit(1)
+"""
+        script_path = os.path.join("temp_text_forge_script.py")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def build_text_meshes(self):
+        self.log_message("Waking up Autonomous Typography Brain...", "INFO")
+        
+        nodes = self._load_upstream_context()
+        master_blueprint = {}
+
+        for node in nodes:
+            scene_name = node["scene_name"]
+            self.log_message(f"Analyzing Vibe for: {scene_name} ({node['vibe_genre']})", "INFO")
+            
+            # AI Decides the text style
+            design = self._query_autonomous_typography_brain(node)
+            
+            if not design.get("text_content") or design.get("text_content").upper() == "NONE":
+                self.log_message("AI decided no 3D text is needed here.", "INFO")
+                continue
+                
+            style = design.get('style_type', 'Default')
+            self.log_message(f"AI Decision: Opted for '{style}' style text -> '{design['text_content']}'", "INFO")
+            
+            out_blend_path = os.path.join(self.output_dir, f"{scene_name}_text.blend")
+            script_path = self._generate_blender_script(design, out_blend_path)
+            
+            # Execute Blender
+            command = [self.blender_path, "-b", "-P", script_path]
+            try:
+                result = subprocess.run(command, capture_output=True, text=True)
+                if result.returncode == 0 and os.path.exists(out_blend_path):
+                    self.log_message(f"3D Typography saved: {scene_name}_text.blend", "INFO")
+                    master_blueprint[scene_name] = {
+                        "text_blend": out_blend_path,
+                        "ai_design_decisions": design
+                    }
+                else:
+                    self.log_message(f"Blender failed: {result.stdout[-200:]}", "ERROR")
+            except Exception as e:
+                self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                
+            if os.path.exists(script_path):
+                os.remove(script_path)
+
+        with open(self.output_blueprint, "w", encoding="utf-8") as f:
+            json.dump(master_blueprint, f, indent=4)
+        
+        self.log_message("Autonomous Typography Generation Complete.", "INFO")
 
 if __name__ == "__main__":
-    builder = ProceduralTextMeshBuilder()
-    output = builder.design_procedural_text_meshes()
-    
-    print("\n--- Z-NET BLENDER ENGINE: AGENT 20 TEXT MESH BUILD COMPLETED ---")
-    print(f"Generated procedural 3D text assets: {len(output['3d_text_mesh_blueprints'])}")
-    if output["3d_text_mesh_blueprints"]:
-        sample = output["3d_text_mesh_blueprints"][0]
-        print(f"Asset Name: '{sample['text_content']}' | Bevel: {sample['bevel_depth']}m | Depth: {sample['font_thickness_depth']}m | Target Spot: {sample['timestamp_sec']}s")
-    print("-----------------------------------------------------------------")
+    builder = AutonomousTextMeshBuilder()
+    builder.build_text_meshes()
