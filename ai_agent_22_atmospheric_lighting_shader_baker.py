@@ -99,20 +99,20 @@ class UniversalAtmosphericLightingDoP:
             "Output strictly valid JSON with no backticks."
         )
 
-        if self.openai_api_key:
+        if self.gemini_api_key:
             try:
+                # GEMINI NATIVE JSON PAYLOAD
                 payload = {
-                    "model": self.model_cloud,
-                    "messages": [{"role": "system", "content": system_prompt}],
-                    "response_format": {"type": "json_object"}
+                    "contents": [{"parts": [{"text": system_prompt}]}], 
+                    "generationConfig": {"responseMimeType": "application/json"}
                 }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"})
+                req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=45) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    cleaned = self._clean_json_response(res_json["choices"][0]["message"]["content"])
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    cleaned = self._clean_json_response(res_text)
                     return json.loads(cleaned)
             except Exception as e:
-                self.log_message(f"Cloud API Route Failed: {str(e)}. Using procedural fallback.", "WARNING")
+                self.log_message(f"Gemini API Route Failed: {str(e)}. Using procedural fallback.", "WARNING")
 
         return self._get_fallback_lighting(style)
 
