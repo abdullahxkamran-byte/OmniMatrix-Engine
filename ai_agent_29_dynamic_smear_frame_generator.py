@@ -8,31 +8,34 @@ import urllib.error
 
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
+                    # Universal Uppercase API Keys
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
 class OmniMatrixMotionDynamicsDirector:
-    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 29: OmniMatrix Motion & Smear Director"
+    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 29: aaa_motion_smear_director"
         
         # Directories
-        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.workspace_dir = workspace_dir
+        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
         self.env_dir = os.path.join(local_library_dir, "3d_environments")
         
         # Outputs
-        self.output_blueprint = os.path.join(self.env_dir, "29_motion_dynamics_blueprint.json")
+        self.output_blueprint = os.path.join(self.workspace_dir, "29_motion_dynamics_blueprint.json")
         self.blender_path = blender_path
         
+        # GEMINI API INTEGRATION
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        for d in [self.script_dir, self.env_dir]:
+        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
@@ -44,7 +47,7 @@ class OmniMatrixMotionDynamicsDirector:
         context = {
             "visual_style": "omni_neutral",
             "action_description": "Standard movement",
-            "fast_motion_frame": 0
+            "fast_motion_frame": 24
         }
         
         # Load Style Context
@@ -54,28 +57,41 @@ class OmniMatrixMotionDynamicsDirector:
                 with open(script_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     context["visual_style"] = data.get("visual_style", "omni_neutral")
-                    context["action_description"] = data.get("action_description", "")
-            except:
-                pass
+                    context["action_description"] = data.get("action_description", "Standard movement")
+            except Exception as e:
+                self.log_message(f"Style context parse error: {str(e)}", "WARNING")
 
-        # Load Animation Keys (to find fast movement frames)
-        anim_file = os.path.join(self.env_dir, "26_animation_blueprint.json")
+        # Load Animation Keys (to find fast movement frames from Agent 26)
+        anim_file = os.path.join(self.workspace_dir, "26_animation_blueprint.json")
         if os.path.exists(anim_file):
             try:
                 with open(anim_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if scene_name in data:
-                        # Guessing the target frame based on puppet action
                         context["fast_motion_frame"] = data[scene_name].get("target_frame", 24)
-            except:
-                pass
+            except Exception as e:
+                self.log_message(f"Animation data read error: {str(e)}", "WARNING")
 
         return context
 
+    def _clean_json_response(self, raw_text):
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx + 1]
+        return cleaned
+
     def _query_motion_brain(self, scene_name, context):
         """Ask Gemini to decide between Realistic Motion Blur or Anime Smear Frames."""
+        self.log_message(f"Calculating Motion & Smear Vectors for '{scene_name}'...", "INFO")
+        
         if not self.gemini_api_key:
-            return self._fallback_motion()
+            self.log_message("No Gemini API Key found. Using fallback motion blur.", "WARNING")
+            return self._fallback_motion(context["fast_motion_frame"])
 
         ai_prompt = (
             f"You are the Motion Dynamics Technical Director for the OmniMatrix Engine.\n"
@@ -85,10 +101,10 @@ class OmniMatrixMotionDynamicsDirector:
             "Decide how to render high-speed motion based on the visual style.\n"
             "- Realistic/Cinematic: Use 'realistic_blur', high shutter speed, NO mesh stretching.\n"
             "- Anime/Cartoon: Use 'stylized_smear', high stretch factor, ghost trails.\n"
-            "Return ONLY raw JSON:\n"
+            "Return EXACTLY 1 raw JSON object containing:\n"
             "{\n"
             "  \"motion_handling_mode\": \"stylized_smear\",\n"
-            "  \"target_frame\": " + str(context['fast_motion_frame']) + ",\n"
+            f"  \"target_frame\": {context['fast_motion_frame']},\n"
             "  \"camera_shutter_speed\": 0.5,\n"
             "  \"motion_blur_steps\": 8,\n"
             "  \"mesh_stretch_factor\": 2.5,\n"
@@ -98,13 +114,16 @@ class OmniMatrixMotionDynamicsDirector:
         )
 
         try:
-            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            # NATIVE GEMINI JSON PAYLOAD
+            payload = {
+                "contents": [{"parts": [{"text": ai_prompt}]}], 
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
             req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
-                res_text = re.sub(r'```$', '', res_text).strip()
-                return json.loads(res_text)
+                cleaned = self._clean_json_response(res_text)
+                return json.loads(cleaned)
         except Exception as e:
             self.log_message(f"AI Motion Director failed: {str(e)}. Using fallback.", "WARNING")
             return self._fallback_motion(context["fast_motion_frame"])
@@ -114,7 +133,7 @@ class OmniMatrixMotionDynamicsDirector:
             "motion_handling_mode": "realistic_blur", "target_frame": frame,
             "camera_shutter_speed": 0.5, "motion_blur_steps": 4,
             "mesh_stretch_factor": 0.0, "ghost_trail_count": 0,
-            "rationale": "Universal default motion blur."
+            "rationale": "Universal default motion blur applied."
         }
 
     def _generate_blender_script(self, blend_file_path, motion_data):
@@ -124,9 +143,9 @@ class OmniMatrixMotionDynamicsDirector:
         script_content = f"""
 import bpy
 
-bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
-
 try:
+    bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
     mode = "{motion_data.get('motion_handling_mode', 'realistic_blur')}"
     target_frame = {motion_data.get('target_frame', 24)}
     shutter = {motion_data.get('camera_shutter_speed', 0.5)}
@@ -137,17 +156,25 @@ try:
     bpy.context.scene.render.use_motion_blur = True
     bpy.context.scene.render.motion_blur_shutter = shutter
     
-    # Eevee specific blur settings
-    if hasattr(bpy.context.scene.eevee, "use_motion_blur"):
+    # Eevee specific blur settings (Legacy Eevee check for backward compatibility)
+    if hasattr(bpy.context.scene, "eevee") and hasattr(bpy.context.scene.eevee, "use_motion_blur"):
         bpy.context.scene.eevee.use_motion_blur = True
         bpy.context.scene.eevee.motion_blur_steps = steps
 
-    # 2. Anime-Style Smear Deformation (If Stylized)
+    # 2. Anime-Style Smear Deformation
     if mode == "stylized_smear" and stretch_factor > 0:
-        # Find character meshes (Assumed to be children of Armature)
-        char_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent and obj.parent.type == 'ARMATURE']
+        # Secure Identification: MESH that is parented to an ARMATURE, or uses universal prefix
+        char_meshes = [
+            obj for obj in bpy.context.scene.objects 
+            if obj.type == 'MESH' and ((obj.parent and obj.parent.type == 'ARMATURE') or obj.name.startswith("OMNI_CHAR"))
+        ]
         
         for mesh in char_meshes:
+            # Cleanup existing modifiers to prevent stacking on re-runs
+            for mod in mesh.modifiers:
+                if mod.name == "Omni_Smear_Stretch":
+                    mesh.modifiers.remove(mod)
+
             # Add Simple Deform (Stretch) Modifier
             mod = mesh.modifiers.new(name="Omni_Smear_Stretch", type='SIMPLE_DEFORM')
             mod.deform_method = 'STRETCH'
@@ -166,11 +193,11 @@ try:
     print("SUCCESS: OmniMatrix Motion Dynamics (Blur/Smear) injected successfully.")
 
 except Exception as e:
-    print("ERROR:", str(e))
+    print(f"ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join("temp_motion_script.py")
+        script_path = os.path.join(self.workspace_dir, "temp_motion_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
@@ -189,20 +216,20 @@ except Exception as e:
                 self.log_message(f"--- Processing Motion for: {scene_name} ---", "INFO")
                 motion_data = self._query_motion_brain(scene_name, context)
                 
-                self.log_message(f"AI Decision: {motion_data['rationale']} | Mode: {motion_data['motion_handling_mode']}", "INFO")
+                self.log_message(f"AI Decision: {motion_data.get('rationale', 'Default')} | Mode: {motion_data.get('motion_handling_mode', 'realistic_blur')}", "INFO")
                 
                 script_path = self._generate_blender_script(blend_file_path, motion_data)
                 
                 command = [self.blender_path, "-b", "-P", script_path]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        self.log_message(f"Motion Dynamics applied to {filename}", "INFO")
+                    if result.returncode == 0 and "SUCCESS" in result.stdout:
+                        self.log_message(f"Motion Dynamics applied to {filename}", "SUCCESS")
                         master_blueprint[scene_name] = motion_data
                     else:
-                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
