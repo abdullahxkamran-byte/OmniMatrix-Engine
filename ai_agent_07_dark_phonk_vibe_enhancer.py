@@ -11,10 +11,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class UniversalVibeEnhancer:
-    def __init__(self, state_file_path="matrix_state.json"):
+    def __init__(self):
         # Master List Compliance
         self.agent_name = "Ai Agent 07: dark_phonk_vibe_enhancer"
-        self.state_file = state_file_path
+        
+        # GOD-LEVEL UPGRADE 1: Universal Path Isolation
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        os.makedirs(self.workspace_dir, exist_ok=True)
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
         
         # Network Resilience Settings
         self.max_retries = 3
@@ -39,14 +43,14 @@ class UniversalVibeEnhancer:
         self.model_local = "llama3"
 
     def _log_info(self, message):
-        print(f"[{self.agent_name}] INFO: {message}")
+        print(f"[{self.agent_name}] [INFO] {message}")
 
     def _log_error(self, message):
-        print(f"[{self.agent_name}] ERROR: {message}", file=sys.stderr)
+        print(f"[{self.agent_name}] [ERROR] {message}", file=sys.stderr)
 
     def _read_state(self):
         if not os.path.exists(self.state_file):
-            self._log_error("Critical Error: matrix_state.json not found.")
+            self._log_error("Critical Error: matrix_state.json not found. Run previous agents first.")
             sys.exit(1)
         try:
             with open(self.state_file, 'r', encoding='utf-8') as f:
@@ -73,60 +77,57 @@ class UniversalVibeEnhancer:
             cleaned = cleaned[start_idx:end_idx + 1]
         return cleaned
 
-    def _build_universal_prompt(self, topic, content_format, frames):
-        """Builds a flexible prompt that adapts the 'Vibe' based on the video format."""
+    def _build_universal_prompt(self, topic, content_format, vibe_tempo, dna_profile, frames):
+        """GOD-LEVEL UPGRADE 3: Limitless algorithmic aesthetic parameters based on architecture."""
         
-        base_system = (
-            "You are a Master Cinematic Editor and Vibe Director. Your job is to read storyboard frames "
-            "and output synchronized visual aesthetic parameters for each frame.\n"
-            "Output must STRICTLY be a raw JSON object containing a list named 'phonk_frames' with these parameters for each frame:\n"
-            "- 'frame_index': matching integer representing the sequence flow.\n"
-            "- 'visual_style_prompt': specific visual description (lighting, color grading, shadows).\n"
-            "- 'color_palette_hex': a list of exactly three HEX color codes representing the dominant grading theme.\n"
-            "- 'camera_shake_intensity': float scaling from 0.0 (calm tripod) to 1.5 (maximum explosive shockwave).\n"
-            "- 'bass_drop_sync': boolean (true if this frame represents a visual slam, impact, or key transition).\n"
-            "- 'ambient_glitch_rate': float from 0.0 to 1.0 mapping screen distortions or VHS effects.\n"
+        system_prompt = (
+            "You are the OmniMatrix Supreme Cinematic Editor and Vibe Director.\n"
+            "Your objective is to read storyboard frames and output synchronized visual aesthetic parameters for each frame.\n"
+            "Analyze the dynamically injected parameters and shape the aesthetics strictly to their visual and acoustic intent.\n\n"
+            f"Visual DNA Architecture: {dna_profile}\n"
+            f"Audio/Acoustic Signature: {vibe_tempo}\n"
+            f"Content Format/Style/Pacing: {content_format}\n\n"
+            "Instructions:\n"
+            "1. Internalize the specific 'DNA', 'Vibe', and 'Format'. If it's dark/phonk, inject extreme contrasts and toxic neon accents. If it's clean/casual, use inviting soft grading. Adapt universally to WHATEVER the inputs dictate.\n"
+            "2. Output must STRICTLY be a raw JSON object containing a list named 'phonk_frames'.\n"
+            "3. Each frame object must contain these exact keys:\n"
+            "   - 'frame_index': matching integer representing the sequence flow.\n"
+            "   - 'visual_style_prompt': specific visual description (lighting, color grading, shadows) mapped to the injected DNA.\n"
+            "   - 'color_palette_hex': a list of exactly three HEX color codes representing the dominant grading theme for this frame.\n"
+            "   - 'camera_shake_intensity': float scaling from 0.0 (calm tripod) to 1.5 (maximum explosive shockwave).\n"
+            "   - 'bass_drop_sync': boolean (true if this frame represents a visual slam, impact, or key transition).\n"
+            "   - 'ambient_glitch_rate': float from 0.0 to 1.0 mapping screen distortions or aesthetic degradation.\n"
+            "Do not wrap the JSON in markdown code blocks."
         )
 
-        user_context = f"Topic: '{topic}'\nInput Frames Data:\n" + json.dumps(frames, indent=2)
+        user_context = (
+            f"Target Subject: '{topic}'\n"
+            f"Number of Frames: {len(frames)}\n\n"
+            f"Input Frames Data:\n{json.dumps(frames, indent=2)}"
+        )
 
-        # Dynamic Flexibility: Adjust Vibe based on Format
-        if content_format == "cinematic_movie":
-            mode_rules = (
-                "VIBE MODE: DARK PHONK / ANIME SAKUGA\n"
-                "Inject extreme contrasts, deep shadows, and toxic neon accents (purple, blood red, emerald green). "
-                "Camera shakes should peak at 1.5 during action beats. Glitch rate should be high during tension peaks."
-            )
-        elif content_format == "casual_commentary":
-            mode_rules = (
-                "VIBE MODE: CLEAN CASUAL CREATOR\n"
-                "Keep lighting soft, bright, and natural. Color palette should be inviting (warm oranges, clean blues). "
-                "Camera shake must remain 0.0 unless there is a sudden comedic reaction (max 0.4). No glitch effects."
-            )
-        else:
-            mode_rules = (
-                "VIBE MODE: VIRAL EXPLAINER\n"
-                "Use high-saturation, high-contrast, attention-grabbing colors (neon yellow, electric blue, stark white). "
-                "Keep camera motion kinetic but smooth (0.1 - 0.3). Use 'bass_drop_sync' strictly on key truth reveals."
-            )
-
-        return base_system + "\n\n" + mode_rules, user_context
+        return system_prompt, user_context
 
     def _call_ai_engine(self, system_prompt, user_prompt):
         # Tri-Core Routing
         if self.gemini_api_key:
-            self._log_info("Routing to Priority 1: Google Gemini")
+            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
             try:
-                response = self.gemini_model.generate_content(f"{system_prompt}\n\n{user_prompt}")
+                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+                response = self.gemini_model.generate_content(full_prompt)
                 return json.loads(self._clean_json_response(response.text))
             except Exception as e:
                 self._log_error(f"Gemini failed: {str(e)}. Switching to OpenAI...")
 
         if self.openai_api_key:
-            self._log_info("Routing to Priority 2: OpenAI")
+            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
             try:
                 headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
-                payload = {"model": self.model_openai, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "response_format": {"type": "json_object"}}
+                payload = {
+                    "model": self.model_openai, 
+                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
+                    "response_format": {"type": "json_object"}
+                }
                 req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=45) as response:
                     return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"]))
@@ -136,7 +137,12 @@ class UniversalVibeEnhancer:
         self._log_info("Routing to Priority 3: Local Engine (Ollama)")
         try:
             headers = {"Content-Type": "application/json"}
-            payload = {"model": self.model_local, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "stream": False, "format": "json"}
+            payload = {
+                "model": self.model_local, 
+                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
+                "stream": False, 
+                "format": "json"
+            }
             req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
             with urllib.request.urlopen(req, timeout=50) as response:
                 return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["message"]["content"]))
@@ -144,29 +150,30 @@ class UniversalVibeEnhancer:
             self._log_error(f"Ollama failed: {str(e)}.")
             return None
 
-    def _execute_procedural_fallback(self, content_format, frames):
-        """Mathematical fallback if APIs go offline."""
-        self._log_info("Executing Procedural Fallback Engine.")
+    def _execute_procedural_fallback(self, content_format, vibe_tempo, dna_profile, frames):
+        """Mathematical universal fallback interpreting injected strings without hardcoded templates."""
+        self._log_info(f"Executing Universal Procedural Fallback Engine for vibe: {vibe_tempo}.")
         
         phonk_frames = []
         for idx, frame in enumerate(frames):
             frame_idx = frame.get("frame_index", idx + 1)
             
-            if content_format == "casual_commentary":
-                prompt, palette, shake, bass, glitch = "Soft studio lighting", ["#ffffff", "#e6e6e6", "#cccccc"], 0.0, False, 0.0
-            elif content_format == "explainer":
-                prompt, palette, shake, bass, glitch = "Bright, high contrast neon glow", ["#ffea00", "#00d4ff", "#ffffff"], 0.1, (idx % 3 == 0), 0.05
-            else:
-                # Phonk / Cinematic Default
-                prompt, palette, shake, bass, glitch = "Deep shadows, extreme contrast, toxic purple glow", ["#7f00ff", "#0d0d0d", "#ff003c"], 0.8 if idx % 2 == 0 else 0.2, (idx % 2 == 0), 0.3
-
+            # Procedural dynamic scaling based on index progression
+            is_impact_frame = (idx % 3 == 0)
+            base_shake = 0.5 if is_impact_frame else 0.1
+            base_glitch = 0.3 if is_impact_frame else 0.05
+            
+            prompt = f"Procedural aesthetic mapping: architecture '{dna_profile}', acoustic resonance '{vibe_tempo}'. High contrast node."
+            # Universal fallback palette (Deep core, Mid-tone, High-energy accent)
+            palette = ["#0a0a0a", "#2a2a2a", "#ff003c"]
+            
             phonk_frames.append({
                 "frame_index": frame_idx,
                 "visual_style_prompt": prompt,
                 "color_palette_hex": palette,
-                "camera_shake_intensity": shake,
-                "bass_drop_sync": bass,
-                "ambient_glitch_rate": glitch
+                "camera_shake_intensity": base_shake,
+                "bass_drop_sync": is_impact_frame,
+                "ambient_glitch_rate": base_glitch
             })
 
         return {"phonk_frames": phonk_frames}
@@ -176,12 +183,19 @@ class UniversalVibeEnhancer:
         
         # Pipeline Check
         target_agent = state.get("pipeline_status", {}).get("next_agent", "")
-        if target_agent != "Ai_Agent_07":
+        if target_agent not in ["Ai_Agent_07", "Agent_07"]:
             self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
             return False
 
-        topic = state.get("runtime_data", {}).get("core_topic", "Unknown")
-        content_format = state.get("global_config", {}).get("content_format", "cinematic_movie")
+        # GOD-LEVEL UPGRADE 2: Idempotency Sweep
+        if "agent_07_vibe_enhancer" in state.get("runtime_data", {}).get("module_a_scripting", {}):
+            del state["runtime_data"]["module_a_scripting"]["agent_07_vibe_enhancer"]
+            self._log_info("Idempotency Sweep: Cleared legacy vibe aesthetics from previous session.")
+
+        topic = state.get("runtime_data", {}).get("core_topic", "Unknown Target")
+        content_format = state.get("global_config", {}).get("content_format", "Fluid_Narrative")
+        vibe_tempo = state.get("global_config", {}).get("vibe_tempo", "Adaptive_Resonance")
+        dna_profile = state.get("global_config", {}).get("animation_dna", "Omni_Procedural")
         
         # Pull audited frames safely
         frames = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_03_storyboard", {}).get("storyboard_frames", [])
@@ -190,24 +204,24 @@ class UniversalVibeEnhancer:
             self._log_error("Critical Error: No frames found to apply vibe aesthetics.")
             return False
 
-        self._log_info(f"Applying Vibe Aesthetics. Mode: {content_format.upper()}")
+        self._log_info(f"Applying Universal Vibe Aesthetics. Architecture: {content_format.upper()}")
 
-        system_prompt, user_prompt = self._build_universal_prompt(topic, content_format, frames)
+        system_prompt, user_prompt = self._build_universal_prompt(topic, content_format, vibe_tempo, dna_profile, frames)
         
         generated_data = None
         for attempt in range(1, self.max_retries + 1):
             parsed_json = self._call_ai_engine(system_prompt, user_prompt)
             if parsed_json and "phonk_frames" in parsed_json:
                 generated_data = parsed_json
-                self._log_info(f"Success! Vibe applied to {len(generated_data['phonk_frames'])} frames.")
+                self._log_info(f"Success! Universal Vibe applied to {len(generated_data['phonk_frames'])} frames.")
                 break
             else:
                 self._log_error("Invalid format. Retrying...")
                 time.sleep(self.retry_delay)
 
         if not generated_data:
-            self._log_error("All AI nodes failed. Applying Math Fallback.")
-            generated_data = self._execute_procedural_fallback(content_format, frames)
+            self._log_error("All AI nodes failed. Applying Universal Math Fallback.")
+            generated_data = self._execute_procedural_fallback(content_format, vibe_tempo, dna_profile, frames)
             state["pipeline_status"]["last_active_agent"] = "Ai_Agent_07_Fallback"
         else:
             state["pipeline_status"]["last_active_agent"] = "Ai_Agent_07"
@@ -215,11 +229,11 @@ class UniversalVibeEnhancer:
         # Update State
         state["runtime_data"]["module_a_scripting"]["agent_07_vibe_enhancer"] = generated_data
         
-        # HANDSHAKE TO LAST AGENT IN MODULE A
-        state["pipeline_status"]["next_agent"] = "Agent_08"
+        # STRICT HANDSHAKE TO LAST AGENT IN MODULE A
+        state["pipeline_status"]["next_agent"] = "Ai_Agent_08"
         self._write_state(state)
         
-        self._log_info("Aesthetics Locked! Pipeline handed to Agent 08: script_file_formatter.")
+        self._log_info("Aesthetics Locked! Pipeline handed to Ai_Agent_08: script_file_formatter.")
         return True
 
 if __name__ == "__main__":
