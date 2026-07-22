@@ -19,7 +19,7 @@ load_env_file()
 # Standardize Gemini Integration
 try:
     import google.generativeai as genai
-    GEMINI_SDK_AVAILABLE = True
+    GEMINI_SDk_AVAILABLE = True
 except ImportError:
     GEMINI_SDK_AVAILABLE = False
 
