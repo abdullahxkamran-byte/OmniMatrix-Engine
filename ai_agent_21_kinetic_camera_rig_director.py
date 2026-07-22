@@ -33,7 +33,7 @@ class UniversalKineticCameraRigDirector:
         
         # GEMINI API INTEGRATION RESTORED!
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){self.gemini_api_key}"
 
         for d in [self.workspace_dir, self.audio_dir, self.script_dir, self.env_dir]:
             if not os.path.exists(d):
@@ -114,20 +114,21 @@ class UniversalKineticCameraRigDirector:
             "Output strictly valid JSON with no backticks."
         )
 
-        if self.openai_api_key:
+        if self.gemini_api_key:
             try:
+                # GEMINI NATIVE JSON PAYLOAD & PROMPT MERGE
+                combined_prompt = system_prompt + "\n\nTriggers Data:\n" + json.dumps(triggers)
                 payload = {
-                    "model": self.model_cloud,
-                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": json.dumps(triggers)}],
-                    "response_format": {"type": "json_object"}
+                    "contents": [{"parts": [{"text": combined_prompt}]}], 
+                    "generationConfig": {"responseMimeType": "application/json"}
                 }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"})
+                req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=45) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    cleaned = self._clean_json_response(res_json["choices"][0]["message"]["content"])
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    cleaned = self._clean_json_response(res_text)
                     return json.loads(cleaned).get("camera_keyframe_data", self._get_procedural_fallback(triggers, style))
             except Exception as e:
-                self.log_message(f"Cloud API Route Failed: {str(e)}. Using procedural fallback.", "WARNING")
+                self.log_message(f"Gemini API Route Failed: {str(e)}. Using procedural fallback.", "WARNING")
 
         return self._get_procedural_fallback(triggers, style)
 
