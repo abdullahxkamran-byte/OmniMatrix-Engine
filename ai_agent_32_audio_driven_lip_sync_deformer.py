@@ -8,31 +8,34 @@ import urllib.error
 
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
+                    # Universal Uppercase API Keys
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
 class OmniMatrixLipSyncDeformer:
-    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 32: OmniMatrix Lip-Sync & Actor Deformer"
+    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 32: aaa_omni_lipsync_actor_deformer"
         
         # Directories
-        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.workspace_dir = workspace_dir
+        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
         self.env_dir = os.path.join(local_library_dir, "3d_environments")
         
         # Outputs
-        self.output_blueprint = os.path.join(self.env_dir, "32_omni_lipsync_blueprint.json")
+        self.output_blueprint = os.path.join(self.workspace_dir, "32_omni_lipsync_blueprint.json")
         self.blender_path = blender_path
         
+        # GEMINI API INTEGRATION
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        for d in [self.script_dir, self.env_dir]:
+        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
@@ -58,13 +61,27 @@ class OmniMatrixLipSyncDeformer:
                     # Look for dialogue in matrix state
                     if "dialogue" in data and data["dialogue"]:
                         context["dialogue_text"] = data["dialogue"]
-            except:
-                pass
+            except Exception as e:
+                self.log_message(f"Style context parse error: {str(e)}", "WARNING")
                 
         return context
 
+    def _clean_json_response(self, raw_text):
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx + 1]
+        return cleaned
+
     def _query_linguistic_brain(self, scene_name, context):
+        self.log_message(f"Calculating Lip-Sync Visemes for '{scene_name}'...", "INFO")
+
         if not self.gemini_api_key:
+            self.log_message("No Gemini API Key found. Using fallback procedural phonemes.", "WARNING")
             return self._fallback_phonemes(context)
 
         ai_prompt = (
@@ -84,22 +101,25 @@ class OmniMatrixLipSyncDeformer:
             "5. 'viseme_U': Weight (0.0 to 1.0) for puckered lips.\n"
             "6. 'viseme_BMP': Weight (0.0 to 1.0) for closed lips.\n"
             "7. 'jaw_drop': Float (0.0 to 1.0).\n"
-            "Return ONLY raw JSON in this format:\n"
+            "Return EXACTLY 1 raw JSON object in this format:\n"
             "{\n"
             "  \"keyframes\": [\n"
-            "    {\"frame_num\": 12, \"syllable\": \"Om\", \"viseme_A_O\": 0.8, \"viseme_E_I\": 0.0, \"viseme_U\": 0.2, \"viseme_BMP\": 0.0, \"jaw_drop\": 0.5}\n"
+            f"    {{\"frame_num\": {context['start_frame']}, \"syllable\": \"Om\", \"viseme_A_O\": 0.8, \"viseme_E_I\": 0.0, \"viseme_U\": 0.2, \"viseme_BMP\": 0.0, \"jaw_drop\": 0.5}}\n"
             "  ]\n"
             "}"
         )
 
         try:
-            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            # NATIVE GEMINI JSON PAYLOAD
+            payload = {
+                "contents": [{"parts": [{"text": ai_prompt}]}], 
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
             req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=20) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
-                res_text = re.sub(r'```$', '', res_text).strip()
-                return json.loads(res_text)
+                cleaned = self._clean_json_response(res_text)
+                return json.loads(cleaned)
         except Exception as e:
             self.log_message(f"AI Linguistic Brain failed: {str(e)}. Triggering procedural fallback.", "WARNING")
             return self._fallback_phonemes(context)
@@ -131,20 +151,19 @@ class OmniMatrixLipSyncDeformer:
         script_content = f"""
 import bpy
 import json
-import math
-
-bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
 
 try:
+    bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
     frames_data = json.loads('''{frames_json}''')
     interp_style = {interp_type}
     
     # 1. Fuzzy Name Mappings for Universal Compatibility
     shape_map = {{
-        "viseme_A_O": ["viseme_a_o", "a", "o", "mouth_open", "jaw_drop", "open"],
+        "viseme_A_O": ["viseme_a_o", "a", "o", "mouth_open", "jaw_drop", "open", "jaw_open"],
         "viseme_E_I": ["viseme_e_i", "e", "i", "mouth_wide", "smile"],
         "viseme_U":   ["viseme_u", "u", "w", "pucker", "kiss"],
-        "viseme_BMP": ["viseme_bmp", "b", "m", "p", "mouth_closed", "closed"]
+        "viseme_BMP": ["viseme_bmp", "b", "m", "p", "mouth_closed", "closed", "lips_closed"]
     }}
 
     def find_shape_key(mesh_obj, logical_name):
@@ -162,10 +181,20 @@ try:
     
     if char_meshes:
         for mesh in char_meshes:
+            # Idempotency: Scrub existing lip-sync animations to prevent additive garbage
+            if mesh.data.shape_keys.animation_data and mesh.data.shape_keys.animation_data.action:
+                action = mesh.data.shape_keys.animation_data.action
+                for logical_name in shape_map.keys():
+                    sk = find_shape_key(mesh, logical_name)
+                    if sk:
+                        fc = action.fcurves.find('key_blocks["'+sk.name+'"].value')
+                        if fc:
+                            action.fcurves.remove(fc)
+
+            # Apply Shape Keys
             for fd in frames_data:
                 f_num = fd["frame_num"]
                 
-                # Apply Shape Keys
                 for logical_name in ["viseme_A_O", "viseme_E_I", "viseme_U", "viseme_BMP"]:
                     sk = find_shape_key(mesh, logical_name)
                     if sk:
@@ -185,29 +214,36 @@ try:
         arm = armatures[0]
         # Try to find head or neck bone
         head_bone = None
-        for bone_name in ["Head", "head", "Neck", "neck", "mixamorig:Head"]:
+        for bone_name in ["Head", "head", "Neck", "neck", "mixamorig:Head", "DEF-spine.006"]:
             if bone_name in arm.pose.bones:
                 head_bone = arm.pose.bones[bone_name]
                 break
                 
         if head_bone:
-            arm.animation_data_create()
+            if not arm.animation_data:
+                arm.animation_data_create()
             head_bone.rotation_mode = 'XYZ'
+            
+            # Idempotency: Scrub existing X-rotation on head bone to prevent Exorcist 360 spin
+            if arm.animation_data.action:
+                fc = arm.animation_data.action.fcurves.find('pose.bones["'+head_bone.name+'"].rotation_euler', index=0)
+                if fc:
+                    arm.animation_data.action.fcurves.remove(fc)
+            
+            # Establish baseline rotation
+            base_rot_x = 0.0
             
             for i, fd in enumerate(frames_data):
                 f_num = fd["frame_num"]
                 intensity = fd.get("jaw_drop", 0.0)
                 
-                # Create a subtle bob effect
-                # If jaw opens wide (A_O), head tilts slightly up/down based on anime vs realistic
+                # Create a subtle bob effect based on jaw opening
                 bob_angle = (intensity * 0.05) if interp_style == 'BEZIER' else (intensity * 0.1)
                 
                 # Alternate direction slightly for dynamic life
                 direction = 1 if i % 2 == 0 else -1
                 
-                original_rot = list(head_bone.rotation_euler)
-                head_bone.rotation_euler[0] = original_rot[0] + (bob_angle * direction)
-                
+                head_bone.rotation_euler[0] = base_rot_x + (bob_angle * direction)
                 head_bone.keyframe_insert(data_path="rotation_euler", index=0, frame=f_num)
                 
                 # Reset interpolation
@@ -222,11 +258,11 @@ try:
     print(f"SUCCESS: OmniMatrix Lip-Sync & Head-Bobbing applied. Interp: {{interp_style}}")
 
 except Exception as e:
-    print("ERROR:", str(e))
+    print(f"ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join("temp_lipsync_script.py")
+        script_path = os.path.join(self.workspace_dir, "temp_lipsync_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
@@ -251,13 +287,13 @@ except Exception as e:
                 command = [self.blender_path, "-b", "-P", script_path]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        self.log_message(f"God-Level Lip-Sync & Micro-Movements applied to {filename}", "INFO")
+                    if result.returncode == 0 and "SUCCESS" in result.stdout:
+                        self.log_message(f"God-Level Lip-Sync & Micro-Movements applied to {filename}", "SUCCESS")
                         master_blueprint[scene_name] = sync_data
                     else:
-                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
