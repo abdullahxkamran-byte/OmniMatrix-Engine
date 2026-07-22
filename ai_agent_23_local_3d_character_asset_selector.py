@@ -8,37 +8,34 @@ import urllib.error
 
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    # Force environment variables to uppercase for consistency
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
-class Local3DCharacterAssetSelector:
-    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 23: AAA Character Asset Placer"
+class Universal3DCharacterAssetSelector:
+    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 23: universal_character_asset_placer"
         
-        # Upstream Inputs
-        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments") # Modifies existing _stage.blend files
+        self.workspace_dir = workspace_dir
+        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
+        self.env_dir = os.path.join(local_library_dir, "3d_environments")
         
-        # Local Asset Library
         self.char_lib_dir = os.path.join(local_library_dir, "3d_characters")
         self.manifest_path = os.path.join(self.char_lib_dir, "character_manifest.json")
         
-        # Output Log
-        self.output_blueprint = os.path.join(self.env_dir, "23_character_placements.json")
+        self.output_blueprint = os.path.join(self.workspace_dir, "23_universal_character_placements.json")
         self.blender_path = blender_path
         
-        # Fixed API Key casing issue!
+        # GEMINI API INTEGRATION RESTORED!
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        for d in [self.script_dir, self.env_dir, self.char_lib_dir]:
+        for d in [self.workspace_dir, self.script_dir, self.env_dir, self.char_lib_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
                 
@@ -47,28 +44,38 @@ class Local3DCharacterAssetSelector:
     def log_message(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
+    def _load_master_config(self):
+        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data.get("global_style", "realistic").lower()
+            except Exception as e:
+                self.log_message(f"Master config read warning: {str(e)}", "WARNING")
+        return "realistic"
+
     def _ensure_manifest_exists(self):
-        """Creates a manifest if the local library is empty."""
         if not os.path.exists(self.manifest_path):
             mock_data = {
                 "characters": [
-                    {"id": "char_001", "name": "Gojo Satoru", "file_name": "ch_gojo.blend", "tags": ["anime", "blindfold", "tall", "sorcerer"]},
-                    {"id": "char_002", "name": "Cyber Ninja", "file_name": "ch_cyberninja.blend", "tags": ["sci-fi", "armor", "sword", "dark"]},
-                    {"id": "char_003", "name": "Zack Snyder Hero", "file_name": "ch_grittyhero.blend", "tags": ["realistic", "cape", "gritty", "muscular"]}
+                    {"id": "char_001", "name": "Goku", "file_name": "ch_goku.blend", "tags": ["anime", "fighter", "saiyan", "dbz"]},
+                    {"id": "char_002", "name": "Naruto", "file_name": "ch_naruto.blend", "tags": ["anime", "ninja", "shinobi", "action"]},
+                    {"id": "char_003", "name": "Gojo Satoru", "file_name": "ch_gojo.blend", "tags": ["anime", "blindfold", "tall", "sorcerer"]},
+                    {"id": "char_004", "name": "Killua", "file_name": "ch_killua.blend", "tags": ["anime", "assassin", "lightning", "hunter"]},
+                    {"id": "char_005", "name": "Sasuke", "file_name": "ch_sasuke.blend", "tags": ["anime", "ninja", "dark", "sword"]}
                 ]
             }
             with open(self.manifest_path, "w", encoding="utf-8") as f:
                 json.dump(mock_data, f, indent=4)
             
-            # Create dummy .blend files so the script doesn't crash during testing
             for char in mock_data["characters"]:
                 dummy_path = os.path.join(self.char_lib_dir, char["file_name"])
                 if not os.path.exists(dummy_path):
                     with open(dummy_path, "w") as f:
-                        f.write("DUMMY BLEND FILE")
+                        f.write("OMNIMATRIX DUMMY BLEND FILE")
 
     def _load_character_demands(self, scene_name):
-        """Finds what characters the script actually needs for this scene."""
         script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
         demand = "Main protagonist standing in the center"
         
@@ -81,48 +88,65 @@ class Local3DCharacterAssetSelector:
                 self.log_message(f"Script parse error: {str(e)}", "WARNING")
         return demand
 
-    def _query_ai_matcher(self, scene_name, demand, manifest):
-        """Asks Gemini to semantically match the script's demand with our local offline database."""
+    def _clean_json_response(self, raw_text):
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx + 1]
+        return cleaned
+
+    def _query_ai_matcher(self, scene_name, demand, manifest, style):
+        self.log_message(f"Matching Asset via Gemini for '{scene_name}' (Style: {style.upper()})...", "INFO")
+        
         if not self.gemini_api_key:
+            self.log_message("No Gemini API Key found. Using fallback.", "WARNING")
             return self._fallback_matcher(manifest)
 
         ai_prompt = (
-            f"You are the AAA 3D Asset Supervisor.\n"
+            f"You are the AAA 3D Asset Supervisor. Project Style: '{style.upper()}'.\n"
             f"Scene Name: {scene_name}\n"
             f"Character Demand from Script: {demand}\n\n"
             f"Local Assets Database: {json.dumps(manifest['characters'])}\n\n"
-            "Find the BEST matching character from the database. If none match properly, set 'generate_new_asset' to true.\n"
-            "Return ONLY raw JSON:\n"
+            "CRITICAL: Match the character name STRICTLY. Do not hallucinate characters.\n"
+            "If the exact character is missing, set 'generate_new_asset' to true.\n"
+            "Return EXACTLY 1 raw JSON object:\n"
             "{\n"
-            "  \"matched_id\": \"char_001\",\n"
-            "  \"matched_file\": \"ch_gojo.blend\",\n"
-            "  \"confidence\": 0.95,\n"
+            "  \"matched_id\": \"char_xyz\" or \"NONE\",\n"
+            "  \"matched_file\": \"ch_name.blend\" or \"NONE\",\n"
+            "  \"confidence\": 0.99,\n"
             "  \"generate_new_asset\": false,\n"
-            "  \"reason\": \"Character name perfectly matches the script.\"\n"
+            "  \"reason\": \"Character name perfectly matched the demand.\"\n"
             "}"
         )
 
         try:
-            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            # Using Gemini's native JSON enforcement
+            payload = {
+                "contents": [{"parts": [{"text": ai_prompt}]}], 
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
             req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
-                res_text = re.sub(r'```$', '', res_text).strip()
-                return json.loads(res_text)
+                cleaned = self._clean_json_response(res_text)
+                return json.loads(cleaned)
         except Exception as e:
-            self.log_message(f"AI Matching failed: {str(e)}. Using fallback.", "WARNING")
-            return self._fallback_matcher(manifest)
+            self.log_message(f"Gemini API Failed: {str(e)}. Using fallback.", "WARNING")
+
+        return self._fallback_matcher(manifest)
 
     def _fallback_matcher(self, manifest):
         char = manifest["characters"][0] if manifest["characters"] else {"id": "NONE", "file_name": "NONE"}
         return {
             "matched_id": char["id"], "matched_file": char.get("file_name", "NONE"),
-            "confidence": 1.0, "generate_new_asset": False, "reason": "Fallback match"
+            "confidence": 1.0, "generate_new_asset": False, "reason": "Procedural Fallback match"
         }
 
-    def _generate_blender_script(self, target_stage_blend, character_blend_path):
-        """Blender Python script to append the character object into the lit stage."""
+    def _generate_blender_script(self, target_stage_blend, character_blend_path, style):
         safe_stage = target_stage_blend.replace("\\", "/")
         safe_char = character_blend_path.replace("\\", "/")
         
@@ -131,89 +155,122 @@ import bpy
 import os
 
 try:
-    # Open the existing Stage (Lit by Agent 22)
     bpy.ops.wm.open_mainfile(filepath="{safe_stage}")
 
-    # Path to the character file
     char_path = "{safe_char}"
+    tracker = bpy.data.objects.get("OMNIMATRIX_Focus_Target")
     
-    if not os.path.exists(char_path) or "DUMMY" in open(char_path, 'r', errors='ignore').read(10):
-        print("WARNING: Character file is a dummy or missing. Appending a procedural proxy.")
-        # Create Proxy Dummy
-        bpy.ops.mesh.primitive_monkey_add(size=2, location=(0,0,1))
-        monkey = bpy.context.active_object
-        monkey.name = "AAA_Character_Proxy"
-        
-        # Track camera to proxy
-        tracker = bpy.data.objects.get("Focus_Tracker")
-        if tracker:
-            tracker.location = monkey.location
-    else:
-        # APPEND LOGIC: Fetch objects from the character blend file
-        with bpy.data.libraries.load(char_path, link=False) as (data_from, data_to):
-            # Load all objects that start with 'CH_' or 'Rig_' (standard AAA naming conventions)
-            data_to.objects = [name for name in data_from.objects if name.startswith("CH_") or name.startswith("Rig")]
+    # Clean previous characters if agent is re-run
+    for obj in bpy.data.objects:
+        if obj.name.startswith("OMNI_CHAR_"):
+            bpy.data.objects.remove(obj, do_unlink=True)
             
-            # If nothing matched standard naming, just grab everything
-            if not data_to.objects:
-                data_to.objects = data_from.objects
+    is_dummy = not os.path.exists(char_path) or "OMNIMATRIX" in open(char_path, 'r', errors='ignore').read(25)
 
-        # Link appended objects into the current scene
-        for obj in data_to.objects:
-            if obj is not None and obj.name not in bpy.context.scene.collection.objects:
-                bpy.context.scene.collection.objects.link(obj)
+    if is_dummy:
+        print("WARNING: Using Procedural Proxy Mannequin.")
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.5, depth=2.0, location=(0, 0, 1.0))
+        body = bpy.context.active_object
+        body.name = "OMNI_CHAR_Proxy_Body"
+        
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.4, location=(0, 0, 2.4))
+        head = bpy.context.active_object
+        head.name = "OMNI_CHAR_Proxy_Head"
+        head.parent = body
+        
+        mat = bpy.data.materials.new(name="Proxy_Mat")
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        if '{style}' == 'anime':
+            bsdf.inputs['Base Color'].default_value = (1.0, 0.0, 0.5, 1.0) 
+            bsdf.inputs['Roughness'].default_value = 1.0
+        else:
+            bsdf.inputs['Base Color'].default_value = (0.2, 0.2, 0.2, 1.0) 
+            bsdf.inputs['Metallic'].default_value = 1.0
+        body.data.materials.append(mat)
+        head.data.materials.append(mat)
+        
+        if tracker:
+            tracker.location = head.location
+            tracker.parent = head
+            
+    else:
+        # AAA APPEND LOGIC: Collections Priority
+        appended = False
+        with bpy.data.libraries.load(char_path, link=False) as (data_from, data_to):
+            col_names = [c for c in data_from.collections if c.startswith("COL_CH_") or c.startswith("CH_")]
+            if col_names:
+                data_to.collections = col_names
+                appended = True
+            else:
+                obj_names = [o for o in data_from.objects if o.startswith("CH_") or o.startswith("Rig")]
+                data_to.objects = obj_names
+                appended = True
 
-        print("SUCCESS: Character successfully appended into the scene.")
+        if appended:
+            for col in data_to.collections:
+                if col.name not in bpy.context.scene.collection.children:
+                    bpy.context.scene.collection.children.link(col)
+                    
+            for obj in data_to.objects:
+                if obj and obj.name not in bpy.context.scene.collection.objects:
+                    bpy.context.scene.collection.objects.link(obj)
+                    
+            rig = None
+            for obj in bpy.context.scene.objects:
+                if obj.type == 'ARMATURE' and ("Rig" in obj.name or "CH_" in obj.name):
+                    rig = obj
+                    break
+                    
+            if rig and tracker:
+                tracker.location = (rig.location.x, rig.location.y, rig.location.z + 1.6)
+                
+        print("SUCCESS: Character Rig integrated.")
 
-    # Save the updated stage file
     bpy.ops.wm.save_as_mainfile(filepath="{safe_stage}")
 
 except Exception as e:
-    print("ERROR:", str(e))
+    print(f"FAILED TO APPEND CHARACTER: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join("temp_append_script.py")
+        script_path = os.path.join(self.workspace_dir, "temp_append_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
     def place_characters_in_stages(self):
-        self.log_message("Initializing AI Character Selector & Placer...", "INFO")
+        global_style = self._load_master_config()
+        self.log_message(f"Initializing Universal Asset Selector [{global_style.upper()}]...", "INFO")
         
-        with open(self.manifest_path, "r") as f:
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
             
         master_blueprint = {}
         
-        # Go through each Stage file generated previously
         for filename in os.listdir(self.env_dir):
             if filename.endswith("_stage.blend"):
                 scene_name = filename.replace("_stage.blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
-                self.log_message(f"--- Locating Actor for Scene: {scene_name} ---", "INFO")
-                
                 demand = self._load_character_demands(scene_name)
-                match = self._query_ai_matcher(scene_name, demand, manifest)
+                match = self._query_ai_matcher(scene_name, demand, manifest, global_style)
                 
-                self.log_message(f"AI Decision: Selected '{match['matched_file']}' (Reason: {match['reason']})", "INFO")
-                
-                if match["generate_new_asset"]:
-                    self.log_message("WARNING: Asset missing locally. Module H (Asset Factory) must generate this later.", "WARNING")
-                    master_blueprint[scene_name] = {"status": "Awaiting Generative Asset", "demand": demand}
+                if match.get("generate_new_asset", False):
+                    self.log_message(f"[{scene_name}] Asset Missing Locally. Handing over to Module H.", "WARNING")
+                    master_blueprint[scene_name] = {"status": "Awaiting Module H Generation", "demand": demand}
                     continue
                 
-                char_blend_path = os.path.join(self.char_lib_dir, match["matched_file"])
-                script_path = self._generate_blender_script(blend_file_path, char_blend_path)
+                self.log_message(f"[{scene_name}] Selected '{match.get('matched_file')}'", "INFO")
+                char_blend_path = os.path.join(self.char_lib_dir, match.get("matched_file", ""))
                 
-                self.log_message("Executing Headless Blender to Append Character...", "INFO")
+                script_path = self._generate_blender_script(blend_file_path, char_blend_path, global_style)
+                
                 command = [self.blender_path, "-b", "-P", script_path]
-                
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        self.log_message(f"Character injected into {filename}", "INFO")
+                    if result.returncode == 0 and "SUCCESS" in result.stdout:
+                        self.log_message(f"Character successfully injected into {filename}", "SUCCESS")
                         master_blueprint[scene_name] = match
                     else:
                         self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
@@ -226,8 +283,8 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        self.log_message("Character Integration Complete. Stages are now populated.", "INFO")
+        self.log_message("Universal Character Integration Complete.", "INFO")
 
 if __name__ == "__main__":
-    selector = Local3DCharacterAssetSelector()
+    selector = Universal3DCharacterAssetSelector()
     selector.place_characters_in_stages()
