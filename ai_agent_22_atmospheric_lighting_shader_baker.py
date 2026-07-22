@@ -28,10 +28,9 @@ class UniversalAtmosphericLightingDoP:
         self.output_blueprint = os.path.join(self.workspace_dir, "22_universal_lighting_blueprint.json")
         self.blender_path = blender_path
         
-        # Unified AI Routing
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_cloud = "gpt-4o-mini"
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        # GEMINI API INTEGRATION RESTORED!
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
         for d in [self.workspace_dir, self.script_dir, self.env_dir]:
             if not os.path.exists(d):
