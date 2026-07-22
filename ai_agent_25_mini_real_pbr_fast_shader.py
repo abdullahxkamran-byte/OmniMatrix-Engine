@@ -8,27 +8,31 @@ import urllib.error
 
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
-                    os.environ[line.split("=", 1)[0].strip().upper()] = line.split("=", 1)[1].strip()
+                    key, val = line.split("=", 1)
+                    # Force environment variables to UPPERCASE
+                    os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
 class MiniRealPBRFastShader:
-    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 25: AAA Real PBR Shader & Grime Maker"
+    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
+        self.agent_name = "Ai Agent 25: aaa_real_pbr_shader_grime_maker"
         
-        self.script_dir = os.path.join(drive_temp_dir, "module_a_scripts")
+        self.workspace_dir = workspace_dir
+        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
         self.env_dir = os.path.join(local_library_dir, "3d_environments")
-        self.output_blueprint = os.path.join(self.env_dir, "25_pbr_shader_blueprint.json")
+        self.output_blueprint = os.path.join(self.workspace_dir, "25_pbr_shader_blueprint.json")
         self.blender_path = blender_path
         
+        # GEMINI API INTEGRATION RESTORED
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
 
-        for d in [self.script_dir, self.env_dir]:
+        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
@@ -45,12 +49,26 @@ class MiniRealPBRFastShader:
                     context["visual_style"] = data.get("visual_style", "realistic").lower()
                     context["vibe_genre"] = data.get("genre_vibe", "Action")
                     context["action_description"] = data.get("action_description", "")
-            except:
-                pass
+            except Exception as e:
+                self.log_message(f"Script parse warning: {str(e)}", "WARNING")
         return context
 
+    def _clean_json_response(self, raw_text):
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx + 1]
+        return cleaned
+
     def _query_pbr_ai_brain(self, scene_name, context):
+        self.log_message(f"Calculating PBR Realism vectors for '{scene_name}'...", "INFO")
+        
         if not self.gemini_api_key:
+            self.log_message("No Gemini API Key found. Using procedural fallback.", "WARNING")
             return self._fallback_pbr_shader(context)
 
         ai_prompt = (
@@ -59,7 +77,7 @@ class MiniRealPBRFastShader:
             f"Action: {context['action_description']}\n\n"
             "Design PBR and Realistic Dirt/Blood parameters.\n"
             "If character takes damage, increase 'grime_damage_level' (0.0 to 1.0).\n"
-            "Return ONLY raw JSON:\n"
+            "Return EXACTLY 1 raw JSON object containing:\n"
             "{\n"
             "  \"base_color_hex\": \"#2E2E2E\",\n"
             "  \"metallic_value\": 0.8,\n"
@@ -70,25 +88,32 @@ class MiniRealPBRFastShader:
             "  \"grime_color_hex\": \"#3B1F1F\"\n"
             "}"
         )
+        
         try:
-            payload = {"contents": [{"parts": [{"text": ai_prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
+            # GEMINI NATIVE JSON PAYLOAD
+            payload = {
+                "contents": [{"parts": [{"text": ai_prompt}]}], 
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
             req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
-                res_text = re.sub(r'```$', '', res_text).strip()
-                return json.loads(res_text)
-        except:
+                cleaned = self._clean_json_response(res_text)
+                return json.loads(cleaned)
+        except Exception as e:
+            self.log_message(f"Gemini API Route Failed: {str(e)}. Using fallback shader.", "WARNING")
             return self._fallback_pbr_shader(context)
 
     def _fallback_pbr_shader(self, context):
         return {
             "base_color_hex": "#333333", "metallic_value": 0.5, "roughness_value": 0.3,
-            "emission_strength": 0.0, "grime_damage_level": 0.5, "grime_color_hex": "#3B1F1F"
+            "emission_color_hex": "#000000", "emission_strength": 0.0, 
+            "grime_damage_level": 0.5, "grime_color_hex": "#3B1F1F"
         }
 
     def _generate_blender_script(self, blend_file_path, shader_data):
         safe_blend_path = blend_file_path.replace("\\", "/")
+        
         script_content = f"""
 import bpy
 
@@ -97,14 +122,15 @@ def hex_to_rgb(hex_str):
     if len(hex_str) != 6: return (0.5, 0.5, 0.5, 1)
     return tuple(int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4)) + (1.0,)
 
-bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
-
 try:
+    bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
+
     # 1. Enable Realistic Engine Features in Eevee (Reflections & AO)
     bpy.context.scene.render.engine = 'BLENDER_EEVEE'
-    bpy.context.scene.eevee.use_ssr = True 
-    bpy.context.scene.eevee.use_ssr_refraction = True
-    bpy.context.scene.eevee.use_gtao = True 
+    if hasattr(bpy.context.scene.eevee, "use_ssr"):
+        bpy.context.scene.eevee.use_ssr = True 
+        bpy.context.scene.eevee.use_ssr_refraction = True
+        bpy.context.scene.eevee.use_gtao = True 
 
     color = hex_to_rgb("{shader_data.get('base_color_hex', '#555555')}")
     metallic = {shader_data.get('metallic_value', 0.0)}
@@ -175,12 +201,13 @@ try:
 
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
     print("SUCCESS: Realistic PBR Materials + Grime applied.")
+    
 except Exception as e:
-    print("ERROR:", str(e))
+    print(f"ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join("temp_pbrshader_script.py")
+        script_path = os.path.join(self.workspace_dir, "temp_pbrshader_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
@@ -188,28 +215,42 @@ except Exception as e:
     def process_realistic_shading(self):
         self.log_message("Waking up Realistic PBR Shader Engine...", "INFO")
         master_blueprint = {}
+        
         for filename in os.listdir(self.env_dir):
             if filename.endswith("_stage.blend"):
                 scene_name = filename.replace("_stage.blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
-                # Routing check
+                # Routing check (Universal Compatibility)
                 context = self._check_style_routing(scene_name)
                 style = context.get("visual_style", "realistic").lower()
                 
                 if "anime" in style or "cel" in style or "2d" in style:
-                    self.log_message(f"Scene '{scene_name}' is '{style}'. Going to SLEEP.", "WARNING")
+                    self.log_message(f"[{scene_name}] Routing: Style is '{style}'. Going to SLEEP (Agent 24 handles this).", "INFO")
                     continue
                 
                 shader_data = self._query_pbr_ai_brain(scene_name, context)
                 script_path = self._generate_blender_script(blend_file_path, shader_data)
                 
-                subprocess.run([self.blender_path, "-b", "-P", script_path])
-                self.log_message(f"PBR + Damage Level {shader_data['grime_damage_level']} applied to {filename}", "INFO")
-                master_blueprint[scene_name] = shader_data
+                command = [self.blender_path, "-b", "-P", script_path]
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    if result.returncode == 0 and "SUCCESS" in result.stdout:
+                        self.log_message(f"PBR + Grime Level {shader_data.get('grime_damage_level')} applied to {filename}", "SUCCESS")
+                        master_blueprint[scene_name] = shader_data
+                    else:
+                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
+                except Exception as e:
+                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
+                    
+                if os.path.exists(script_path):
+                    os.remove(script_path)
 
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
+            
+        self.log_message("Realistic PBR Pipeline Complete.", "INFO")
 
 if __name__ == "__main__":
-    MiniRealPBRFastShader().process_realistic_shading()
+    shader_dop = MiniRealPBRFastShader()
+    shader_dop.process_realistic_shading()
