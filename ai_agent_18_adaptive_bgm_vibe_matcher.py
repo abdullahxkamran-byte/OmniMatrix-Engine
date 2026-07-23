@@ -3,6 +3,7 @@ import sys
 import json
 import re
 import urllib.request
+import urllib.parse
 
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
@@ -23,12 +24,12 @@ except ImportError:
 
 
 class AiAgent18AdaptiveBgmVibeMatcher:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Ai Agent 18: adaptive_bgm_vibe_matcher"
-        self.workspace_dir = workspace_dir
+    def __init__(self):
+        self.agent_name = "Ai_Agent_18"
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
         self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
 
-        self.ollama_url = "http://localhost:11434/api/chat"
+        self.ollama_url = "http://localhost:11434/api/generate"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.model_local = "llama3"
         self.model_cloud = "gpt-4o-mini"
@@ -43,21 +44,22 @@ class AiAgent18AdaptiveBgmVibeMatcher:
         print(f"[{level}] [{self.agent_name}] {message}")
 
     def _load_matrix_state(self):
-        """Loads the central OmniMatrix state file."""
         if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run upstream modules first.", "ERROR")
+            self.log("matrix_state.json not found. Run upstream modules first.", "FATAL")
             sys.exit(1)
-        with open(self.state_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(self.state_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            self.log(f"JSON Corruption detected: {e}", "FATAL")
+            sys.exit(1)
 
     def _save_matrix_state(self, state_data):
-        """Saves the BGM automation blueprint back to the central state."""
         with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4)
-        self.log("OmniMatrix state successfully updated with BGM Automation Curves.")
+            json.dump(state_data, f, indent=4, ensure_ascii=False)
+        self.log("OmniMatrix state successfully updated with Limitless BGM Automation Curves.", "SUCCESS")
 
     def _clean_json_response(self, raw_text):
-        """Strips markdown and extracts pure JSON string."""
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
@@ -70,26 +72,32 @@ class AiAgent18AdaptiveBgmVibeMatcher:
             
         return cleaned
 
-    def fetch_bgm_automation_ai(self, narrative_cues):
-        """Uses AI logic cores to design cinematic music automation maps."""
+    def fetch_bgm_automation_ai(self, narrative_cues, video_format, global_theme):
+        """
+        LIMITLESS AI LOGIC CORE:
+        No hardcoded genres. The AI invents the exact BGM style needed based on the theme and format.
+        """
         system_prompt = (
-            "You are a cinematic music supervisor and dynamic video editor. "
-            "Analyze video narration emotional curves and build dynamic volume/genre automation parameters for the Background Music (BGM).\n"
+            "You are a limitless cinematic music supervisor and audio automation engineer. "
+            f"The current project format is '{video_format}' and the overall theme is '{global_theme}'.\n"
+            "Analyze the narrative emotional curves and build dynamic volume/genre automation parameters for the Background Music (BGM).\n"
+            "DO NOT RESTRICT YOURSELF TO PRESETS. Invent the perfect music sub-genre descriptor for each segment.\n"
             "Return STRICTLY a JSON object containing a list named 'bgm_automation_segments'.\n"
             "Each segment must contain:\n"
             "- 'start_sec': float matching the narration block start.\n"
             "- 'end_sec': float matching the narration block end.\n"
-            "- 'bgm_vibe_style': string (choose from: 'dark-ambient-pad', 'aggressive-phonk-drill', 'cyberpunk-chiptune', 'orchestral-epic-riser').\n"
-            "- 'target_bgm_volume_db': float (-24.0 dB for talking/focus, up to -6.0 dB during action/silence).\n"
-            "- 'filter_cutoff_hz': integer (400-20000 Hz. Use ~800 Hz to muffle music during intense dialogue).\n"
-            "- 'tempo_multiplier': float (0.75, 1.0, 1.25).\n"
-            "- 'vibe_shift_note': string explaining the musical transition logic.\n"
+            "- 'bgm_vibe_style': string (Invent a highly descriptive hyphenated genre, e.g., 'dark-synthwave-pulse', 'acoustic-nostalgic-strum', 'orchestral-combat-choir').\n"
+            "- 'target_bgm_volume_db': float (-30.0 dB for heavy dialogue, up to -5.0 dB for pure musical montage/silence).\n"
+            "- 'filter_cutoff_hz': integer (Range 300 to 20000 Hz. Use low-pass ~800Hz to muffle BGM during talking, 20000Hz for full clarity).\n"
+            "- 'tempo_multiplier': float (0.5 to 2.0. Base is 1.0).\n"
+            "- 'vibe_shift_note': string explaining why this specific musical shift is happening.\n"
         )
         
-        user_prompt = f"Vocal Narrative Flow:\n{json.dumps(narrative_cues, indent=2)}"
+        user_prompt = f"Vocal Narrative & Action Flow:\n{json.dumps(narrative_cues, indent=2)}"
 
+        # CORE 1: Gemini
         if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Routing to Core 1: Gemini AI for BGM automation mapping...")
+            self.log("Routing to Core 1: Gemini AI for Limitless BGM mapping...")
             try:
                 model = genai.GenerativeModel("gemini-1.5-flash")
                 response = model.generate_content(
@@ -100,6 +108,7 @@ class AiAgent18AdaptiveBgmVibeMatcher:
             except Exception as e:
                 self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
 
+        # CORE 2: OpenAI
         if self.openai_api_key:
             self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
             url = self.openai_url
@@ -119,27 +128,52 @@ class AiAgent18AdaptiveBgmVibeMatcher:
                     raw_text = res_data["choices"][0]["message"]["content"]
                     return json.loads(self._clean_json_response(raw_text)).get("bgm_automation_segments", [])
             except Exception as e:
-                self.log(f"OpenAI Engine failed: {e}. Engaging Offline Math Logic.", "WARNING")
+                self.log(f"OpenAI Engine failed: {e}. Engaging Ollama Local Core.", "WARNING")
 
-        self.log("All AI API Cores failed. Engaging Offline Procedural Vibe Mapper.", "STATUS")
-        return self._execute_procedural_fallback(narrative_cues)
+        # CORE 3: Ollama (Local Limitless Engine)
+        self.log(f"Routing to Core 3: Local Ollama [{self.model_local}]...", "STATUS")
+        try:
+            payload = {
+                "model": self.model_local,
+                "prompt": system_prompt + "\n\n" + user_prompt,
+                "stream": False,
+                "format": "json"
+            }
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_data = json.loads(response.read().decode("utf-8"))
+                raw_text = res_data.get("response", "")
+                return json.loads(self._clean_json_response(raw_text)).get("bgm_automation_segments", [])
+        except Exception as e:
+            self.log(f"Ollama Engine failed: {e}. Engaging Procedural Math Fallback.", "WARNING")
 
-    def _execute_procedural_fallback(self, cues):
-        """Mathematical fallback for BGM adjustments without LLM."""
+        # CORE 4: Procedural Limitless Fallback
+        self.log("All AI API Cores failed. Engaging Offline Procedural Limitless Mapper.", "STATUS")
+        return self._execute_procedural_fallback(narrative_cues, video_format, global_theme)
+
+    def _execute_procedural_fallback(self, cues, video_format, global_theme):
+        """Mathematical fallback that still attempts to be limitless by using the text cues."""
         segments = []
         for cue in cues:
             start = float(cue.get("start_sec", 0.0))
             end = float(cue.get("end_sec", 3.0))
-            tone = cue.get("emotional_tone", "neutral").lower()
+            tone = str(cue.get("emotional_tone", "neutral")).lower()
+            context = str(cue.get("text_context", "")).lower()
 
-            if "dark" in tone or "sad" in tone:
-                style, vol, cutoff, mult, note = "dark-ambient-pad", -20.0, 1200, 0.75, "Low-pass filtered pad for tense atmosphere."
-            elif "high" in tone or "rage" in tone or "action" in tone:
-                style, vol, cutoff, mult, note = "aggressive-phonk-drill", -10.0, 20000, 1.25, "Energy spike. Unfiltered heavy beat."
-            elif "epic" in tone or "climax" in tone:
-                style, vol, cutoff, mult, note = "orchestral-epic-riser", -8.0, 18000, 1.0, "High intensity build up."
+            # Dynamic naming instead of hardcoded lists
+            clean_tone = re.sub(r'[^a-z]+', '-', tone)
+            clean_theme = re.sub(r'[^a-z]+', '-', str(global_theme).lower()[:10])
+            
+            style = f"{clean_theme}-{clean_tone}-background"
+            
+            # Procedural DSP rules
+            if any(x in tone or x in context for x in ["sad", "dark", "quiet", "tense"]):
+                vol, cutoff, mult, note = -24.0, 800, 0.8, "Muffled low-pass for tension/sadness."
+            elif any(x in tone or x in context for x in ["hype", "action", "epic", "fight"]):
+                vol, cutoff, mult, note = -8.0, 20000, 1.2, "Unfiltered high energy spike."
+                style = f"aggressive-{style}"
             else:
-                style, vol, cutoff, mult, note = "cyberpunk-chiptune", -16.0, 5000, 1.0, "Standard mid-tempo background volume."
+                vol, cutoff, mult, note = -18.0, 10000, 1.0, "Standard dialogue backing track."
 
             segments.append({
                 "start_sec": start,
@@ -155,14 +189,23 @@ class AiAgent18AdaptiveBgmVibeMatcher:
     def process_bgm_vibe_automation(self):
         state = self._load_matrix_state()
         
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
-        if target_agent and target_agent != "Ai_Agent_18":
-            self.log(f"Pipeline sequence mismatch. Expected {target_agent}, but executing {self.agent_name}.", "WARNING")
+        # 1. Atomic Handshake Protocol
+        orchestrator = state.get("orchestrator_matrix", {})
+        if orchestrator.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{orchestrator.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
 
-        # Fetch Voiceover Timeline from Module B or Visual Storyboard from Module A
+        # 2. Extract Limitless Configuration Parameters
+        global_config = state.get("global_config", {})
+        video_format = global_config.get("video_format", "undefined_format")
+        global_theme = global_config.get("theme", "neutral_unspecified")
+
+        # Idempotency: Scrub old BGM map
         audio_module = state.get("module_b_audio", {})
+        if "bgm_automation_map" in audio_module:
+            del audio_module["bgm_automation_map"]
+
         voiceover_timeline = audio_module.get("audio_timeline", [])
-        
         narrative_cues = []
         
         # Method 1: Extract from active audio timeline
@@ -172,7 +215,7 @@ class AiAgent18AdaptiveBgmVibeMatcher:
                     "start_sec": block.get("global_timing", {}).get("start_sec", 0.0),
                     "end_sec": block.get("global_timing", {}).get("end_sec", 3.0),
                     "emotional_tone": block.get("emotion", "neutral"),
-                    "text_context": block.get("dialogue_text", "")
+                    "text_context": block.get("dialogue_text", "instrumental/pause")
                 })
         else:
             self.log("Voiceover timeline not found. Searching for Module A Storyboard cues...", "WARNING")
@@ -182,34 +225,35 @@ class AiAgent18AdaptiveBgmVibeMatcher:
                     narrative_cues.append({
                         "start_sec": panel.get("timestamp_sec", float(idx * 3.0)),
                         "end_sec": panel.get("timestamp_sec", float(idx * 3.0)) + 3.0,
-                        "emotional_tone": "epic-climax" if "fight" in panel.get("prompt", "").lower() else "neutral",
-                        "text_context": panel.get("prompt", "")
+                        "emotional_tone": "high_intensity" if "fight" in panel.get("prompt", "").lower() else "neutral",
+                        "text_context": panel.get("prompt", "visual action")
                     })
 
-        # Final Fallback
         if not narrative_cues:
-            self.log("No upstream data found. Using default timeline structure.", "WARNING")
+            self.log("No upstream data found. Generating fallback limitless baseline.", "WARNING")
             narrative_cues = [
-                {"start_sec": 0.0, "end_sec": 3.0, "emotional_tone": "dark-suspense", "text_context": "Introduction"}
+                {"start_sec": 0.0, "end_sec": 10.0, "emotional_tone": "introductory", "text_context": "Introduction"}
             ]
 
-        self.log(f"Vibe Engine active. Generating BGM automation curves for {len(narrative_cues)} segments...")
+        self.log(f"Limitless Vibe Engine active. Generating BGM automation for {video_format} ({global_theme})...", "STATUS")
         
-        bgm_automation_map = self.fetch_bgm_automation_ai(narrative_cues)
+        bgm_automation_map = self.fetch_bgm_automation_ai(narrative_cues, video_format, global_theme)
 
         state["module_b_audio"]["bgm_automation_map"] = {
             "total_segments": len(bgm_automation_map),
+            "video_format": video_format,
+            "global_theme": global_theme,
             "automation_curves": bgm_automation_map
         }
         
-        # Pipeline Handshake
-        state["pipeline_status"]["last_active_agent"] = "Ai_Agent_18"
-        state["pipeline_status"]["next_agent"] = "Ai_Agent_19"
+        # 3. OmniMatrix Pipeline Handshake
+        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
+        # Heading towards the Final Audio Compiler/Mixer
+        state["orchestrator_matrix"]["next_agent"] = "Ai_Agent_19"
         
         self._save_matrix_state(state)
-        self.log("Success! Adaptive BGM parameters mapped into OmniMatrix. Handoff to Agent 19.")
+        self.log(f"Success! {len(bgm_automation_map)} limitless BGM parameters mapped into OmniMatrix. Handoff to Ai_Agent_19.", "SUCCESS")
 
 if __name__ == "__main__":
     matcher = AiAgent18AdaptiveBgmVibeMatcher()
     matcher.process_bgm_vibe_automation()
-    print("\n--- OMNIMATRIX MODULE B: AGENT 18 COMPLETE ---")
