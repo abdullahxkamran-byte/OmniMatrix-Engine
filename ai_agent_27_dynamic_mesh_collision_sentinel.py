@@ -1,6 +1,6 @@
 # ==============================================================================
 # Ai_Agent_27_AAA_Dynamic_Mesh_Collision_Sentinel.py
-# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL ANTI-CLIPPING)
+# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL ANTI-CLIPPING & IMPACT TRACKER)
 # ==============================================================================
 
 import os
@@ -9,6 +9,7 @@ import sys
 import json
 import subprocess
 import urllib.request
+import urllib.error
 
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
@@ -17,16 +18,17 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
+                    # RULE 6: Universal Uppercase API Keys
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
 class AiAgent27DynamicMeshCollisionSentinel:
     def __init__(self):
-        # RULE 8: AI vs NON-AI NAMING
+        # RULE 8: STRICT AI NAMING
         self.agent_name = "Ai_Agent_27_Dynamic_Mesh_Collision_Sentinel"
         
-        # UNIVERSAL PATH ISOLATION
+        # RULE 2: UNIVERSAL PATH ISOLATION
         self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
         self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
         self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
@@ -45,9 +47,18 @@ class AiAgent27DynamicMeshCollisionSentinel:
     def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
+    def _load_master_config(self):
+        default_config = {"global_style": "anime", "blender_executable": "blender"}
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
+
     def _load_upstream_action(self, scene_name):
-        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
         context = {"action_description": "Characters standing close to each other."}
+        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
         if os.path.exists(script_file):
             try:
                 with open(script_file, "r", encoding="utf-8") as f:
@@ -71,26 +82,41 @@ class AiAgent27DynamicMeshCollisionSentinel:
     def _fallback_sentinel(self):
         return {
             "intentional_contact": False,
+            "has_major_impact": False,
+            "impact_frame": 0,
             "minimum_distance_threshold": 0.5,
+            "interpolation_style": "BEZIER",
             "rationale": "Fallback: Default anti-clipping distance."
         }
 
-    # LIMITLESS AI SENTINEL BRAIN
-    def _query_sentinel_brain(self, scene_name, context):
-        self.log(f"Consulting Collision Sentinel for '{scene_name}'...", "INFO")
+    # LIMITLESS AI SENTINEL BRAIN (ANIME VS REALISM AWARE)
+    def _query_sentinel_brain(self, scene_name, context, style):
+        self.log(f"Consulting Collision Sentinel for '{scene_name}' (Style: {style.upper()})...", "INFO")
         
         ai_prompt = f"""
         You are the AAA Collision Sentinel for the OmniMatrix Engine.
         Action Narrative: {context['action_description']}
+        Visual Style: {style.upper()}
         
-        MISSION: Determine if the characters are SUPPOSED to touch/clip (e.g., punching, hugging, grappling). 
-        If they are just talking, walking, or standing, they should NEVER overlap (intentional_contact = false).
+        MISSION 1: ANTI-CLIPPING
+        Determine if the characters are SUPPOSED to touch/clip (e.g., punching, hugging, sword clash). 
+        If they are just talking or walking, they should NEVER overlap (`intentional_contact` = false).
+        
+        MISSION 2: IMPACT TRACKING FOR AGENT 28
+        If they DO clash/punch, set `has_major_impact` to true and estimate the `impact_frame` (e.g., frame 24 or 30).
+        
+        STYLE RULES:
+        - If ANIME: Pushback should be snappy (`interpolation_style`: "LINEAR").
+        - If REALISTIC: Pushback should be smooth and physical (`interpolation_style`: "BEZIER").
         
         Return ONLY valid JSON:
         {{
-            "intentional_contact": boolean (true ONLY if physical contact is part of the action),
-            "minimum_distance_threshold": float (0.6 for talking/idle, 0.1 for combat proximity),
-            "rationale": "Why contact is allowed or blocked."
+            "intentional_contact": boolean,
+            "has_major_impact": boolean,
+            "impact_frame": integer (0 if no impact),
+            "minimum_distance_threshold": float (0.6 for talking, 0.1 for combat),
+            "interpolation_style": "LINEAR" or "BEZIER",
+            "rationale": "Brief reasoning"
         }}
         """
 
@@ -107,11 +133,13 @@ class AiAgent27DynamicMeshCollisionSentinel:
 
         return self._fallback_sentinel()
 
-    # THE BLENDER ANTI-CLIPPING ENGINE
-    def _generate_blender_script(self, blend_file_path, sentinel_data):
+    # GOD-LEVEL BLENDER SCRIPT: F-CURVE INTERPOLATION & CLOTH PHYSICS
+    def _generate_blender_script(self, blend_file_path, sentinel_data, style):
         safe_blend_path = blend_file_path.replace("\\", "/")
         is_contact_intended = "True" if sentinel_data.get("intentional_contact", False) else "False"
         min_dist = float(sentinel_data.get("minimum_distance_threshold", 0.5))
+        interp_style = sentinel_data.get("interpolation_style", "BEZIER")
+        is_anime = "True" if "anime" in style else "False"
         
         script_content = f"""
 import bpy
@@ -122,19 +150,19 @@ try:
 
     contact_intended = {is_contact_intended}
     min_distance = {min_dist}
+    interp_type = '{interp_style}'
+    is_anime = {is_anime}
     
     armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
     
+    # 1. DYNAMIC PROXIMITY SCANNER & PUSHBACK
     if len(armatures) >= 2 and not contact_intended:
-        # 1. DYNAMIC PROXIMITY SCANNER (Character to Character)
-        # Scan through the animation timeline
         start_frame = bpy.context.scene.frame_start
         end_frame = bpy.context.scene.frame_end
         
-        for frame in range(start_frame, end_frame + 1, 5): # Check every 5 frames for efficiency
+        for frame in range(start_frame, end_frame + 1, 3): # High precision scan
             bpy.context.scene.frame_set(frame)
             
-            # Compare distance between Root bones of the first two characters
             char1 = armatures[0]
             char2 = armatures[1]
             
@@ -143,31 +171,41 @@ try:
             distance = (loc1 - loc2).length
             
             if distance < min_distance:
-                # CLIPPING DETECTED! Inject Corrective Pushback Keyframe
-                print(f"[SENTINEL WARNING] Clipping detected at frame {{frame}}. Pushing apart.")
-                
-                # Calculate push vector away from each other
+                # CALCULATE REPULSION VECTOR
                 direction = (loc1 - loc2).normalized()
                 correction_amount = (min_distance - distance) / 2.0
                 
+                # Push them apart to maintain the "Infinity Barrier"
                 char1.location += direction * correction_amount
                 char2.location -= direction * correction_amount
                 
                 char1.keyframe_insert(data_path="location", frame=frame)
                 char2.keyframe_insert(data_path="location", frame=frame)
                 
-    # 2. INTERNAL SELF-CLIPPING FIXER (Arms clipping into Body)
-    # Using Blender's Shrinkwrap & Collision trick for Character clothing/limbs
+                # Apply Style-Specific Interpolation (Snappy vs Smooth)
+                for char in [char1, char2]:
+                    if char.animation_data and char.animation_data.action:
+                        for fcurve in char.animation_data.action.fcurves:
+                            if fcurve.data_path == "location":
+                                for kf in fcurve.keyframe_points:
+                                    if kf.co[0] == frame:
+                                        kf.interpolation = interp_type
+                
+    # 2. INTERNAL SELF-CLIPPING FIXER (Anime vs Realism Cloth)
     for arm in armatures:
-        # Find meshes parented to this armature
         meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent == arm]
-        
         for mesh in meshes:
-            # Enable Self-Collision in Cloth/Physics modifiers if Agent 26 added physics
             for mod in mesh.modifiers:
                 if mod.type == 'CLOTH':
                     mod.collision_settings.use_self_collision = True
-                    mod.collision_settings.self_distance_min = 0.015
+                    # Realism requires higher quality collision steps to prevent arm-torso clipping
+                    if not is_anime:
+                        mod.collision_settings.self_distance_min = 0.015
+                        mod.collision_settings.collision_quality = 5
+                    else:
+                        # Anime prioritizes speed and sharp folds
+                        mod.collision_settings.self_distance_min = 0.02
+                        mod.collision_settings.collision_quality = 2
     
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
     print("OMNIMATRIX_BLENDER_SUCCESS")
@@ -183,8 +221,9 @@ except Exception as e:
         return script_path
 
     def execute_pipeline(self):
-        self.log("Initializing Agent 27 (Dynamic Mesh Collision Sentinel)...", "INFO")
+        self.log("Initializing Agent 27 (Dynamic Mesh Collision Sentinel V2)...", "INFO")
 
+        # RULE 7: ATOMIC HANDSHAKE
         state = {}
         if os.path.exists(self.state_file):
             try:
@@ -196,11 +235,8 @@ except Exception as e:
             self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
             sys.exit(0)
 
-        config = {}
-        if os.path.exists(self.config_file):
-            with open(self.config_file, "r") as f:
-                config = json.load(f)
-        
+        config = self._load_master_config()
+        global_style = config.get("global_style", "anime").lower()
         blender_executable = config.get("blender_executable", "blender")
         master_blueprint = {}
         
@@ -214,11 +250,11 @@ except Exception as e:
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
                 context = self._load_upstream_action(scene_name)
-                sentinel_data = self._query_sentinel_brain(scene_name, context)
+                sentinel_data = self._query_sentinel_brain(scene_name, context, global_style)
                 
                 self.log(f"[{scene_name}] Sentinel Status: {sentinel_data['rationale']}", "INFO")
                 
-                script_path = self._generate_blender_script(blend_file_path, sentinel_data)
+                script_path = self._generate_blender_script(blend_file_path, sentinel_data, global_style)
                 command = [blender_executable, "-b", "-P", script_path]
                 
                 try:
@@ -234,17 +270,18 @@ except Exception as e:
                 if os.path.exists(script_path):
                     os.remove(script_path)
 
+        # Save blueprint so Agent 28 (Hit Stop) can read the exact 'impact_frame'
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        # Update Pipeline
+        # RULE 7: Update Pipeline Handshake
         state["last_active_agent"] = self.agent_name
         state["next_agent"] = "Ai_Agent_28_Anime_Hit_Stop_Frame_Scheduler" 
         
         with open(self.state_file, "w") as f:
             json.dump(state, f, indent=4)
             
-        self.log(f"Sentinel Complete! Meshes are protected. Handoff to {state['next_agent']}.", "SUCCESS")
+        self.log(f"Sentinel Complete! Meshes are protected & Impacts mapped. Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
     sentinel = AiAgent27DynamicMeshCollisionSentinel()
