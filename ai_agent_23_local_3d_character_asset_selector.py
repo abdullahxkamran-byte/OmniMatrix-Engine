@@ -1,7 +1,14 @@
+# ==============================================================================
+# Ai_Agent_23_Universal_Character_Asset_Selector.py
+# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL V2.1: FULLY DYNAMIC)
+# ==============================================================================
+
 import os
 import re
 import sys
 import json
+import math
+import hashlib
 import subprocess
 import urllib.request
 import urllib.error
@@ -17,265 +24,362 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class Universal3DCharacterAssetSelector:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 23: universal_character_asset_placer"
+class AiAgent23UniversalCharacterAssetSelector:
+    def __init__(self):
+        # RULE 8: AI vs NON-AI NAMING
+        self.agent_name = "Ai_Agent_23_Dynamic_Casting_Director"
         
-        self.workspace_dir = workspace_dir
-        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        # RULE 2: UNIVERSAL PATH ISOLATION
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_c_dir = os.path.join(self.workspace_dir, "Module_C_Heavy_Infantry")
         
-        self.char_lib_dir = os.path.join(local_library_dir, "3d_characters")
-        self.manifest_path = os.path.join(self.char_lib_dir, "character_manifest.json")
+        # Limitless Asset Library (Scans automatically, no hardcoding)
+        self.char_lib_dir = os.path.join(self.workspace_dir, "Omni_Local_Assets", "3d_characters")
+        self.manifest_path = os.path.join(self.char_lib_dir, "dynamic_character_manifest.json")
+        self.output_blueprint = os.path.join(self.module_c_dir, "23_character_placements.json")
         
-        self.output_blueprint = os.path.join(self.workspace_dir, "23_universal_character_placements.json")
-        self.blender_path = blender_path
+        # System States (RULE 7)
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_dir, "global_config.json")
         
-        # GEMINI API INTEGRATION RESTORED!
+        # APIs (RULE 6)
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.workspace_dir, self.script_dir, self.env_dir, self.char_lib_dir]:
+        for d in [self.script_dir, self.env_dir, self.module_c_dir, self.char_lib_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
-                
-        self._ensure_manifest_exists()
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
-    def _load_master_config(self):
-        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("global_style", "realistic").lower()
-            except Exception as e:
-                self.log_message(f"Master config read warning: {str(e)}", "WARNING")
-        return "realistic"
-
-    def _ensure_manifest_exists(self):
-        if not os.path.exists(self.manifest_path):
-            mock_data = {
-                "characters": [
-                    {"id": "char_001", "name": "Goku", "file_name": "ch_goku.blend", "tags": ["anime", "fighter", "saiyan", "dbz"]},
-                    {"id": "char_002", "name": "Naruto", "file_name": "ch_naruto.blend", "tags": ["anime", "ninja", "shinobi", "action"]},
-                    {"id": "char_003", "name": "Gojo Satoru", "file_name": "ch_gojo.blend", "tags": ["anime", "blindfold", "tall", "sorcerer"]},
-                    {"id": "char_004", "name": "Killua", "file_name": "ch_killua.blend", "tags": ["anime", "assassin", "lightning", "hunter"]},
-                    {"id": "char_005", "name": "Sasuke", "file_name": "ch_sasuke.blend", "tags": ["anime", "ninja", "dark", "sword"]}
-                ]
-            }
-            with open(self.manifest_path, "w", encoding="utf-8") as f:
-                json.dump(mock_data, f, indent=4)
+    # LIMITLESS FEATURE: DYNAMIC FOLDER SCANNING (No Hardcoded Names)
+    def _build_dynamic_manifest(self):
+        chars = []
+        if os.path.exists(self.char_lib_dir):
+            for filename in os.listdir(self.char_lib_dir):
+                if filename.endswith(".blend"):
+                    # Auto-generate semantic tags from filename (e.g., ch_evil_boss_v2.blend -> [evil, boss])
+                    clean_name = filename.replace(".blend", "").replace("ch_", "")
+                    tags = re.findall(r'[a-zA-Z]+', clean_name.lower())
+                    char_id = hashlib.md5(filename.encode()).hexdigest()[:8] # Unique ID to prevent name collisions
+                    
+                    chars.append({
+                        "id": f"char_{char_id}",
+                        "name": clean_name.replace("_", " ").title(),
+                        "file_name": filename,
+                        "tags": tags
+                    })
+        
+        # Failsafe if folder is empty
+        if not chars:
+            chars.append({"id": "char_proxy_000", "name": "Procedural Proxy", "file_name": "dummy_proxy.blend", "tags": ["generic", "proxy", "dummy"]})
             
-            for char in mock_data["characters"]:
-                dummy_path = os.path.join(self.char_lib_dir, char["file_name"])
-                if not os.path.exists(dummy_path):
-                    with open(dummy_path, "w") as f:
-                        f.write("OMNIMATRIX DUMMY BLEND FILE")
+        manifest = {"characters": chars}
+        with open(self.manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=4)
+        return manifest
 
+    def _load_master_config(self):
+        default_config = {"global_style": "realistic", "blender_executable": "blender"}
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
+
+    # MULTI-CHARACTER DEMAND PARSER
     def _load_character_demands(self, scene_name):
         script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
-        demand = "Main protagonist standing in the center"
-        
+        # Now returns a LIST of demands for multiple characters
+        demands = ["A protagonist standing in the center"]
         if os.path.exists(script_file):
             try:
                 with open(script_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    demand = data.get("character_details", data.get("action_description", demand))
-            except Exception as e:
-                self.log_message(f"Script parse error: {str(e)}", "WARNING")
-        return demand
+                    if "characters_in_scene" in data and isinstance(data["characters_in_scene"], list):
+                        demands = data["characters_in_scene"]
+                    else:
+                        demands = [data.get("action_description", demands[0])]
+            except: pass
+        return demands
 
     def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _query_ai_matcher(self, scene_name, demand, manifest, style):
-        self.log_message(f"Matching Asset via Gemini for '{scene_name}' (Style: {style.upper()})...", "INFO")
-        
-        if not self.gemini_api_key:
-            self.log_message("No Gemini API Key found. Using fallback.", "WARNING")
-            return self._fallback_matcher(manifest)
-
-        ai_prompt = (
-            f"You are the AAA 3D Asset Supervisor. Project Style: '{style.upper()}'.\n"
-            f"Scene Name: {scene_name}\n"
-            f"Character Demand from Script: {demand}\n\n"
-            f"Local Assets Database: {json.dumps(manifest['characters'])}\n\n"
-            "CRITICAL: Match the character name STRICTLY. Do not hallucinate characters.\n"
-            "If the exact character is missing, set 'generate_new_asset' to true.\n"
-            "Return EXACTLY 1 raw JSON object:\n"
-            "{\n"
-            "  \"matched_id\": \"char_xyz\" or \"NONE\",\n"
-            "  \"matched_file\": \"ch_name.blend\" or \"NONE\",\n"
-            "  \"confidence\": 0.99,\n"
-            "  \"generate_new_asset\": false,\n"
-            "  \"reason\": \"Character name perfectly matched the demand.\"\n"
-            "}"
-        )
-
         try:
-            # Using Gemini's native JSON enforcement
-            payload = {
-                "contents": [{"parts": [{"text": ai_prompt}]}], 
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                cleaned = self._clean_json_response(res_text)
-                return json.loads(cleaned)
-        except Exception as e:
-            self.log_message(f"Gemini API Failed: {str(e)}. Using fallback.", "WARNING")
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_text, flags=re.DOTALL).strip()
+            return json.loads(cleaned)
+        except:
+            start = raw_text.find("[") if "[" in raw_text else raw_text.find("{")
+            end = raw_text.rfind("]") if "]" in raw_text else raw_text.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_text[start:end+1])
+                except: pass
+            return None
 
-        return self._fallback_matcher(manifest)
+    # RULE 10: OFFLINE MATH/LOGIC FALLBACK FOR MULTIPLE CHARACTERS
+    def _fuzzy_fallback_matcher(self, demands, manifest):
+        results = []
+        for i, demand in enumerate(demands):
+            demand_words = set(re.findall(r'\w+', demand.lower()))
+            best_match = manifest["characters"][0]
+            highest_score = -1
+            
+            for char in manifest.get("characters", []):
+                tags_words = set([t.lower() for t in char["tags"]] + char["name"].lower().split())
+                score = len(demand_words.intersection(tags_words))
+                if score > highest_score:
+                    highest_score = score
+                    best_match = char
+                    
+            # Auto-spacing logic for multiple characters on X-axis
+            offset_x = (i * 2.0) - ((len(demands)-1) * 1.0)
+            
+            results.append({
+                "demand": demand,
+                "matched_id": best_match["id"],
+                "matched_file": best_match["file_name"],
+                "generate_new_asset": (highest_score == 0),
+                "spawn_offset_xyz": [offset_x, 0.0, 0.0]
+            })
+        return results
 
-    def _fallback_matcher(self, manifest):
-        char = manifest["characters"][0] if manifest["characters"] else {"id": "NONE", "file_name": "NONE"}
-        return {
-            "matched_id": char["id"], "matched_file": char.get("file_name", "NONE"),
-            "confidence": 1.0, "generate_new_asset": False, "reason": "Procedural Fallback match"
-        }
+    # RULE 6: MULTI-ENTITY SEMANTIC AI
+    def _query_ai_matcher(self, scene_name, demands, manifest, style):
+        self.log(f"Consulting AAA Casting AI for '{scene_name}' (Characters: {len(demands)})...", "INFO")
+        
+        ai_prompt = f"""
+        You are an elite Casting Director AI. Style: '{style.upper()}'.
+        Scene requires the following characters: {json.dumps(demands)}
+        
+        Local Assets Database (Dynamically Scanned): {json.dumps(manifest['characters'])}
+        
+        MISSION: For EACH demanded character, match them to the most logical asset in the database. 
+        If two identical characters are requested, they can use the same file. 
+        Set realistic 'spawn_offset_xyz' coordinates so they aren't standing inside each other (e.g. X = -2 for char 1, X = 2 for char 2).
+        
+        Return exactly a JSON ARRAY of objects:
+        [
+            {{
+                "demand": "Original string",
+                "matched_id": "id from database",
+                "matched_file": "exact_file_name.blend",
+                "generate_new_asset": false (true ONLY if no logical match exists at all),
+                "spawn_offset_xyz": [X, Y, Z]
+            }}
+        ]
+        """
 
-    def _generate_blender_script(self, target_stage_blend, character_blend_path, style):
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self._clean_json_response(res_text)
+                    if isinstance(parsed, list): return parsed
+            except: pass
+
+        self.log("AI API failed or returned bad format. Engaging Offline Multi-Matcher.", "WARNING")
+        return self._fuzzy_fallback_matcher(demands, manifest)
+
+    # RULE 13 (Multi-Socket Protocol), RULE 12 (Kinetic), Collision Avoidance
+    def _generate_blender_script(self, target_stage_blend, match_data, style):
         safe_stage = target_stage_blend.replace("\\", "/")
-        safe_char = character_blend_path.replace("\\", "/")
+        matches_json = json.dumps(match_data)
+        safe_lib_dir = self.char_lib_dir.replace("\\", "/")
         
         script_content = f"""
 import bpy
 import os
+import json
 
 try:
     bpy.ops.wm.open_mainfile(filepath="{safe_stage}")
 
-    char_path = "{safe_char}"
-    tracker = bpy.data.objects.get("OMNIMATRIX_Focus_Target")
+    matches = json.loads('''{matches_json}''')
+    char_lib = "{safe_lib_dir}"
+    focus_target = bpy.data.objects.get("OMNIMATRIX_Focus_Target")
     
-    # Clean previous characters if agent is re-run
+    # Clean old characters safely
     for obj in bpy.data.objects:
-        if obj.name.startswith("OMNI_CHAR_"):
+        if obj.name.startswith("CHAR_SOCKET_") or obj.name.startswith("OMNI_CHAR_"):
             bpy.data.objects.remove(obj, do_unlink=True)
             
-    is_dummy = not os.path.exists(char_path) or "OMNIMATRIX" in open(char_path, 'r', errors='ignore').read(25)
+    head_locations = []
 
-    if is_dummy:
-        print("WARNING: Using Procedural Proxy Mannequin.")
-        bpy.ops.mesh.primitive_cylinder_add(radius=0.5, depth=2.0, location=(0, 0, 1.0))
-        body = bpy.context.active_object
-        body.name = "OMNI_CHAR_Proxy_Body"
-        
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.4, location=(0, 0, 2.4))
-        head = bpy.context.active_object
-        head.name = "OMNI_CHAR_Proxy_Head"
-        head.parent = body
-        
-        mat = bpy.data.materials.new(name="Proxy_Mat")
-        mat.use_nodes = True
-        bsdf = mat.node_tree.nodes.get("Principled BSDF")
-        if '{style}' == 'anime':
-            bsdf.inputs['Base Color'].default_value = (1.0, 0.0, 0.5, 1.0) 
-            bsdf.inputs['Roughness'].default_value = 1.0
-        else:
-            bsdf.inputs['Base Color'].default_value = (0.2, 0.2, 0.2, 1.0) 
-            bsdf.inputs['Metallic'].default_value = 1.0
-        body.data.materials.append(mat)
-        head.data.materials.append(mat)
-        
-        if tracker:
-            tracker.location = head.location
-            tracker.parent = head
+    for index, char_data in enumerate(matches):
+        if char_data.get("generate_new_asset"):
+            continue
             
-    else:
-        # AAA APPEND LOGIC: Collections Priority
-        appended = False
-        with bpy.data.libraries.load(char_path, link=False) as (data_from, data_to):
-            col_names = [c for c in data_from.collections if c.startswith("COL_CH_") or c.startswith("CH_")]
-            if col_names:
-                data_to.collections = col_names
-                appended = True
-            else:
-                obj_names = [o for o in data_from.objects if o.startswith("CH_") or o.startswith("Rig")]
-                data_to.objects = obj_names
-                appended = True
+        file_name = char_data.get("matched_file")
+        char_path = os.path.join(char_lib, file_name)
+        offset = char_data.get("spawn_offset_xyz", [0,0,0])
+        
+        # UNIQUE SOCKET FOR EVERY CHARACTER (Collision Protection)
+        socket_name = f"CHAR_SOCKET_{{index}}"
+        bpy.ops.object.empty_add(type='CUBE', radius=1.0, location=(offset[0], offset[1], offset[2]))
+        socket = bpy.context.active_object
+        socket.name = socket_name
 
-        if appended:
+        is_valid = os.path.exists(char_path) and "OMNIMATRIX DUMMY" not in open(char_path, 'r', errors='ignore').read(50)
+
+        if not is_valid:
+            print(f"Forging Procedural Proxy for Socket {{index}}")
+            bpy.ops.mesh.primitive_cylinder_add(radius=0.4, depth=1.6, location=(offset[0], offset[1], offset[2] + 0.8))
+            body = bpy.context.active_object
+            body.name = f"OMNI_CHAR_{{index}}_Body"
+            body.parent = socket
+            
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.3, location=(offset[0], offset[1], offset[2] + 1.8))
+            head = bpy.context.active_object
+            head.name = f"OMNI_CHAR_{{index}}_Head"
+            head.parent = body
+            
+            mat = bpy.data.materials.new(name=f"Proxy_Mat_{{index}}")
+            mat.use_nodes = True
+            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            bsdf.inputs['Base Color'].default_value = (0.2 * index, 0.5, 0.8 - (0.2 * index), 1.0)
+            body.data.materials.append(mat)
+            head.data.materials.append(mat)
+            
+            head_locations.append(head)
+            
+        else:
+            # MULTI-CHARACTER APPEND LOGIC WITH NAMESPACE ISOLATION
+            print(f"Appending Real Rig for Socket {{index}}...")
+            pre_append_objects = set(bpy.data.objects)
+            
+            with bpy.data.libraries.load(char_path, link=False) as (data_from, data_to):
+                # Prefer Collections, fallback to objects
+                col_names = [c for c in data_from.collections if "CH_" in c or "Char" in c]
+                if col_names: data_to.collections = col_names
+                else: data_to.objects = [o for o in data_from.objects if o.type in ['ARMATURE', 'MESH']]
+
+            appended_objects = []
+            
+            # Link Collections
             for col in data_to.collections:
                 if col.name not in bpy.context.scene.collection.children:
                     bpy.context.scene.collection.children.link(col)
-                    
+                    for obj in col.objects:
+                        appended_objects.append(obj)
+                        
+            # Link standalone objects
             for obj in data_to.objects:
                 if obj and obj.name not in bpy.context.scene.collection.objects:
                     bpy.context.scene.collection.objects.link(obj)
-                    
-            rig = None
-            for obj in bpy.context.scene.objects:
-                if obj.type == 'ARMATURE' and ("Rig" in obj.name or "CH_" in obj.name):
-                    rig = obj
-                    break
-                    
-            if rig and tracker:
-                tracker.location = (rig.location.x, rig.location.y, rig.location.z + 1.6)
-                
-        print("SUCCESS: Character Rig integrated.")
+                    appended_objects.append(obj)
+            
+            post_append_objects = set(bpy.data.objects) - pre_append_objects
+            appended_objects.extend(list(post_append_objects))
 
+            # Find rig and rename everything to prevent collisions (e.g., if appending 2 Gokus)
+            rig = None
+            for obj in set(appended_objects):
+                obj.name = f"OMNI_CHAR_{{index}}_{{obj.name}}"
+                if obj.type == 'ARMATURE':
+                    rig = obj
+                    
+            if rig:
+                rig.parent = socket
+                rig.location = (0,0,0)
+                # Head height approximation for camera target
+                bpy.ops.object.empty_add(type='SPHERE', radius=0.1, location=(offset[0], offset[1], offset[2] + 1.6))
+                head_proxy = bpy.context.active_object
+                head_proxy.name = f"Head_Tracker_{{index}}"
+                head_proxy.parent = rig
+                head_locations.append(head_proxy)
+
+    # --- CINEMATIC MULTI-TARGET FOCUS (Rule 13 Upgrade) ---
+    # If there are multiple characters, camera focus should be the center point between them!
+    if focus_target and head_locations:
+        for c in focus_target.constraints:
+            focus_target.constraints.remove(c)
+            
+        if len(head_locations) == 1:
+            copy_loc = focus_target.constraints.new('COPY_LOCATION')
+            copy_loc.target = head_locations[0]
+        else:
+            # Create a median point tracker for epic anime showdown shots
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,0))
+            median_empty = bpy.context.active_object
+            median_empty.name = "OMNIMATRIX_Fight_Center"
+            
+            for head in head_locations:
+                copy = median_empty.constraints.new('COPY_LOCATION')
+                copy.target = head
+                copy.influence = 1.0 / len(head_locations) # Distribute weight evenly
+                
+            copy_focus = focus_target.constraints.new('COPY_LOCATION')
+            copy_focus.target = median_empty
+
+    print("OMNIMATRIX_BLENDER_SUCCESS")
     bpy.ops.wm.save_as_mainfile(filepath="{safe_stage}")
 
 except Exception as e:
-    print(f"FAILED TO APPEND CHARACTER: {{str(e)}}")
+    print(f"OMNIMATRIX_ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join(self.workspace_dir, "temp_append_script.py")
+        script_path = os.path.join(self.module_c_dir, "temp_multi_char_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
     def place_characters_in_stages(self):
-        global_style = self._load_master_config()
-        self.log_message(f"Initializing Universal Asset Selector [{global_style.upper()}]...", "INFO")
+        self.log("Initializing Dynamic Multi-Character Casting Director...", "INFO")
+
+        state = {}
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+            except: pass
+                
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        # 1. Dynamically read directory (No Hardcoding)
+        manifest = self._build_dynamic_manifest()
         
-        with open(self.manifest_path, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
-            
+        config = self._load_master_config()
+        blender_executable = config.get("blender_executable", "blender")
         master_blueprint = {}
         
+        if not os.path.exists(self.env_dir) or not os.listdir(self.env_dir):
+            self.log("No 3D environments found. Exiting...", "WARNING")
+            sys.exit(0)
+        
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                scene_name = filename.replace("_stage.blend", "")
+            if filename.endswith(".blend"):
+                scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
-                demand = self._load_character_demands(scene_name)
-                match = self._query_ai_matcher(scene_name, demand, manifest, global_style)
+                # 2. Get multiple character demands
+                demands = self._load_character_demands(scene_name)
                 
-                if match.get("generate_new_asset", False):
-                    self.log_message(f"[{scene_name}] Asset Missing Locally. Handing over to Module H.", "WARNING")
-                    master_blueprint[scene_name] = {"status": "Awaiting Module H Generation", "demand": demand}
-                    continue
+                # 3. AI Matches array of characters
+                matches = self._query_ai_matcher(scene_name, demands, manifest, config.get("global_style", "realistic"))
                 
-                self.log_message(f"[{scene_name}] Selected '{match.get('matched_file')}'", "INFO")
-                char_blend_path = os.path.join(self.char_lib_dir, match.get("matched_file", ""))
+                self.log(f"[{scene_name}] Forging {len(matches)} Characters into Scene...", "INFO")
                 
-                script_path = self._generate_blender_script(blend_file_path, char_blend_path, global_style)
+                script_path = self._generate_blender_script(blend_file_path, matches, config)
+                command = [blender_executable, "-b", "-P", script_path]
                 
-                command = [self.blender_path, "-b", "-P", script_path]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0 and "SUCCESS" in result.stdout:
-                        self.log_message(f"Character successfully injected into {filename}", "SUCCESS")
-                        master_blueprint[scene_name] = match
+                    if "OMNIMATRIX_BLENDER_SUCCESS" in result.stdout:
+                        self.log(f"Dynamic Cast successfully injected into {filename}", "SUCCESS")
+                        master_blueprint[scene_name] = matches
                     else:
-                        self.log_message(f"Blender failed: {result.stdout[-300:]}", "ERROR")
+                        self.log(f"Blender failed: {result.stdout[-300:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Execution failed: {str(e)}", "CRITICAL")
+                    self.log(f"Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
@@ -283,8 +387,13 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        self.log_message("Universal Character Integration Complete.", "INFO")
+        state["last_active_agent"] = self.agent_name
+        state["next_agent"] = "Ai_Agent_24_Kinetic_Animation_Retargeter"
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+        
+        self.log(f"Dynamic Limitless Casting Complete! Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    selector = Universal3DCharacterAssetSelector()
+    selector = AiAgent23UniversalCharacterAssetSelector()
     selector.place_characters_in_stages()
