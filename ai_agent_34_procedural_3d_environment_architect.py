@@ -1,6 +1,6 @@
 # ==============================================================================
-# Ai_Agent_34_Cinematic_Environment_Architect.py
-# MODULE D: Atmosphere & Cinematography - (GOD-LEVEL TERRAIN & VOLUMETRICS)
+# ai_agent_34_procedural_3d_environment_architect.py
+# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL TERRAIN & PROP SCATTERING)
 # ==============================================================================
 
 import os
@@ -23,18 +23,19 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class AiAgent34CinematicEnvironmentArchitect:
+class AiAgent34Procedural3DEnvironmentArchitect:
     def __init__(self):
-        # RULE 8: STRICT AI NAMING
-        self.agent_name = "Ai_Agent_34_Cinematic_Environment_Architect"
+        # RULE 8: STRICT AI NAMING (Fixed to match Roster)
+        self.agent_name = "ai_agent_34_procedural_3d_environment_architect"
         
         # RULE 2: UNIVERSAL PATH ISOLATION (No Hardcoded Drives)
         self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
         self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
         self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
-        self.module_d_dir = os.path.join(self.workspace_dir, "Module_D_Atmosphere")
+        # FIXED: Brought back to Module C
+        self.module_c_dir = os.path.join(self.workspace_dir, "Module_C_Heavy_Infantry")
         
-        self.output_blueprint = os.path.join(self.module_d_dir, "34_environment_lighting_blueprint.json")
+        self.output_blueprint = os.path.join(self.module_c_dir, "34_procedural_env_blueprint.json")
         self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
         self.config_file = os.path.join(self.workspace_dir, "global_config.json")
         
@@ -42,7 +43,7 @@ class AiAgent34CinematicEnvironmentArchitect:
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.script_dir, self.env_dir, self.module_d_dir]:
+        for d in [self.script_dir, self.env_dir, self.module_c_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
@@ -59,13 +60,11 @@ class AiAgent34CinematicEnvironmentArchitect:
         return default_config
 
     def _load_upstream_context(self):
-        """Loads story/mood data from Master Matrix State (Rule 7)"""
+        """Loads story/mood data from Master Matrix State"""
         context = {
             "mood": "EPIC",
             "visual_description": "Desolate battleground",
-            "start_frame": 1
         }
-        
         if os.path.exists(self.state_file):
             try:
                 with open(self.state_file, "r", encoding="utf-8") as f:
@@ -75,7 +74,6 @@ class AiAgent34CinematicEnvironmentArchitect:
                     if "scene_description" in data:
                         context["visual_description"] = data["scene_description"]
             except: pass
-                
         return context
 
     def _clean_json_response(self, raw_text):
@@ -94,40 +92,36 @@ class AiAgent34CinematicEnvironmentArchitect:
         is_anime = "anime" in style.lower()
         return {
             "environment_preset": "neo_tokyo_cyberpunk" if is_anime else "apocalyptic_ruins",
-            "sun_intensity_lux": 15.0 if is_anime else 3.5,
-            "sun_color": [1.0, 0.9, 0.8] if is_anime else [0.6, 0.7, 0.9], # Warm vs Cold
-            "volumetric_fog_density": 0.02 if is_anime else 0.15, # Realism has heavy fog
             "procedural_prop_count": 30,
-            "ground_subdivision_level": 4,
-            "emission_strength": 5.0 if is_anime else 0.5
+            "ground_subdivision_level": 3 if is_anime else 5, # Realism needs more terrain detail
+            "displacement_strength": 0.5 if is_anime else 1.5,
+            "emission_strength": 5.0 if is_anime else 0.0
         }
 
-    # LIMITLESS ARCHITECT & LIGHTING AI
+    # PURE ENVIRONMENT AI BRAIN (No Lighting overlap)
     def _query_architect_brain(self, scene_name, context, style):
-        self.log(f"Calculating World Geometry & Cinematography for '{scene_name}'...", "INFO")
+        self.log(f"Calculating Procedural Geometry & Layout for '{scene_name}'...", "INFO")
 
         ai_prompt = f"""
-        You are the Master Procedural Environment & Lighting Architect for the OmniMatrix Engine.
+        You are the Master Procedural 3D Environment Architect for the OmniMatrix Engine.
         Scene Description: "{context['visual_description']}"
         Mood: {context['mood']}
         Visual Style: {style.upper()}
         
         MISSION:
-        Design the procedural environment layout AND volumetric lighting settings.
+        Design the procedural terrain layout and prop scattering logic ONLY. (Lighting is handled by Agent 22).
         
         STYLE RULES (Rule 13):
-        - If ANIME: Use high `sun_intensity_lux` (vibrant colors), low `volumetric_fog_density` (clear skies), and high `emission_strength` for glowing cyberpunk elements or bright grass.
-        - If REALISTIC: Use lower `sun_intensity_lux`, higher `volumetric_fog_density` (moody atmosphere), and realistic `sun_color` (RGB format).
+        - If ANIME: Use stylized/smooth terrain (lower displacement), 'neo_tokyo_cyberpunk' or 'grassy_shonen_plains'. Higher emission strength.
+        - If REALISTIC: Use rough, highly displaced terrain (higher subdivision), 'apocalyptic_ruins'. Emission is 0.
         
         Return EXACTLY 1 JSON object:
         {{
             "environment_preset": "neo_tokyo_cyberpunk" or "grassy_shonen_plains" or "apocalyptic_ruins",
-            "sun_intensity_lux": float,
-            "sun_color": [R, G, B] (floats 0.0 to 1.0),
-            "volumetric_fog_density": float,
-            "procedural_prop_count": integer (max 50),
-            "ground_subdivision_level": integer (3 to 6),
-            "emission_strength": float
+            "procedural_prop_count": integer (max 60 for RAM safety),
+            "ground_subdivision_level": integer (2 to 6),
+            "displacement_strength": float (0.1 to 2.0),
+            "emission_strength": float (0.0 to 10.0)
         }}
         """
 
@@ -145,7 +139,7 @@ class AiAgent34CinematicEnvironmentArchitect:
 
         return self._fallback_architect(style)
 
-    # GOD-LEVEL BLENDER SCRIPT: NODES, VOLUMETRICS, TERRAIN
+    # GOD-LEVEL BLENDER SCRIPT: TERRAIN, DISPLACEMENT & INSTANCING
     def _generate_blender_script(self, blend_file_path, layout_data, style):
         safe_blend_path = blend_file_path.replace("\\", "/")
         preset = layout_data.get('environment_preset', 'apocalyptic_ruins')
@@ -159,48 +153,16 @@ try:
     bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
 
     # 1. IDEMPOTENCY: STRICT GARBAGE COLLECTION (Rule 5)
-    # Scrub old terrains, props, lights, and volumetrics
+    # Scrub old terrains and props to prevent overlapping
     for obj in bpy.data.objects:
-        if any(prefix in obj.name for prefix in ["OMNI_Ground", "OMNI_Prop", "OMNI_Sun", "OMNI_Volume"]):
+        if any(prefix in obj.name for prefix in ["OMNI_Ground", "OMNI_Prop"]):
             bpy.data.objects.remove(obj, do_unlink=True)
             
-    # Scrub unused textures and materials to free VRAM
     for mat in bpy.data.materials:
-        if "OMNI_" in mat.name: bpy.data.materials.remove(mat, do_unlink=True)
-    for tex in bpy.data.textures:
-        if "OMNI_" in tex.name: bpy.data.textures.remove(tex, do_unlink=True)
+        if "OMNI_Ground" in mat.name: bpy.data.materials.remove(mat, do_unlink=True)
 
-    # 2. DYNAMIC SUN & LIGHTING
-    sun_data = bpy.data.lights.new(name="OMNI_Sun_Light", type='SUN')
-    sun_data.energy = {layout_data.get('sun_intensity_lux', 10.0)}
-    sun_data.color = {layout_data.get('sun_color', [1.0, 1.0, 1.0])}
-    
-    sun_obj = bpy.data.objects.new(name="OMNI_Sun", object_data=sun_data)
-    bpy.context.collection.objects.link(sun_obj)
-    sun_obj.rotation_euler = (0.785, 0.0, 0.5) # Angled sunset/sunrise lighting
-
-    # 3. ATMOSPHERE: VOLUMETRIC FOG (God Rays Setup)
-    bpy.ops.mesh.primitive_cube_add(size=100.0, location=(0,0,10))
-    vol_cube = bpy.context.active_object
-    vol_cube.name = "OMNI_Volume_Domain"
-    vol_cube.display_type = 'WIRE' # Don't block viewport
-    
-    vol_mat = bpy.data.materials.new(name="OMNI_Volumetric_Mat")
-    vol_mat.use_nodes = True
-    nodes = vol_mat.node_tree.nodes
-    links = vol_mat.node_tree.links
-    
-    nodes.clear() # Clear default principled bsdf
-    vol_node = nodes.new(type='ShaderNodeVolumePrincipled')
-    vol_node.inputs['Density'].default_value = {layout_data.get('volumetric_fog_density', 0.1)}
-    vol_node.inputs['Anisotropy'].default_value = 0.8 if {is_anime} else 0.4 # Anime has sharp god rays
-    
-    out_node = nodes.new(type='ShaderNodeOutputMaterial')
-    links.new(vol_node.outputs['Volume'], out_node.inputs['Volume'])
-    vol_cube.data.materials.append(vol_mat)
-
-    # 4. PROCEDURAL TERRAIN GENERATION
-    subdiv = {layout_data.get('ground_subdivision_level', 3)}
+    # 2. PROCEDURAL TERRAIN GENERATION (Core Function)
+    subdiv = {layout_data.get('ground_subdivision_level', 4)}
     bpy.ops.mesh.primitive_grid_add(size=40.0, x_subdivisions=2**subdiv, y_subdivisions=2**subdiv, location=(0,0,0))
     ground = bpy.context.active_object
     ground.name = "OMNI_Ground_Mesh"
@@ -208,61 +170,69 @@ try:
     sub_mod = ground.modifiers.new(name="Subsurf", type='SUBSURF')
     sub_mod.levels = 2
     
+    # 3. PROCEDURAL DISPLACEMENT (Terrain Roughness)
     disp_mod = ground.modifiers.new(name="Displace", type='DISPLACE')
     tex = bpy.data.textures.new("OMNI_Ground_Noise", type='CLOUDS')
-    tex.noise_scale = 2.0 if {is_anime} else 1.0
+    tex.noise_scale = 1.5 if {is_anime} else 0.8 # Realism has finer noise details
     disp_mod.texture = tex
-    disp_mod.strength = 1.2 if not "plains" in "{preset}" else 0.4
+    disp_mod.strength = {layout_data.get('displacement_strength', 1.0)}
 
-    # 5. PROCEDURAL SHADER NODE NETWORK (The Magic)
+    # 4. TERRAIN SHADER NETWORK
     ground_mat = bpy.data.materials.new(name="OMNI_Ground_Mat")
     ground_mat.use_nodes = True
     gnodes = ground_mat.node_tree.nodes
     bsdf = gnodes.get("Principled BSDF")
     
     if "cyberpunk" in "{preset}":
-        # Create glowing neon grid lines
         bsdf.inputs['Base Color'].default_value = (0.05, 0.05, 0.05, 1) # Dark asphalt
         bsdf.inputs['Emission Strength'].default_value = {layout_data.get('emission_strength', 5.0)}
-        bsdf.inputs['Emission Color'].default_value = (0.0, 0.8, 1.0, 1) # Cyan glow
+        bsdf.inputs['Emission Color'].default_value = (0.0, 0.8, 1.0, 1) # Cyan grid lines glow
     elif "plains" in "{preset}":
-        bsdf.inputs['Base Color'].default_value = (0.1, 0.5, 0.1, 1) if {is_anime} else (0.05, 0.2, 0.05, 1)
+        bsdf.inputs['Base Color'].default_value = (0.1, 0.5, 0.1, 1) # Grass tone
+    else: 
+        bsdf.inputs['Base Color'].default_value = (0.2, 0.18, 0.15, 1) # Dirt/Ruins tone
         bsdf.inputs['Roughness'].default_value = 0.9
-    else: # Ruins
-        bsdf.inputs['Base Color'].default_value = (0.2, 0.18, 0.15, 1)
         
     ground.data.materials.append(ground_mat)
 
-    # 6. INSTANCE SCATTERING (Debris/Pillars)
-    random.seed(42)
+    # 5. INSTANCE SCATTERING (Debris/Cyber-Pillars)
+    random.seed(42) # Consistent scatter seed
     prop_count = {layout_data.get('procedural_prop_count', 30)}
     for i in range(prop_count):
         x, y = random.uniform(-15.0, 15.0), random.uniform(-15.0, 15.0)
-        if "cyberpunk" in "{preset}":
-            bpy.ops.mesh.primitive_cylinder_add(radius=0.3, depth=random.uniform(5.0, 10.0), location=(x, y, 2.5))
-            bpy.context.active_object.data.materials.append(ground_mat) # Share neon material
-        else:
-            bpy.ops.mesh.primitive_ico_sphere_add(radius=random.uniform(0.5, 2.0), subdivisions=2, location=(x, y, random.uniform(0, 1)))
         
+        # Determine prop type based on preset
+        if "cyberpunk" in "{preset}":
+            bpy.ops.mesh.primitive_cylinder_add(radius=random.uniform(0.2, 0.6), depth=random.uniform(3.0, 8.0), location=(x, y, 2.5))
+            bpy.context.active_object.data.materials.append(ground_mat) 
+        elif "plains" in "{preset}":
+            # Simple rocks
+            bpy.ops.mesh.primitive_ico_sphere_add(radius=random.uniform(0.5, 1.5), subdivisions=1, location=(x, y, 0))
+        else:
+            # Jagged Ruins debris
+            bpy.ops.mesh.primitive_ico_sphere_add(radius=random.uniform(0.5, 2.0), subdivisions=2, location=(x, y, 0))
+            # Distort debris to look like broken concrete
+            bpy.ops.transform.resize(value=(1.0, random.uniform(0.5, 1.5), random.uniform(0.2, 0.8)))
+            
         prop = bpy.context.active_object
         prop.name = f"OMNI_Prop_Scatter_{{i}}"
         prop.rotation_euler = (random.uniform(0, 0.5), random.uniform(0, 0.5), random.uniform(0, 6.28))
 
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
-    print("OMNIMATRIX_ARCHITECT_SUCCESS")
+    print("OMNIMATRIX_TERRAIN_SUCCESS")
 
 except Exception as e:
     print(f"OMNIMATRIX_ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join(self.module_d_dir, "temp_environment_script.py")
+        script_path = os.path.join(self.module_c_dir, "temp_environment_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
     def execute_pipeline(self):
-        self.log("Initializing Agent 34 (Cinematic Environment & Atmosphere)...", "INFO")
+        self.log("Initializing Agent 34 (Procedural 3D Environment Architect)...", "INFO")
 
         # RULE 7: ATOMIC HANDSHAKE
         state = {}
@@ -292,19 +262,19 @@ except Exception as e:
                 scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
-                self.log(f"--- Sculpting Terrain & Atmosphere for: {scene_name} | Style: {global_style.upper()} ---", "INFO")
+                self.log(f"--- Sculpting Procedural Terrain for: {scene_name} | Style: {global_style.upper()} ---", "INFO")
                 
                 layout_data = self._query_architect_brain(scene_name, context, global_style)
                 
-                self.log(f"AI Matrix -> Theme: {layout_data.get('environment_preset')} | Fog Density: {layout_data.get('volumetric_fog_density')} | Sun: {layout_data.get('sun_intensity_lux')} Lux", "INFO")
+                self.log(f"AI Terrain Core -> Theme: {layout_data.get('environment_preset')} | Prop Density: {layout_data.get('procedural_prop_count')} | Subdivisions: {layout_data.get('ground_subdivision_level')}", "INFO")
                 
                 script_path = self._generate_blender_script(blend_file_path, layout_data, global_style)
                 command = [blender_executable, "-b", "-P", script_path]
                 
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if "OMNIMATRIX_ARCHITECT_SUCCESS" in result.stdout:
-                        self.log(f"God-Level Environment & Volumetrics baked into {filename}", "SUCCESS")
+                    if "OMNIMATRIX_TERRAIN_SUCCESS" in result.stdout:
+                        self.log(f"God-Level Environment Geometry baked into {filename}", "SUCCESS")
                         master_blueprint[scene_name] = layout_data
                     else:
                         self.log(f"Blender build failed: {result.stdout[-300:]}", "ERROR")
@@ -317,15 +287,16 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        # RULE 7: STATE UPDATE (Handoff to Camera Cinematography)
+        # RULE 7: STATE UPDATE (Handoff to Module D: VFX Forge)
         state["last_active_agent"] = self.agent_name
-        state["next_agent"] = "Ai_Agent_35_Camera_Cinematography_Director" 
+        # FIXED: Exact name from the Master List for Agent 35!
+        state["next_agent"] = "ai_agent_35_autonomous_vfx_procedural_forge" 
         
         with open(self.state_file, "w") as f:
             json.dump(state, f, indent=4)
             
-        self.log(f"Module D (Atmosphere) Setup Complete. Handoff to {state['next_agent']}.", "SUCCESS")
+        self.log(f"Module C 100% COMPLETE. Handoff to Module D ({state['next_agent']}).", "SUCCESS")
 
 if __name__ == "__main__":
-    architect = AiAgent34CinematicEnvironmentArchitect()
+    architect = AiAgent34Procedural3DEnvironmentArchitect()
     architect.execute_pipeline()
