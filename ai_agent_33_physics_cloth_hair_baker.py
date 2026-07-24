@@ -93,15 +93,15 @@ class Agent33PhysicsClothHairBaker:
         is_anime = "anime" in style.lower()
         return {
             "wind_strength": 3000.0 if is_anime else 800.0,
-            "wind_noise": 0.5 if is_anime else 3.5, # Anime uses Vortex, Real uses Noise
-            "vortex_strength": 1500.0 if is_anime else 0.0, # The "Aura" wind
-            "cloth_bending_stiffness": 5.0 if is_anime else 0.2, # Stiff anime cloaks
+            "wind_noise": 0.5 if is_anime else 3.5, 
+            "vortex_strength": 1500.0 if is_anime else 0.0, 
+            "cloth_bending_stiffness": 5.0 if is_anime else 0.2, 
             "cloth_damping": 2.0 if is_anime else 10.0,
             "hair_stiffness": 0.8 if is_anime else 0.2,
-            "gravity_scale": 0.6 if is_anime else 1.0 # Floatiness
+            "gravity_scale": 0.6 if is_anime else 1.0 
         }
 
-    # LIMITLESS PHYSICS AI BRAIN
+    # LIMITLESS PHYSICS AI BRAIN WITH DUAL API FAILSAFE
     def _query_physics_brain(self, scene_name, context, style):
         self.log(f"Calculating Advanced Kinetic Physics & Turbulence for '{scene_name}'...", "INFO")
 
@@ -129,6 +129,7 @@ class Agent33PhysicsClothHairBaker:
         }}
         """
 
+        # PRIMARY API: GEMINI
         if self.gemini_api_key:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
@@ -139,7 +140,35 @@ class Agent33PhysicsClothHairBaker:
                     parsed = self._clean_json_response(res_text)
                     if parsed and "wind_strength" in parsed:
                         return parsed
-            except: pass
+            except Exception as e:
+                self.log(f"Gemini API failed: {str(e)}. Switching to OpenAI Failsafe.", "WARNING")
+
+        # FAILSAFE API: OPENAI (Rule 6 Implementation)
+        if self.openai_api_key:
+             try:
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.openai_api_key}"
+                }
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": "You are a JSON-only response bot."},
+                        {"role": "user", "content": ai_prompt}
+                    ],
+                    "temperature": 0.2
+                }
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_data = json.loads(response.read().decode("utf-8"))
+                    res_text = res_data["choices"][0]["message"]["content"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed and "wind_strength" in parsed:
+                        self.log("OpenAI Failsafe successful.", "INFO")
+                        return parsed
+             except Exception as e:
+                 self.log(f"OpenAI API failed: {str(e)}. Triggering Hard Fallback.", "ERROR")
 
         return self._fallback_physics(context, style)
 
@@ -298,7 +327,7 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        # RULE 7: STATE UPDATE (FIXED: Correct Handoff to Agent 34 based on the verified list)
+        # RULE 7: STATE UPDATE
         state["last_active_agent"] = self.agent_name
         state["next_agent"] = "ai_agent_34_procedural_3d_environment_architect" 
         
