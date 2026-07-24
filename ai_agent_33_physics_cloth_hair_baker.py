@@ -1,3 +1,8 @@
+# ==============================================================================
+# Ai_Agent_33_Omni_Physics_Baker.py
+# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL KINETIC PHYSICS & AURA WIND)
+# ==============================================================================
+
 import os
 import re
 import sys
@@ -13,241 +18,279 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    # Universal Uppercase API Keys
+                    # RULE 6: UNIVERSAL UPPERCASE API KEYS
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
-class OmniMatrixPhysicsBaker:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 33: aaa_physics_cloth_hair_baker"
+class AiAgent33OmniPhysicsBaker:
+    def __init__(self):
+        # RULE 8: STRICT AI NAMING
+        self.agent_name = "Ai_Agent_33_Omni_Physics_Baker"
         
-        # Directories
-        self.workspace_dir = workspace_dir
-        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        # RULE 2: UNIVERSAL PATH ISOLATION (No Hardcoded Drives)
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_c_dir = os.path.join(self.workspace_dir, "Module_C_Heavy_Infantry")
         
-        # Outputs
-        self.output_blueprint = os.path.join(self.workspace_dir, "33_omni_physics_blueprint.json")
-        self.blender_path = blender_path
+        self.output_blueprint = os.path.join(self.module_c_dir, "33_physics_blueprint.json")
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_dir, "global_config.json")
         
-        # GEMINI API INTEGRATION
+        # RULE 6: DUAL API FAILSAFES
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
+        for d in [self.script_dir, self.env_dir, self.module_c_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
+    def _load_master_config(self):
+        default_config = {"global_style": "anime", "blender_executable": "blender"}
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
+
     def _load_upstream_context(self, scene_name):
-        """Loads visual style and kinetic movement data"""
+        """Loads data from Master Matrix State (Rule 7)"""
         context = {
-            "visual_style": "anime",
-            "action_intensity": "high", 
+            "action_intensity": "high",
             "start_frame": 1,
             "end_frame": 72
         }
         
-        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
-        if os.path.exists(script_file):
+        if os.path.exists(self.state_file):
             try:
-                with open(script_file, "r", encoding="utf-8") as f:
+                with open(self.state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    context["visual_style"] = data.get("visual_style", "anime").lower()
                     context["action_intensity"] = data.get("action_intensity", "high")
-            except Exception as e:
-                self.log_message(f"Style context parse error: {str(e)}", "WARNING")
+                    context["start_frame"] = data.get("global_start_frame", 1)
+                    context["end_frame"] = data.get("global_end_frame", 72)
+            except: pass
                 
         return context
 
     def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _query_physics_brain(self, scene_name, context):
-        self.log_message(f"Calculating Physics Damping & Wind Vectors for '{scene_name}'...", "INFO")
-
-        if not self.gemini_api_key:
-            self.log_message("No Gemini API Key found. Using fallback physics setup.", "WARNING")
-            return self._fallback_physics(context)
-
-        ai_prompt = (
-            f"You are the Lead 3D Physics Technical Director for the OmniMatrix Engine.\n"
-            f"Scene Name: {scene_name}\n"
-            f"Visual Style: {context['visual_style']}\n"
-            f"Action Intensity: {context['action_intensity']}\n\n"
-            "Calculate the cloth, hair, and wind physics parameters for Blender based on the visual style.\n"
-            "- If style is 'anime', cloth should be stiff (high bending), hair spring tension high, and wind highly directional/dramatic.\n"
-            "- If style is 'realistic', cloth should be soft (low bending, high damping), wind natural with noise.\n"
-            "Output EXACTLY 1 raw JSON object containing:\n"
-            "{\n"
-            "  \"wind_strength\": 1500.0,\n"
-            "  \"wind_noise\": 2.5,\n"
-            "  \"wind_direction\": [1.0, -1.0, 0.2],\n"
-            "  \"cloth_bending_stiffness\": 1.5,\n"
-            "  \"cloth_damping\": 5.0,\n"
-            "  \"hair_stiffness\": 0.8,\n"
-            "  \"gravity_scale\": 0.8\n"
-            "}"
-        )
-
         try:
-            # NATIVE GEMINI JSON PAYLOAD
-            payload = {
-                "contents": [{"parts": [{"text": ai_prompt}]}], 
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                cleaned = self._clean_json_response(res_text)
-                return json.loads(cleaned)
-        except Exception as e:
-            self.log_message(f"AI Physics Brain failed: {str(e)}. Triggering fallback.", "WARNING")
-            return self._fallback_physics(context)
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_text, flags=re.DOTALL).strip()
+            return json.loads(cleaned)
+        except:
+            start = raw_text.find("{")
+            end = raw_text.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_text[start:end+1])
+                except: pass
+            return None
 
-    def _fallback_physics(self, context):
-        is_anime = "anime" in context["visual_style"]
+    def _fallback_physics(self, context, style):
+        is_anime = "anime" in style.lower()
         return {
-            "wind_strength": 2000.0 if is_anime else 500.0,
-            "wind_noise": 5.0 if is_anime else 1.2,
-            "wind_direction": [1.0, 0.0, 0.5],
-            "cloth_bending_stiffness": 5.0 if is_anime else 0.5,
-            "cloth_damping": 2.0 if is_anime else 8.0,
-            "hair_stiffness": 1.5 if is_anime else 0.4,
-            "gravity_scale": 0.5 if is_anime else 1.0 # Anime has floaty gravity
+            "wind_strength": 3000.0 if is_anime else 800.0,
+            "wind_noise": 0.5 if is_anime else 3.5, # Anime uses Vortex, Real uses Noise
+            "vortex_strength": 1500.0 if is_anime else 0.0, # The "Aura" wind
+            "cloth_bending_stiffness": 5.0 if is_anime else 0.2, # Stiff anime cloaks
+            "cloth_damping": 2.0 if is_anime else 10.0,
+            "hair_stiffness": 0.8 if is_anime else 0.2,
+            "gravity_scale": 0.6 if is_anime else 1.0 # Floatiness
         }
 
+    # LIMITLESS PHYSICS AI BRAIN
+    def _query_physics_brain(self, scene_name, context, style):
+        self.log(f"Calculating Advanced Kinetic Physics & Turbulence for '{scene_name}'...", "INFO")
+
+        ai_prompt = f"""
+        You are the Lead 3D Physics & Simulation TD for the OmniMatrix Engine.
+        Scene: {scene_name} | Style: {style.upper()}
+        Action Intensity: {context['action_intensity']}
+        
+        MISSION:
+        Design cloth, hair, and wind force field parameters.
+        
+        STYLE RULES:
+        - If ANIME: Add high `vortex_strength` (creates a circular 'power-up' aura wind). Lower `cloth_bending_stiffness` for flow, but high stiffness for sharp folds. Gravity scale should be 0.5 - 0.7 for that 'floaty' sakuga feel.
+        - If REALISTIC: `vortex_strength` MUST be 0. Use high `wind_noise` (Turbulence) so cloth ripples naturally. Normal gravity (1.0). High `cloth_damping`.
+        
+        Return EXACTLY 1 JSON object:
+        {{
+            "wind_strength": float (0-5000),
+            "wind_noise": float (0-10 - Turbulence amount),
+            "vortex_strength": float (0-3000 - Circular aura wind),
+            "cloth_bending_stiffness": float,
+            "cloth_damping": float,
+            "hair_stiffness": float,
+            "gravity_scale": float (0.1 to 1.0)
+        }}
+        """
+
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed and "wind_strength" in parsed:
+                        return parsed
+            except: pass
+
+        return self._fallback_physics(context, style)
+
+    # GOD-LEVEL BLENDER SCRIPT: WIND, VORTEX, TURBULENCE & SAFE BAKING
     def _generate_blender_script(self, blend_file_path, phys_data, context):
-        """Generates Blender script to apply physics limits, wind, and BAKE caches safely."""
         safe_blend_path = blend_file_path.replace("\\", "/")
         
-        # Safegaurd: Absolute limit on baking frames to prevent VRAM explosion
         start_frame = int(context.get("start_frame", 1))
-        end_frame = min(int(context.get("end_frame", 72)), start_frame + 72)
+        # Hard limit bake to 150 frames max to prevent VRAM overflow (Colab safety)
+        end_frame = min(int(context.get("end_frame", 72)), start_frame + 150)
         
         script_content = f"""
 import bpy
 import json
-import mathutils
 
 try:
     bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
 
-    phys_data = json.loads('''{json.dumps(phys_data)}''')
-    
     start_f = {start_frame}
     end_f = {end_frame}
     
     bpy.context.scene.frame_start = start_f
     bpy.context.scene.frame_end = end_f
     
-    # Set gravity multiplier safely
+    # 1. GRAVITY MANIPULATION (Rule 13: Anime float vs Realism)
     bpy.context.scene.use_gravity = True
-    bpy.context.scene.gravity[2] = -9.81 * phys_data.get("gravity_scale", 1.0)
+    bpy.context.scene.gravity[2] = -9.81 * {phys_data.get("gravity_scale", 1.0)}
     
-    # 1. Create/Update Wind Force Field (Idempotent cleanup)
-    wind_obj = bpy.data.objects.get("OMNI_Wind")
-    if wind_obj:
-        bpy.data.objects.remove(wind_obj, do_unlink=True)
+    # 2. IDEMPOTENCY: CLEANUP OLD PHYSICS FIELDS (Rule 5)
+    for obj_name in ["OMNI_Wind", "OMNI_Turbulence", "OMNI_Vortex"]:
+        existing = bpy.data.objects.get(obj_name)
+        if existing:
+            bpy.data.objects.remove(existing, do_unlink=True)
+            
+    # 3. CREATE DYNAMIC FORCE FIELDS
+    # A. Base Wind
+    bpy.ops.object.effector_add(type='WIND', location=(0, -5, 2))
+    wind = bpy.context.active_object
+    wind.name = "OMNI_Wind"
+    wind.field.strength = {phys_data.get("wind_strength", 1000.0)}
+    wind.rotation_euler = (1.5708, 0, 0) # Point forward
+    
+    # B. Turbulence (The "Noise" for realistic ripples)
+    if {phys_data.get("wind_noise", 0.0)} > 0:
+        bpy.ops.object.effector_add(type='TURBULENCE', location=(0, 0, 1))
+        turb = bpy.context.active_object
+        turb.name = "OMNI_Turbulence"
+        turb.field.strength = {phys_data.get("wind_noise", 0.0)} * 10.0
+        turb.field.size = 0.5
         
-    bpy.ops.object.effector_add(type='WIND', enter_editmode=False, align='WORLD', location=(0, -5, 2))
-    wind_obj = bpy.context.active_object
-    wind_obj.name = "OMNI_Wind"
-    
-    wind_obj.field.strength = phys_data.get("wind_strength", 1000.0)
-    wind_obj.field.noise = phys_data.get("wind_noise", 1.0)
-    
-    dir_vec = phys_data.get("wind_direction", [0,1,0])
-    # Convert direction vector to euler rotation
-    vec = mathutils.Vector((dir_vec[0], dir_vec[1], dir_vec[2]))
-    wind_obj.rotation_euler = vec.to_track_quat('Z', 'Y').to_euler()
+    # C. Vortex (Anime Power-Up Aura Wind)
+    if {phys_data.get("vortex_strength", 0.0)} > 0:
+        bpy.ops.object.effector_add(type='VORTEX', location=(0, 0, 0.5)) # Place at character feet
+        vortex = bpy.context.active_object
+        vortex.name = "OMNI_Vortex"
+        vortex.field.strength = {phys_data.get("vortex_strength", 0.0)}
+        vortex.field.shape = 'TUBE'
 
-    # 2. Iterate through objects to find Cloth & Particle Systems
+    # 4. APPLY PHYSICS TO MESHES & HAIR
     meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
-    
     for obj in meshes:
-        # Check Cloth Modifiers
+        # Cloth Modifiers
         for mod in obj.modifiers:
             if mod.type == 'CLOTH':
-                mod.settings.bending_stiffness = phys_data.get("cloth_bending_stiffness", 1.0)
-                mod.settings.damping = phys_data.get("cloth_damping", 5.0)
+                mod.settings.bending_stiffness = {phys_data.get("cloth_bending_stiffness", 1.0)}
+                mod.settings.damping = {phys_data.get("cloth_damping", 5.0)}
                 
-                # Apply Frame Limits to Point Cache
+                # Setup Cache Frame Limits
                 mod.point_cache.frame_start = start_f
                 mod.point_cache.frame_end = end_f
                 
-                # STRICT CACHE CLEANUP BEFORE BAKE
+                # Scrub old cache before baking
                 bpy.context.view_layer.objects.active = obj
-                bpy.ops.ptcache.free_bake({"point_cache": mod.point_cache})
+                bpy.ops.ptcache.free_bake({{"point_cache": mod.point_cache}})
                 
-        # Check Hair/Particle Systems
+        # Hair/Particle Modifiers
         for ps in obj.particle_systems:
             if ps.settings.type == 'HAIR' and ps.settings.use_hair_dynamics:
-                ps.settings.hair_dynamics.pin_stiffness = phys_data.get("hair_stiffness", 1.0)
+                ps.settings.hair_dynamics.pin_stiffness = {phys_data.get("hair_stiffness", 1.0)}
                 
-                # Apply Frame Limits to Point Cache
                 ps.point_cache.frame_start = start_f
                 ps.point_cache.frame_end = end_f
                 
-                # STRICT CACHE CLEANUP BEFORE BAKE
                 bpy.context.view_layer.objects.active = obj
-                bpy.ops.ptcache.free_bake({"point_cache": ps.point_cache})
+                bpy.ops.ptcache.free_bake({{"point_cache": ps.point_cache}})
 
-    # 3. VRAM SAFEGUARD BAKE COMMAND
-    print("Starting Global Physics Bake (Max 72 Frames)...")
+    # 5. GLOBAL BAKE EXECUTION (RAM Safe)
+    print(f"Starting Kinetic Physics Bake (Frames: {{start_f}} to {{end_f}})...")
     bpy.ops.ptcache.bake_all(bake=True)
-    print("Physics Baking Completed Successfully.")
+    print("OMNIMATRIX_BAKE_SUCCESS")
                                 
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
 
 except Exception as e:
-    print(f"ERROR: {{str(e)}}")
+    print(f"OMNIMATRIX_ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join(self.workspace_dir, "temp_physics_script.py")
+        script_path = os.path.join(self.module_c_dir, "temp_physics_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
-    def execute_baking_pipeline(self):
-        self.log_message("Initializing OmniMatrix Physics Baker...", "INFO")
+    def execute_pipeline(self):
+        self.log("Initializing Agent 33 (Omni Kinetic Physics Baker)...", "INFO")
+
+        # RULE 7: ATOMIC HANDSHAKE
+        state = {}
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+            except: pass
+
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        config = self._load_master_config()
+        global_style = config.get("global_style", "anime").lower()
+        blender_executable = config.get("blender_executable", "blender")
         master_blueprint = {}
         
+        if not os.path.exists(self.env_dir) or not os.listdir(self.env_dir):
+            self.log("No 3D environments found. Exiting...", "WARNING")
+            sys.exit(0)
+            
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                scene_name = filename.replace("_stage.blend", "")
+            if filename.endswith(".blend"):
+                scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
                 context = self._load_upstream_context(scene_name)
+                self.log(f"--- Simulating Dynamics for: {scene_name} | Style: {global_style.upper()} ---", "INFO")
                 
-                self.log_message(f"--- Simulating Physics for: {scene_name} | Style: {context['visual_style'].upper()} ---", "INFO")
+                phys_data = self._query_physics_brain(scene_name, context, global_style)
                 
-                phys_data = self._query_physics_brain(scene_name, context)
+                self.log(f"Applied Forces -> Wind: {phys_data.get('wind_strength')} | Turbulence: {phys_data.get('wind_noise')} | Vortex: {phys_data.get('vortex_strength')}", "INFO")
+                
                 script_path = self._generate_blender_script(blend_file_path, phys_data, context)
+                command = [blender_executable, "-b", "-P", script_path]
                 
-                # Run Headless Blender
-                command = [self.blender_path, "-b", "-P", script_path]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0 and "Completed Successfully" in result.stdout:
-                        self.log_message(f"Physics baked and saved safely for {filename} (Max 72 Frames).", "SUCCESS")
+                    if "OMNIMATRIX_BAKE_SUCCESS" in result.stdout:
+                        self.log(f"God-Level Physics baked and cached for {filename}", "SUCCESS")
                         master_blueprint[scene_name] = phys_data
                     else:
-                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
+                        self.log(f"Blender build failed: {result.stdout[-300:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
+                    self.log(f"Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
@@ -255,8 +298,15 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        self.log_message("Agent 33 Pipeline Complete. Cloth and Hair are now dynamically baked!", "INFO")
+        # RULE 7: STATE UPDATE (Handoff to Lighting/Render)
+        state["last_active_agent"] = self.agent_name
+        state["next_agent"] = "Ai_Agent_34_Cinematic_Lighting_Director" 
+        
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+            
+        self.log(f"Physics Baking Complete. Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    baker = OmniMatrixPhysicsBaker()
-    baker.execute_baking_pipeline()
+    baker = AiAgent33OmniPhysicsBaker()
+    baker.execute_pipeline()
