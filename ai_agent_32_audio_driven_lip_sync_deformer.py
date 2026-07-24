@@ -1,3 +1,8 @@
+# ==============================================================================
+# Ai_Agent_32_Omni_LipSync_Actor_Deformer.py
+# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL FACIAL & LIP-SYNC ENGINE)
+# ==============================================================================
+
 import os
 import re
 import sys
@@ -13,287 +18,341 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    # Universal Uppercase API Keys
+                    # RULE 6: UNIVERSAL UPPERCASE API KEYS
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
-class OmniMatrixLipSyncDeformer:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 32: aaa_omni_lipsync_actor_deformer"
+class AiAgent32OmniLipSyncActorDeformer:
+    def __init__(self):
+        # RULE 8: STRICT AI NAMING
+        self.agent_name = "Ai_Agent_32_Omni_LipSync_Actor_Deformer"
         
-        # Directories
-        self.workspace_dir = workspace_dir
-        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        # RULE 2: UNIVERSAL PATH ISOLATION (No Hardcoded Drives)
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_c_dir = os.path.join(self.workspace_dir, "Module_C_Heavy_Infantry")
         
-        # Outputs
-        self.output_blueprint = os.path.join(self.workspace_dir, "32_omni_lipsync_blueprint.json")
-        self.blender_path = blender_path
+        self.output_blueprint = os.path.join(self.module_c_dir, "32_omni_lipsync_blueprint.json")
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_dir, "global_config.json")
         
-        # GEMINI API INTEGRATION
+        # RULE 6: DUAL API FAILSAFES
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
+        for d in [self.script_dir, self.env_dir, self.module_c_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
+    def _load_master_config(self):
+        default_config = {"global_style": "anime", "blender_executable": "blender"}
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
+
     def _load_upstream_context(self, scene_name):
-        """Loads visual style and dialogue from Master Matrix State"""
+        """Loads dialogue, emotion, and style from Master Matrix State (Rule 7)"""
         context = {
-            "visual_style": "omni_neutral",
-            "dialogue_text": "Omni matrix initialization complete.",
-            "start_frame": 12,
-            "character_id": "char_main"
+            "dialogue_text": "Target acquired. Engaging protocol.",
+            "emotion_tone": "serious",
+            "start_frame": 12
         }
         
-        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
-        if os.path.exists(script_file):
+        # We read the main state file to see what script/audio generated
+        if os.path.exists(self.state_file):
             try:
-                with open(script_file, "r", encoding="utf-8") as f:
+                with open(self.state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    context["visual_style"] = data.get("visual_style", "omni_neutral")
-                    
-                    # Look for dialogue in matrix state
                     if "dialogue" in data and data["dialogue"]:
                         context["dialogue_text"] = data["dialogue"]
-            except Exception as e:
-                self.log_message(f"Style context parse error: {str(e)}", "WARNING")
+                    if "emotion" in data:
+                        context["emotion_tone"] = data["emotion"]
+                    if "audio_start_frame" in data:
+                        context["start_frame"] = data["audio_start_frame"]
+            except: pass
                 
         return context
 
     def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _query_linguistic_brain(self, scene_name, context):
-        self.log_message(f"Calculating Lip-Sync Visemes for '{scene_name}'...", "INFO")
-
-        if not self.gemini_api_key:
-            self.log_message("No Gemini API Key found. Using fallback procedural phonemes.", "WARNING")
-            return self._fallback_phonemes(context)
-
-        ai_prompt = (
-            f"You are the Lead Linguistic & Facial Animator for the OmniMatrix Engine.\n"
-            f"Scene Name: {scene_name}\n"
-            f"Visual Style: {context['visual_style']}\n"
-            f"Dialogue: \"{context['dialogue_text']}\"\n"
-            f"Start Frame: {context['start_frame']}\n\n"
-            "Analyze the dialogue and break it down into phoneme frames for 3D lipsync.\n"
-            "- If style is 'anime', output fewer frames (snappy mouth flaps: open, half, closed).\n"
-            "- If style is 'realistic', output granular frames per syllable.\n"
-            "Create a list of keyframes. For each frame, provide:\n"
-            "1. 'frame_num': Integer frame number (assuming 24fps).\n"
-            "2. 'syllable': The sound being made.\n"
-            "3. 'viseme_A_O': Weight (0.0 to 1.0) for wide/open mouth.\n"
-            "4. 'viseme_E_I': Weight (0.0 to 1.0) for wide lips.\n"
-            "5. 'viseme_U': Weight (0.0 to 1.0) for puckered lips.\n"
-            "6. 'viseme_BMP': Weight (0.0 to 1.0) for closed lips.\n"
-            "7. 'jaw_drop': Float (0.0 to 1.0).\n"
-            "Return EXACTLY 1 raw JSON object in this format:\n"
-            "{\n"
-            "  \"keyframes\": [\n"
-            f"    {{\"frame_num\": {context['start_frame']}, \"syllable\": \"Om\", \"viseme_A_O\": 0.8, \"viseme_E_I\": 0.0, \"viseme_U\": 0.2, \"viseme_BMP\": 0.0, \"jaw_drop\": 0.5}}\n"
-            "  ]\n"
-            "}"
-        )
-
         try:
-            # NATIVE GEMINI JSON PAYLOAD
-            payload = {
-                "contents": [{"parts": [{"text": ai_prompt}]}], 
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                cleaned = self._clean_json_response(res_text)
-                return json.loads(cleaned)
-        except Exception as e:
-            self.log_message(f"AI Linguistic Brain failed: {str(e)}. Triggering procedural fallback.", "WARNING")
-            return self._fallback_phonemes(context)
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_text, flags=re.DOTALL).strip()
+            return json.loads(cleaned)
+        except:
+            start = raw_text.find("{")
+            end = raw_text.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_text[start:end+1])
+                except: pass
+            return None
 
-    def _fallback_phonemes(self, context):
+    def _fallback_phonemes(self, context, style):
         start = context["start_frame"]
         words = context["dialogue_text"].split()
         frames = []
-        current_frame = start
+        curr_frame = start
         
         for w in words:
-            # Open mouth for word start
-            frames.append({"frame_num": current_frame, "syllable": w, "viseme_A_O": 0.8, "viseme_E_I": 0.2, "viseme_U": 0.0, "viseme_BMP": 0.0, "jaw_drop": 0.6})
-            current_frame += 4
-            # Close mouth at word end
-            frames.append({"frame_num": current_frame, "syllable": "-", "viseme_A_O": 0.0, "viseme_E_I": 0.0, "viseme_U": 0.0, "viseme_BMP": 1.0, "jaw_drop": 0.0})
-            current_frame += 3
+            frames.append({
+                "frame_num": curr_frame, "syllable": w, 
+                "viseme_A_O": 0.8, "viseme_E_I": 0.0, "viseme_BMP": 0.0, 
+                "jaw_drop": 0.7, "emotion_intensity": 0.5, "blink_trigger": False
+            })
+            curr_frame += 4
+            frames.append({
+                "frame_num": curr_frame, "syllable": "-", 
+                "viseme_A_O": 0.0, "viseme_E_I": 0.0, "viseme_BMP": 1.0, 
+                "jaw_drop": 0.0, "emotion_intensity": 0.5, "blink_trigger": True
+            })
+            curr_frame += 3
             
-        return {"keyframes": frames}
+        return {"keyframes": frames, "overall_emotion": context["emotion_tone"]}
 
-    def _generate_blender_script(self, blend_file_path, sync_data, visual_style):
-        """God-Level Blender Python Script to inject Lip Sync AND Head Bob dynamics"""
+    # LIMITLESS LINGUISTIC & EMOTION AI
+    def _query_linguistic_brain(self, scene_name, context, style):
+        self.log(f"Calculating Lip-Sync, Micro-Expressions & Blinks for '{scene_name}'...", "INFO")
+
+        ai_prompt = f"""
+        You are the Lead Facial Animator for the OmniMatrix Engine.
+        Dialogue: "{context['dialogue_text']}"
+        Tone/Emotion: {context['emotion_tone']}
+        Visual Style: {style.upper()}
+        Start Frame: {context['start_frame']}
+        
+        MISSION:
+        Break down the dialogue into phonetic frames (assuming 24fps).
+        
+        STYLE RULES:
+        - If ANIME: Use fewer, snappier frames (2-4 frame holds). Extreme jaw drops for shouts. Less frequent blinking.
+        - If REALISTIC: Use granular, smooth bezier mapping per syllable. Natural blinking (every ~3-4 seconds).
+        
+        Add Micro-Expressions:
+        - `blink_trigger` (boolean): Set true on pauses, commas, or end of words.
+        - `emotion_intensity` (float 0-1): How hard eyebrows/facial muscles react on this syllable.
+        
+        Return EXACTLY 1 JSON object in this format:
+        {{
+            "overall_emotion": "{context['emotion_tone']}",
+            "keyframes": [
+                {{
+                    "frame_num": integer, 
+                    "syllable": "string", 
+                    "viseme_A_O": float (0-1), 
+                    "viseme_E_I": float (0-1), 
+                    "viseme_BMP": float (0-1), 
+                    "jaw_drop": float (0-1),
+                    "emotion_intensity": float (0-1),
+                    "blink_trigger": boolean
+                }}
+            ]
+        }}
+        """
+
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed and "keyframes" in parsed:
+                        return parsed
+            except: pass
+
+        return self._fallback_phonemes(context, style)
+
+    # GOD-LEVEL BLENDER SCRIPT: ARKit COMPATIBLE & PROCEDURAL ANIMATION
+    def _generate_blender_script(self, blend_file_path, sync_data, style):
         safe_blend_path = blend_file_path.replace("\\", "/")
         frames_json = json.dumps(sync_data.get("keyframes", []))
+        emotion = sync_data.get("overall_emotion", "neutral")
         
-        # Omnimatrix Logic: Anime gets stepped sharp keys, Real gets smooth bezier keys
-        interp_type = "'CONSTANT'" if "anime" in visual_style.lower() else "'BEZIER'"
+        # Omnimatrix Logic: Anime gets stepped keys (flapping), Realistic gets bezier (smooth)
+        interp_type = "'CONSTANT'" if "anime" in style.lower() else "'BEZIER'"
         
         script_content = f"""
 import bpy
 import json
+import random
 
 try:
     bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
 
     frames_data = json.loads('''{frames_json}''')
     interp_style = {interp_type}
+    base_emotion = "{emotion}".lower()
     
-    # 1. Fuzzy Name Mappings for Universal Compatibility
+    # 1. AAA Fuzzy Mapping (Supports ARKit, VRoid, CC4, and Custom Rigs)
     shape_map = {{
-        "viseme_A_O": ["viseme_a_o", "a", "o", "mouth_open", "jaw_drop", "open", "jaw_open"],
-        "viseme_E_I": ["viseme_e_i", "e", "i", "mouth_wide", "smile"],
-        "viseme_U":   ["viseme_u", "u", "w", "pucker", "kiss"],
-        "viseme_BMP": ["viseme_bmp", "b", "m", "p", "mouth_closed", "closed", "lips_closed"]
+        "viseme_A_O": ["viseme_a_o", "v_aa", "v_ou", "jawopen", "a", "o", "mouth_open"],
+        "viseme_E_I": ["viseme_e_i", "v_ee", "v_ih", "mouthsmile", "e", "i", "smile"],
+        "viseme_BMP": ["viseme_bmp", "v_bmp", "mouthclose", "b", "m", "p", "closed"],
+        "blink":      ["eye_close", "blink", "eyesclosed", "blink_l", "blink_r"],
+        "emo_angry":  ["angry", "browdown", "browinnerdown", "mad"],
+        "emo_sad":    ["sad", "browinnerup", "sorrow"],
+        "emo_happy":  ["happy", "smile", "joy"]
     }}
 
-    def find_shape_key(mesh_obj, logical_name):
-        if not mesh_obj.data.shape_keys: return None
+    def find_shape_keys(mesh_obj, logical_name):
+        keys = []
+        if not mesh_obj.data.shape_keys: return keys
         target_list = shape_map.get(logical_name, [])
         for kb in mesh_obj.data.shape_keys.key_blocks:
             kb_lower = kb.name.lower()
             if any(t in kb_lower for t in target_list):
-                return kb
-        return None
+                keys.append(kb)
+        return keys
 
-    # 2. Find Character Mesh & Armature
+    # 2. TARGET IDENTIFICATION & IDEMPOTENCY SCRUBBING
     char_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.data.shape_keys]
     armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
     
     if char_meshes:
         for mesh in char_meshes:
-            # Idempotency: Scrub existing lip-sync animations to prevent additive garbage
+            # Idempotency: Scrub old lip-sync and blink data to prevent layering garbage
             if mesh.data.shape_keys.animation_data and mesh.data.shape_keys.animation_data.action:
                 action = mesh.data.shape_keys.animation_data.action
                 for logical_name in shape_map.keys():
-                    sk = find_shape_key(mesh, logical_name)
-                    if sk:
+                    sks = find_shape_keys(mesh, logical_name)
+                    for sk in sks:
                         fc = action.fcurves.find('key_blocks["'+sk.name+'"].value')
-                        if fc:
-                            action.fcurves.remove(fc)
+                        if fc: action.fcurves.remove(fc)
 
-            # Apply Shape Keys
+            # 3. APPLY SHAPE KEYS (Lip-Sync, Emotions, Blinks)
             for fd in frames_data:
                 f_num = fd["frame_num"]
                 
-                for logical_name in ["viseme_A_O", "viseme_E_I", "viseme_U", "viseme_BMP"]:
-                    sk = find_shape_key(mesh, logical_name)
-                    if sk:
-                        sk.value = fd.get(logical_name, 0.0)
+                # Apply Lip Sync
+                for l_name in ["viseme_A_O", "viseme_E_I", "viseme_BMP"]:
+                    sks = find_shape_keys(mesh, l_name)
+                    for sk in sks:
+                        sk.value = fd.get(l_name, 0.0)
                         sk.keyframe_insert(data_path="value", frame=f_num)
                         
-                        # Set Omnimatrix Interpolation (Anime vs Realistic)
-                        if sk.animation_data and sk.animation_data.action:
-                            fc = sk.animation_data.action.fcurves.find('key_blocks["'+sk.name+'"].value')
-                            if fc:
-                                for kp in fc.keyframe_points:
-                                    if kp.co[0] == f_num:
-                                        kp.interpolation = interp_style
+                # Apply Emotion Intensity
+                emo_target = f"emo_{{base_emotion}}"
+                emo_sks = find_shape_keys(mesh, emo_target)
+                for sk in emo_sks:
+                    sk.value = fd.get("emotion_intensity", 0.5)
+                    sk.keyframe_insert(data_path="value", frame=f_num)
+                        
+                # Procedural Blinking Logic
+                if fd.get("blink_trigger", False):
+                    blink_sks = find_shape_keys(mesh, "blink")
+                    for sk in blink_sks:
+                        sk.value = 0.0
+                        sk.keyframe_insert(data_path="value", frame=f_num - 2)
+                        sk.value = 1.0
+                        sk.keyframe_insert(data_path="value", frame=f_num)
+                        sk.value = 0.0
+                        sk.keyframe_insert(data_path="value", frame=f_num + 3)
 
-    # 3. God Level: Auto Head/Neck Bobbing based on speech rhythm
+            # Set Interpolation Mode (Anime vs Realism)
+            if mesh.data.shape_keys.animation_data and mesh.data.shape_keys.animation_data.action:
+                for fc in mesh.data.shape_keys.animation_data.action.fcurves:
+                    for kp in fc.keyframe_points:
+                        kp.interpolation = interp_style
+
+    # 4. MICRO-MOVEMENT: AUTO HEAD BOBBING
     if armatures and frames_data:
         arm = armatures[0]
-        # Try to find head or neck bone
         head_bone = None
-        for bone_name in ["Head", "head", "Neck", "neck", "mixamorig:Head", "DEF-spine.006"]:
-            if bone_name in arm.pose.bones:
-                head_bone = arm.pose.bones[bone_name]
+        for b_name in ["Head", "head", "Neck", "neck", "mixamorig:Head", "DEF-spine.006"]:
+            if b_name in arm.pose.bones:
+                head_bone = arm.pose.bones[b_name]
                 break
                 
         if head_bone:
-            if not arm.animation_data:
-                arm.animation_data_create()
+            if not arm.animation_data: arm.animation_data_create()
             head_bone.rotation_mode = 'XYZ'
             
-            # Idempotency: Scrub existing X-rotation on head bone to prevent Exorcist 360 spin
+            # Scrub old head rotation
             if arm.animation_data.action:
                 fc = arm.animation_data.action.fcurves.find('pose.bones["'+head_bone.name+'"].rotation_euler', index=0)
-                if fc:
-                    arm.animation_data.action.fcurves.remove(fc)
+                if fc: arm.animation_data.action.fcurves.remove(fc)
             
-            # Establish baseline rotation
-            base_rot_x = 0.0
+            base_rot_x = head_bone.rotation_euler[0]
             
             for i, fd in enumerate(frames_data):
                 f_num = fd["frame_num"]
-                intensity = fd.get("jaw_drop", 0.0)
+                jaw_intensity = fd.get("jaw_drop", 0.0)
                 
-                # Create a subtle bob effect based on jaw opening
-                bob_angle = (intensity * 0.05) if interp_style == 'BEZIER' else (intensity * 0.1)
-                
-                # Alternate direction slightly for dynamic life
+                # Bobbing formula (Anime gets sharper nods, realistic gets subtle movement)
+                multiplier = 0.15 if interp_style == "'CONSTANT'" else 0.05
+                bob_angle = jaw_intensity * multiplier
                 direction = 1 if i % 2 == 0 else -1
                 
                 head_bone.rotation_euler[0] = base_rot_x + (bob_angle * direction)
                 head_bone.keyframe_insert(data_path="rotation_euler", index=0, frame=f_num)
-                
-                # Reset interpolation
-                if arm.animation_data and arm.animation_data.action:
-                    fc = arm.animation_data.action.fcurves.find('pose.bones["'+head_bone.name+'"].rotation_euler', index=0)
-                    if fc:
-                        for kp in fc.keyframe_points:
-                            if kp.co[0] == f_num:
-                                kp.interpolation = interp_style
-                                
+
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
-    print(f"SUCCESS: OmniMatrix Lip-Sync & Head-Bobbing applied. Interp: {{interp_style}}")
+    print("OMNIMATRIX_BLENDER_SUCCESS")
 
 except Exception as e:
-    print(f"ERROR: {{str(e)}}")
+    print(f"OMNIMATRIX_ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join(self.workspace_dir, "temp_lipsync_script.py")
+        script_path = os.path.join(self.module_c_dir, "temp_lipsync_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
-    def process_lip_sync(self):
-        self.log_message("Initializing OmniMatrix Audio-Driven Actor Deformer...", "INFO")
+    def execute_pipeline(self):
+        self.log("Initializing Agent 32 (Omni Lip-Sync & Actor Deformer)...", "INFO")
+
+        # RULE 7: ATOMIC HANDSHAKE
+        state = {}
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+            except: pass
+
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        config = self._load_master_config()
+        global_style = config.get("global_style", "anime").lower()
+        blender_executable = config.get("blender_executable", "blender")
         master_blueprint = {}
         
+        if not os.path.exists(self.env_dir) or not os.listdir(self.env_dir):
+            self.log("No 3D environments found. Exiting...", "WARNING")
+            sys.exit(0)
+            
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                scene_name = filename.replace("_stage.blend", "")
+            if filename.endswith(".blend"):
+                scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
                 context = self._load_upstream_context(scene_name)
+                self.log(f"--- Acting Scene: {scene_name} | Dialogue: '{context['dialogue_text']}' ---", "INFO")
                 
-                self.log_message(f"--- Acting Scene: {scene_name} | Dialogue: '{context['dialogue_text']}' ---", "INFO")
+                sync_data = self._query_linguistic_brain(scene_name, context, global_style)
+                self.log(f"AI Linguistics: Emotion [{sync_data.get('overall_emotion')}] | Frames Analyzed: {len(sync_data.get('keyframes', []))}", "INFO")
                 
-                sync_data = self._query_linguistic_brain(scene_name, context)
+                script_path = self._generate_blender_script(blend_file_path, sync_data, global_style)
+                command = [blender_executable, "-b", "-P", script_path]
                 
-                script_path = self._generate_blender_script(blend_file_path, sync_data, context["visual_style"])
-                
-                command = [self.blender_path, "-b", "-P", script_path]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0 and "SUCCESS" in result.stdout:
-                        self.log_message(f"God-Level Lip-Sync & Micro-Movements applied to {filename}", "SUCCESS")
+                    if "OMNIMATRIX_BLENDER_SUCCESS" in result.stdout:
+                        self.log(f"God-Level Lip-Sync & Micro-Movements baked into {filename}", "SUCCESS")
                         master_blueprint[scene_name] = sync_data
                     else:
-                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
+                        self.log(f"Blender build failed: {result.stdout[-300:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
+                    self.log(f"Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
@@ -301,8 +360,16 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        self.log_message("Agent 32 Pipeline Complete. Characters are now breathing and speaking dynamically!", "INFO")
+        # RULE 7: STATE UPDATE FOR THE NEXT AGENT
+        state["last_active_agent"] = self.agent_name
+        # After Animation & Lip-Sync, we move to Lighting!
+        state["next_agent"] = "Ai_Agent_33_Cinematic_Lighting_Director" 
+        
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+            
+        self.log(f"Facial Animation Complete. Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    actor = OmniMatrixLipSyncDeformer()
-    actor.process_lip_sync()
+    actor = AiAgent32OmniLipSyncActorDeformer()
+    actor.execute_pipeline()
