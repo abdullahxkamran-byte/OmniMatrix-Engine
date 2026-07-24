@@ -1,3 +1,8 @@
+# ==============================================================================
+# Ai_Agent_58_Autonomous_Skeleton_Auto_Rigger.py
+# MODULE H: Omni Generative Matrix (Limitless Skeleton Builder)
+# ==============================================================================
+
 import os
 import sys
 import json
@@ -18,66 +23,116 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class AutonomousUniversalAutoRigger:
-    # 1. Storage Optimization: Separate Temp (Drive) and Assets (Local)
-    def __init__(self, drive_temp_dir="G:/My Drive/ZNET_Temp", local_library_dir="D:/ZNET_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 58: Autonomous Universal Auto-Rigger"
+class AiAgent58AutonomousSkeletonAutoRigger:
+    def __init__(self):
+        # RULE 8: AI vs NON-AI NAMING
+        self.agent_name = "Ai_Agent_58_Autonomous_Skeleton_Auto_Rigger"
         
-        # Upstream Inputs (From Drive)
-        self.vision_outputs_dir = os.path.join(drive_temp_dir, "outputs")
-        self.meshes_dir = os.path.join(drive_temp_dir, "3d_meshes")
+        # RULE 2: UNIVERSAL PATH ISOLATION
+        self.workspace_root = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.module_h_dir = os.path.join(self.workspace_root, "Module_H_Generative")
+        
+        # Upstream Inputs
+        self.vision_outputs_dir = os.path.join(self.module_h_dir, "outputs_vision_layers")
+        self.meshes_dir = os.path.join(self.module_h_dir, "3d_meshes")
         self.input_blueprint_path = os.path.join(self.meshes_dir, "56_master_mesh_blueprint.json")
         
-        # Outputs (Going to Local Hard Drive!)
-        self.rig_dir = os.path.join(local_library_dir, "rigged_assets")
+        # Outputs
+        self.rig_dir = os.path.join(self.module_h_dir, "rigged_assets")
         self.output_rig_blueprint = os.path.join(self.rig_dir, "58_master_rig_blueprint.json")
         
-        # Blender Executable Path
-        self.blender_path = blender_path
+        # System States
+        self.state_file = os.path.join(self.workspace_root, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_root, "global_config.json")
         
+        # API Keys
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [drive_temp_dir, self.rig_dir]:
+        self._initialize_directories()
+
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _initialize_directories(self):
+        for d in [self.workspace_root, self.module_h_dir, self.rig_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
-    def log_message(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+    # RULE 3: IDEMPOTENCY SCRUBBING
+    def scrub_workspace(self):
+        self.log("Scrubbing legacy rigged models to ensure idempotency...", "INFO")
+        for filename in os.listdir(self.rig_dir):
+            file_path = os.path.join(self.rig_dir, filename)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            except Exception as e:
+                self.log(f"Failed to delete {file_path}. Reason: {e}", "WARNING")
+
+    # RULE 4: LIMITLESS FLUIDITY
+    def load_global_config(self):
+        default_config = {
+            "rigging_mode": "omni_limitless", # Omni_limitless automatically figures out anatomy
+            "blender_executable": "blender"
+        }
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    user_config = json.load(f)
+                    default_config.update(user_config)
+            except Exception:
+                pass
+        return default_config
+
+    # RULE 5: BULLETPROOF JSON CLEANER
+    def clean_json_response(self, raw_response):
+        try:
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_response, flags=re.DOTALL)
+            cleaned = cleaned.strip()
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            start = raw_response.find("{")
+            end = raw_response.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_response[start:end+1])
+                except: pass
+            return None
 
     def _analyze_mesh_bounds(self, mesh_path):
-        """Calculates exact 3D limits of the mesh to guide the AI for bone placement."""
-        default_bounds = {"min_x": -1, "max_x": 1, "min_y": -1, "max_y": 1, "min_z": 0, "max_z": 2}
+        """Calculates precise physical coordinates of the model."""
+        default_bounds = {"min_x": -1.0, "max_x": 1.0, "min_y": -1.0, "max_y": 1.0, "min_z": 0.0, "max_z": 2.0}
         if not os.path.exists(mesh_path):
             return default_bounds
 
         try:
-            x_coords, y_coords, z_coords = [], [], []
+            xs, ys, zs = [], [], []
             with open(mesh_path, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.startswith("v "):
                         parts = line.split()
                         if len(parts) >= 4:
-                            x_coords.append(float(parts[1]))
-                            y_coords.append(float(parts[2]))
-                            z_coords.append(float(parts[3]))
+                            xs.append(float(parts[1]))
+                            ys.append(float(parts[2]))
+                            zs.append(float(parts[3]))
 
-            if not z_coords:
+            if not zs:
                 return default_bounds
 
             return {
-                "min_x": min(x_coords), "max_x": max(x_coords),
-                "min_y": min(y_coords), "max_y": max(y_coords),
-                "min_z": min(z_coords), "max_z": max(z_coords),
-                "height": abs(max(z_coords) - min(z_coords)),
-                "width": abs(max(x_coords) - min(x_coords))
+                "min_x": min(xs), "max_x": max(xs),
+                "min_y": min(ys), "max_y": max(ys),
+                "min_z": min(zs), "max_z": max(zs),
+                "height": abs(max(zs) - min(zs)),
+                "width": abs(max(xs) - min(xs))
             }
-        except Exception as e:
-            self.log_message(f"Error parsing mesh dimensions: {str(e)}", "WARNING")
+        except Exception:
             return default_bounds
 
-    def _get_fallback_biped_rig(self, bounds):
-        """Offline fallback if AI API fails. Now includes Weapon Socket and Jaw."""
+    # RULE 10: 100% OFFLINE AUTONOMY FALLBACK
+    def _get_procedural_fallback_rig(self, bounds):
+        """Fallback Math: A universal biped rig with core sockets if AI APIs fail."""
+        self.log("Engaging Procedural Fallback Anatomy Generator...", "STATUS")
         z_min = bounds["min_z"]
         height = bounds["height"]
         root_z = z_min + (height * 0.5)
@@ -88,69 +143,100 @@ class AutonomousUniversalAutoRigger:
             {"name": "Root", "parent": None, "head": [0, 0, z_min], "tail": [0, 0, root_z]},
             {"name": "Spine", "parent": "Root", "head": [0, 0, root_z], "tail": [0, 0, spine_z]},
             {"name": "NeckHead", "parent": "Spine", "head": [0, 0, spine_z], "tail": [0, 0, head_z]},
-            
-            # 2. Facial Rigging Fallback
-            {"name": "Jaw", "parent": "NeckHead", "head": [0, -0.1, head_z - 0.05], "tail": [0, -0.2, head_z - 0.1]},
-            
+            {"name": "Jaw_Socket", "parent": "NeckHead", "head": [0, -0.1, head_z - 0.05], "tail": [0, -0.2, head_z - 0.1]},
             {"name": "Arm_L", "parent": "Spine", "head": [0.2, 0, spine_z], "tail": [0.8, 0, spine_z]},
             {"name": "Arm_R", "parent": "Spine", "head": [-0.2, 0, spine_z], "tail": [-0.8, 0, spine_z]},
-            
-            # 3. Weapon Socket Fallback (Attached to Right Arm/Hand)
-            {"name": "Weapon_Socket", "parent": "Arm_R", "head": [-0.8, 0, spine_z], "tail": [-0.8, -0.2, spine_z]},
-            
+            {"name": "Weapon_Socket_R", "parent": "Arm_R", "head": [-0.8, 0, spine_z], "tail": [-0.8, -0.2, spine_z]},
             {"name": "Leg_L", "parent": "Root", "head": [0.2, 0, root_z], "tail": [0.2, 0, z_min]},
-            {"name": "Leg_R", "parent": "Root", "head": [-0.2, 0, root_z], "tail": [-0.2, 0, z_min]}
+            {"name": "Leg_R", "parent": "Root", "head": [-0.2, 0, root_z], "tail": [-0.2, 0, z_min]},
+            {"name": "VFX_Core_Socket", "parent": "Spine", "head": [0, -0.1, spine_z-0.1], "tail": [0, -0.3, spine_z-0.1]}
         ]
 
-    def _generate_custom_bone_hierarchy(self, char_name, bg_desc, bounds):
-        """Asks Gemini to create a custom anatomical bone structure."""
-        if not self.gemini_api_key:
-            self.log_message("No Gemini API key found. Using fallback AAA rig.", "WARNING")
-            return self._get_fallback_biped_rig(bounds)
+    # RULE 6: QUAD-CORE FALLBACK MATRIX FOR LIMITLESS ANATOMY
+    def _generate_omni_bone_hierarchy(self, char_name, vision_data, bounds):
+        """
+        THE LIMITLESS CORE: Instructs the AI to invent bones for ANY anatomy.
+        4 Arms? Holes in stomach? Eye on hand? It will create sockets for them.
+        """
+        bg_desc = vision_data.get("environment_description", "")
+        pose_intent = vision_data.get("pose_intent", "")
+        
+        ai_prompt = f"""
+        You are an Expert Limitless 3D Rigger. You are rigging: {char_name}.
+        Visual Context: {bg_desc} | Animation Intent: {pose_intent}
+        Mesh Bounds: X[{bounds['min_x']:.2f} to {bounds['max_x']:.2f}], Y[{bounds['min_y']:.2f} to {bounds['max_y']:.2f}], Z[{bounds['min_z']:.2f} to {bounds['max_z']:.2f}].
+        
+        CRITICAL RULES:
+        1. NO LIMITS ON ANATOMY: If the character has 4 arms, create Arm_L1, Arm_L2, etc. If it has a tail, create Tail_1, Tail_2.
+        2. VFX SOCKETS: You MUST add specialized "_Socket" bones for unique features. 
+           - E.g., if there's a hole in the stomach, create "Stomach_Hole_Socket". 
+           - If there's an eye on the hand, create "Hand_Eye_Socket".
+        3. All coordinates [x, y, z] MUST stay within the Mesh Bounds.
+        
+        Return ONLY valid JSON. Format:
+        {{
+          "bones": [
+            {{"name": "Root", "parent": null, "head": [0.0, 0.0, 0.0], "tail": [0.0, 0.0, 0.5]}},
+            {{"name": "Spine", "parent": "Root", "head": [0.0, 0.0, 0.5], "tail": [0.0, 0.0, 1.0]}},
+            {{"name": "Extra_Arm_L", "parent": "Spine", "head": [0.1, 0, 0.8], "tail": [0.5, 0, 0.8]}}
+          ]
+        }}
+        """
 
-        prompt = (
-            "You are an Expert AAA 3D Technical Director and Rigger.\n"
-            f"Character Name: {char_name}\n"
-            f"Context/Description: {bg_desc}\n"
-            f"Mesh Physical Bounds: X[{bounds['min_x']:.2f} to {bounds['max_x']:.2f}], "
-            f"Y[{bounds['min_y']:.2f} to {bounds['max_y']:.2f}], Z[{bounds['min_z']:.2f} to {bounds['max_z']:.2f}].\n\n"
-            "Create a custom bone hierarchy for this specific character. "
-            "If it's an animal, make quadruped bones. If it's a character with 4 arms (like Sukuna) or tails, include bones for them.\n\n"
-            "CRITICAL AAA REQUIREMENTS:\n"
-            "1. FACIAL RIGGING: You MUST include a 'Jaw' bone and 'Eye_L' / 'Eye_R' bones parented to the Head for facial expressions.\n"
-            "2. WEAPON SOCKET: You MUST include a 'Weapon_Socket' bone parented to the dominant hand/arm for prop attachments.\n\n"
-            "ALL bone coordinates (head and tail [x,y,z]) MUST strictly stay within the Mesh Physical Bounds provided.\n"
-            "Return ONLY raw JSON, without markdown formatting. Format exactly like this:\n"
-            "{\n"
-            "  \"bones\": [\n"
-            "    {\"name\": \"Root\", \"parent\": null, \"head\": [0.0, 0.0, 0.1], \"tail\": [0.0, 0.0, 0.5]}\n"
-            "  ]\n"
-            "}"
-        )
+        # Core 1: Gemini
+        if self.gemini_api_key:
+            try:
+                self.log(f"Executing Core 1 (Gemini) for Omni-Anatomy generation...", "INFO")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self.clean_json_response(res_text)
+                    if parsed and "bones" in parsed: return parsed["bones"]
+            except Exception as e:
+                self.log(f"Core 1 Failed: {e}", "WARNING")
 
+        # Core 2: OpenAI
+        if self.openai_api_key:
+            try:
+                self.log("Executing Core 2 (OpenAI) for Omni-Anatomy generation...", "INFO")
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {self.openai_api_key}", "Content-Type": "application/json"}
+                payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": ai_prompt}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"]
+                    parsed = self.clean_json_response(res_text)
+                    if parsed and "bones" in parsed: return parsed["bones"]
+            except Exception as e:
+                self.log(f"Core 2 Failed: {e}", "WARNING")
+
+        # Core 3: Ollama Local
         try:
-            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
-            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as response:
-                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                res_text = re.sub(r'^```json', '', res_text, flags=re.IGNORECASE)
-                res_text = re.sub(r'```$', '', res_text).strip()
-                
-                rig_data = json.loads(res_text)
-                self.log_message(f"AI successfully generated custom AAA anatomy for {char_name}.", "INFO")
-                return rig_data.get("bones", self._get_fallback_biped_rig(bounds))
+            self.log("Executing Core 3 (Ollama Local) for Omni-Anatomy...", "INFO")
+            url = "http://127.0.0.1:11434/api/generate"
+            payload = {"model": "llama3", "prompt": ai_prompt, "stream": False}
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                res_text = json.loads(response.read().decode("utf-8"))["response"]
+                parsed = self.clean_json_response(res_text)
+                if parsed and "bones" in parsed: return parsed["bones"]
         except Exception as e:
-            self.log_message(f"AI Rig Generation failed: {str(e)}. Using fallback AAA rig.", "ERROR")
-            return self._get_fallback_biped_rig(bounds)
+            self.log(f"Core 3 Failed: {e}", "WARNING")
 
+        # Core 4: Procedural Math Fallback
+        return self._get_procedural_fallback_rig(bounds)
+
+    # RULE 9: ACTIONABLE ABSTRACTION
     def _generate_blender_rig_script(self, mesh_path, fbx_out_path, bone_data):
-        """Generates a Blender python script that builds the skeleton."""
         safe_mesh_path = mesh_path.replace("\\", "/")
         safe_fbx_path = fbx_out_path.replace("\\", "/")
-        safe_blend_path = safe_fbx_path.replace(".fbx", ".blend") # Saving .blend for manual tweaks
+        safe_blend_path = safe_fbx_path.replace(".fbx", ".blend") 
         
         bones_json = json.dumps(bone_data)
 
+        # Uses Advanced Envelope Weights for Omni-mesh flexibility
         blender_script = f"""
 import bpy
 import json
@@ -163,11 +249,10 @@ def clear_scene():
 try:
     clear_scene()
 
+    # 1. Import Mesh
     mesh_path = "{safe_mesh_path}"
-    try:
-        bpy.ops.wm.obj_import(filepath=mesh_path)
-    except AttributeError:
-        bpy.ops.import_scene.obj(filepath=mesh_path)
+    try: bpy.ops.wm.obj_import(filepath=mesh_path)
+    except AttributeError: bpy.ops.import_scene.obj(filepath=mesh_path)
 
     mesh_obj = None
     for obj in bpy.context.scene.objects:
@@ -178,9 +263,10 @@ try:
     if not mesh_obj:
         raise ValueError("No mesh found after import.")
 
+    # 2. Build Omni-Skeleton
     bpy.ops.object.armature_add(enter_editmode=True, align='WORLD', location=(0, 0, 0))
     armature_obj = bpy.context.active_object
-    armature_obj.name = "Custom_AI_Rig"
+    armature_obj.name = "Omni_Limitless_Rig"
     armature = armature_obj.data
     
     for bone in armature.edit_bones:
@@ -189,13 +275,18 @@ try:
     bone_data = json.loads('''{bones_json}''')
     edit_bones_dict = {{}}
 
+    # Create all bones (including VFX sockets)
     for b_info in bone_data:
         b_name = b_info.get("name", "Bone")
         eb = armature.edit_bones.new(b_name)
         eb.head = b_info.get("head", (0, 0, 0))
         eb.tail = b_info.get("tail", (0, 0, 1))
+        # Unique sockets shouldn't deform the mesh, just act as attach points
+        if "_Socket" in b_name:
+            eb.use_deform = False 
         edit_bones_dict[b_name] = eb
 
+    # Setup Parent Hierarchy
     for b_info in bone_data:
         parent_name = b_info.get("parent")
         if parent_name and parent_name in edit_bones_dict:
@@ -205,13 +296,15 @@ try:
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
+    # 3. Smart Binding (Bone Envelopes for irregular Omni-anatomy)
     bpy.ops.object.select_all(action='DESELECT')
     mesh_obj.select_set(True)
     armature_obj.select_set(True)
     bpy.context.view_layer.objects.active = armature_obj
 
-    bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+    bpy.ops.object.parent_set(type='ARMATURE_ENVELOPE')
 
+    # 4. Export FBX & Blend
     bpy.ops.export_scene.fbx(
         filepath="{safe_fbx_path}",
         use_selection=False,
@@ -220,87 +313,95 @@ try:
         add_leaf_bones=False,
         armature_nodetype='NULL'
     )
-    
-    # Save Blend file in Local Storage for maximum editability
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
     
-    print("SUCCESS")
+    print("OMNIMATRIX_BLENDER_SUCCESS")
 except Exception as e:
-    print("ERROR:", str(e))
+    print(f"OMNIMATRIX_BLENDER_ERROR: {{str(e)}}")
     sys.exit(1)
 """
-        script_path = os.path.join("temp_blender_rig_script.py")
+        script_path = os.path.join(self.module_h_dir, "temp_rig_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(blender_script)
         return script_path
 
     def execute_batch_rigging(self):
-        self.log_message("Initializing Universal Skeleton Auto-Rigger Engine...", "INFO")
+        self.log("System Initializing...", "INFO")
+        
+        # RULE 7: ATOMIC HANDSHAKE
+        state = {}
+        if os.path.exists(self.state_file):
+            with open(self.state_file, "r") as f:
+                try: state = json.load(f)
+                except: pass
+                
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        self.scrub_workspace()
+        config = self.load_global_config()
+        blender_executable = config.get("blender_executable", "blender")
         
         if not os.path.exists(self.input_blueprint_path):
-            self.log_message("Agent 56 Blueprint missing. Cannot proceed.", "ERROR")
-            return
+            self.log("Agent 56 Blueprint missing. Cannot proceed.", "FATAL")
+            sys.exit(1)
 
         with open(self.input_blueprint_path, "r", encoding="utf-8") as f:
             master_mesh_blueprint = json.load(f)
 
         master_rig_blueprint = {}
-        rigged_memory = {}
 
         for scene_name, mesh_data in master_mesh_blueprint.items():
             obj_path = mesh_data.get("mesh", "")
             if not obj_path or not os.path.exists(obj_path):
                 continue
 
-            vision_json_path = os.path.join(self.vision_outputs_dir, f"{scene_name}_vision.json")
-            char_name = "Unknown"
-            bg_desc = ""
+            vision_json_path = os.path.join(self.vision_outputs_dir, f"{scene_name}_blueprint.json")
+            char_name = f"Char_{scene_name}"
+            vision_data = {}
             
-            # Smart Environment Bypass: If no characters, skip rigging entirely!
             if os.path.exists(vision_json_path):
                 with open(vision_json_path, "r", encoding="utf-8") as vf:
-                    v_data = json.load(vf)
-                    if v_data.get("pipeline_mode") == "Environment":
-                        self.log_message(f"Skipping rigging for {scene_name} (Environment Only).", "INFO")
-                        continue
-                    char_name = v_data.get("character_name", "Unknown").replace(" ", "_")
-                    bg_desc = v_data.get("background_description", "")
+                    vision_data = json.load(vf)
 
-            self.log_message(f"--- Rigging Sequence: {scene_name} | Target: {char_name} ---", "INFO")
-
-            if mesh_data.get("is_reused", False) and char_name in rigged_memory:
-                self.log_message(f"Smart Bypass: Linking existing rig for {char_name}", "INFO")
-                master_rig_blueprint[scene_name] = rigged_memory[char_name]
+            # Check if this scene has a character to rig
+            if not vision_data.get("layers", {}).get("char_layer", ""):
+                self.log(f"Skipping rigging for {scene_name} (No character detected/Environment Only).", "INFO")
                 continue
 
-            # Outputting strictly to Local Drive!
-            fbx_out_path = os.path.join(self.rig_dir, f"{char_name}_rigged.fbx")
+            self.log(f"--- Omni-Rigging Sequence: {char_name} ---", "INFO")
 
+            fbx_out_path = os.path.join(self.rig_dir, f"{char_name}_omni_rig.fbx")
+
+            # 1. Math Analysis
             bounds = self._analyze_mesh_bounds(obj_path)
-            bone_data = self._generate_custom_bone_hierarchy(char_name, bg_desc, bounds)
+            
+            # 2. AI Limitless Hierarchy Generation
+            bone_data = self._generate_omni_bone_hierarchy(char_name, vision_data, bounds)
+            
+            # 3. Actionable Script
             script_path = self._generate_blender_rig_script(obj_path, fbx_out_path, bone_data)
 
-            self.log_message(f"Binding skeleton to {char_name} using Headless Blender...", "INFO")
-            command = [self.blender_path, "-b", "-P", script_path]
+            self.log(f"Binding Omni-Skeleton to {char_name} via Headless Blender...", "INFO")
+            command = [blender_executable, "-b", "-P", script_path]
             
             try:
                 result = subprocess.run(command, capture_output=True, text=True)
-                if result.returncode == 0 and os.path.exists(fbx_out_path):
-                    self.log_message(f"Exported successfully to LOCAL DRIVE: {char_name}_rigged.fbx", "INFO")
+                if "OMNIMATRIX_BLENDER_SUCCESS" in result.stdout and os.path.exists(fbx_out_path):
+                    self.log(f"Exported successfully: {char_name}_omni_rig.fbx", "SUCCESS")
                     
-                    rig_info = {
+                    master_rig_blueprint[scene_name] = {
                         "rigged_fbx": fbx_out_path,
                         "rigged_blend": fbx_out_path.replace(".fbx", ".blend"),
                         "bone_count": len(bone_data),
                         "material": mesh_data.get("material", ""),
                         "texture": mesh_data.get("texture", "")
                     }
-                    rigged_memory[char_name] = rig_info
-                    master_rig_blueprint[scene_name] = rig_info
                 else:
-                    self.log_message(f"Blender failed. Log: {result.stdout[-300:]}", "ERROR")
+                    self.log(f"Blender failed. Log: {result.stdout[-300:]}", "ERROR")
             except Exception as e:
-                self.log_message(f"Subprocess failed. Is Blender in system PATH? {str(e)}", "CRITICAL")
+                self.log(f"Subprocess failed. Is Blender in system PATH? {str(e)}", "CRITICAL")
             
             if os.path.exists(script_path):
                 os.remove(script_path)
@@ -308,8 +409,19 @@ except Exception as e:
         with open(self.output_rig_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_rig_blueprint, f, indent=4)
 
-        self.log_message("Universal Auto-Rigging Pipeline Complete!", "INFO")
+        # RULE 7: ATOMIC HANDSHAKE (Advance State)
+        state["last_active_agent"] = self.agent_name
+        state["next_agent"] = "Ai_Agent_59_Generative_Motion_Puppeteer_Animator"
+        
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+
+        self.log(f"Limitless Auto-Rigging Complete! Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    rigger = AutonomousUniversalAutoRigger()
+    rigger = AiAgent58AutonomousSkeletonAutoRigger()
     rigger.execute_batch_rigging()
+
+# ==============================================================================
+# END OF FILE
+# ==============================================================================
