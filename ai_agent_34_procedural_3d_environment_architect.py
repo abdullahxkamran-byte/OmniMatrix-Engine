@@ -1,3 +1,8 @@
+# ==============================================================================
+# Ai_Agent_34_Cinematic_Environment_Architect.py
+# MODULE D: Atmosphere & Cinematography - (GOD-LEVEL TERRAIN & VOLUMETRICS)
+# ==============================================================================
+
 import os
 import re
 import sys
@@ -13,133 +18,138 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    # Universal Uppercase API Keys
+                    # RULE 6: UNIVERSAL UPPERCASE API KEYS
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
-class OmniMatrixEnvironmentArchitect:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 34: aaa_procedural_environment_architect"
+class AiAgent34CinematicEnvironmentArchitect:
+    def __init__(self):
+        # RULE 8: STRICT AI NAMING
+        self.agent_name = "Ai_Agent_34_Cinematic_Environment_Architect"
         
-        # Directories
-        self.workspace_dir = workspace_dir
-        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        # RULE 2: UNIVERSAL PATH ISOLATION (No Hardcoded Drives)
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_d_dir = os.path.join(self.workspace_dir, "Module_D_Atmosphere")
         
-        # Outputs
-        self.output_blueprint = os.path.join(self.workspace_dir, "34_environment_blueprint.json")
-        self.blender_path = blender_path
+        self.output_blueprint = os.path.join(self.module_d_dir, "34_environment_lighting_blueprint.json")
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_dir, "global_config.json")
         
-        # GEMINI API INTEGRATION
+        # RULE 6: DUAL API FAILSAFES
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
+        for d in [self.script_dir, self.env_dir, self.module_d_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
-    def _load_upstream_storyboard(self):
-        """Loads environmental demands from storyboard or matrix state"""
-        story_path = os.path.join(self.script_dir, "03_visual_sync_storyboarder.json")
-        env_demands = []
-
-        if os.path.exists(story_path):
+    def _load_master_config(self):
+        default_config = {"global_style": "anime", "blender_executable": "blender"}
+        if os.path.exists(self.config_file):
             try:
-                with open(story_path, "r", encoding="utf-8") as f:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
+
+    def _load_upstream_context(self):
+        """Loads story/mood data from Master Matrix State (Rule 7)"""
+        context = {
+            "mood": "EPIC",
+            "visual_description": "Desolate battleground",
+            "start_frame": 1
+        }
+        
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                for i, panel in enumerate(data.get("storyboard_panels", [])):
-                    env_demands.append({
-                        "panel_index": i,
-                        "timestamp_sec": panel.get("timestamp_sec", float(i * 3.0)),
-                        "visual_description": panel.get("visual_prompt", "battleground"),
-                        "mood": panel.get("emotional_tone", "EPIC")
-                    })
-            except Exception as e:
-                self.log_message(f"Storyboard read warning: {str(e)}", "WARNING")
-
-        if not env_demands:
-            env_demands = [{
-                "panel_index": 0, "timestamp_sec": 0.0,
-                "visual_description": "Desolate sci-fi cyber arena with glowing pillars", "mood": "EPIC"
-            }]
-
-        return env_demands
+                    if "emotion" in data:
+                        context["mood"] = data["emotion"]
+                    if "scene_description" in data:
+                        context["visual_description"] = data["scene_description"]
+            except: pass
+                
+        return context
 
     def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _query_architect_brain(self, demands):
-        self.log_message("Consulting Architect Brain for Environment Layouts...", "INFO")
-
-        if not self.gemini_api_key:
-            self.log_message("No Gemini API Key found. Using fallback layout.", "WARNING")
-            return self._fallback_architect(demands)
-
-        ai_prompt = (
-            f"You are the Master Procedural Environment Architect for the OmniMatrix Engine.\n"
-            f"Storyboard Demands:\n{json.dumps(demands[:2], indent=2)}\n\n"
-            "Design the environment layout configuration.\n"
-            "Presets available: 'neo_tokyo_cyberpunk', 'grassy_shonen_plains', 'apocalyptic_ruins', 'crimson_void_space'.\n"
-            "Return EXACTLY 1 raw JSON object containing a list named 'environment_layouts':\n"
-            "{\n"
-            "  \"environment_layouts\": [\n"
-            "    {\n"
-            "      \"timestamp_sec\": 0.0,\n"
-            "      \"environment_preset\": \"neo_tokyo_cyberpunk\",\n"
-            "      \"sun_intensity_lux\": 15.0,\n"
-            "      \"color_temperature_k\": 8500.0,\n"
-            "      \"volumetric_fog_density\": 0.15,\n"
-            "      \"procedural_prop_count\": 50,\n"
-            "      \"ground_subdivision_level\": 4\n"
-            "    }\n"
-            "  ]\n"
-            "}"
-        )
-
         try:
-            # NATIVE GEMINI JSON PAYLOAD
-            payload = {
-                "contents": [{"parts": [{"text": ai_prompt}]}], 
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                cleaned = self._clean_json_response(res_text)
-                return json.loads(cleaned).get("environment_layouts", [])
-        except Exception as e:
-            self.log_message(f"AI Architect Brain failed: {str(e)}. Triggering fallback.", "WARNING")
-            return self._fallback_architect(demands)
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_text, flags=re.DOTALL).strip()
+            return json.loads(cleaned)
+        except:
+            start = raw_text.find("{")
+            end = raw_text.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_text[start:end+1])
+                except: pass
+            return None
 
-    def _fallback_architect(self, demands):
-        layouts = []
-        for d in demands:
-            layouts.append({
-                "timestamp_sec": float(d.get("timestamp_sec", 0.0)),
-                "environment_preset": "neo_tokyo_cyberpunk",
-                "sun_intensity_lux": 10.0,
-                "color_temperature_k": 7000.0,
-                "volumetric_fog_density": 0.1,
-                "procedural_prop_count": 40,
-                "ground_subdivision_level": 3
-            })
-        return layouts
+    def _fallback_architect(self, style):
+        is_anime = "anime" in style.lower()
+        return {
+            "environment_preset": "neo_tokyo_cyberpunk" if is_anime else "apocalyptic_ruins",
+            "sun_intensity_lux": 15.0 if is_anime else 3.5,
+            "sun_color": [1.0, 0.9, 0.8] if is_anime else [0.6, 0.7, 0.9], # Warm vs Cold
+            "volumetric_fog_density": 0.02 if is_anime else 0.15, # Realism has heavy fog
+            "procedural_prop_count": 30,
+            "ground_subdivision_level": 4,
+            "emission_strength": 5.0 if is_anime else 0.5
+        }
 
-    def _generate_blender_script(self, blend_file_path, layout_data):
-        """Headless Blender Script to build procedural ground, craters, and scatter props."""
+    # LIMITLESS ARCHITECT & LIGHTING AI
+    def _query_architect_brain(self, scene_name, context, style):
+        self.log(f"Calculating World Geometry & Cinematography for '{scene_name}'...", "INFO")
+
+        ai_prompt = f"""
+        You are the Master Procedural Environment & Lighting Architect for the OmniMatrix Engine.
+        Scene Description: "{context['visual_description']}"
+        Mood: {context['mood']}
+        Visual Style: {style.upper()}
+        
+        MISSION:
+        Design the procedural environment layout AND volumetric lighting settings.
+        
+        STYLE RULES (Rule 13):
+        - If ANIME: Use high `sun_intensity_lux` (vibrant colors), low `volumetric_fog_density` (clear skies), and high `emission_strength` for glowing cyberpunk elements or bright grass.
+        - If REALISTIC: Use lower `sun_intensity_lux`, higher `volumetric_fog_density` (moody atmosphere), and realistic `sun_color` (RGB format).
+        
+        Return EXACTLY 1 JSON object:
+        {{
+            "environment_preset": "neo_tokyo_cyberpunk" or "grassy_shonen_plains" or "apocalyptic_ruins",
+            "sun_intensity_lux": float,
+            "sun_color": [R, G, B] (floats 0.0 to 1.0),
+            "volumetric_fog_density": float,
+            "procedural_prop_count": integer (max 50),
+            "ground_subdivision_level": integer (3 to 6),
+            "emission_strength": float
+        }}
+        """
+
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed and "environment_preset" in parsed:
+                        return parsed
+            except: pass
+
+        return self._fallback_architect(style)
+
+    # GOD-LEVEL BLENDER SCRIPT: NODES, VOLUMETRICS, TERRAIN
+    def _generate_blender_script(self, blend_file_path, layout_data, style):
         safe_blend_path = blend_file_path.replace("\\", "/")
+        preset = layout_data.get('environment_preset', 'apocalyptic_ruins')
+        is_anime = "True" if "anime" in style.lower() else "False"
         
         script_content = f"""
 import bpy
@@ -148,90 +158,158 @@ import random
 try:
     bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
 
-    # Idempotency: Scrub existing procedural elements to prevent overlapping meshes on re-runs
+    # 1. IDEMPOTENCY: STRICT GARBAGE COLLECTION (Rule 5)
+    # Scrub old terrains, props, lights, and volumetrics
     for obj in bpy.data.objects:
-        if obj.name.startswith("OMNI_Procedural_Ground") or obj.name.startswith("OMNI_Cyber_Pillar_") or obj.name.startswith("OMNI_Terrain_Rock_"):
+        if any(prefix in obj.name for prefix in ["OMNI_Ground", "OMNI_Prop", "OMNI_Sun", "OMNI_Volume"]):
             bpy.data.objects.remove(obj, do_unlink=True)
             
-    # Cleanup unused textures to avoid memory bloat
-    if "OMNI_Ground_Noise" in bpy.data.textures:
-        bpy.data.textures.remove(bpy.data.textures["OMNI_Ground_Noise"], do_unlink=True)
+    # Scrub unused textures and materials to free VRAM
+    for mat in bpy.data.materials:
+        if "OMNI_" in mat.name: bpy.data.materials.remove(mat, do_unlink=True)
+    for tex in bpy.data.textures:
+        if "OMNI_" in tex.name: bpy.data.textures.remove(tex, do_unlink=True)
 
-    preset = "{layout_data.get('environment_preset', 'neo_tokyo_cyberpunk')}"
+    # 2. DYNAMIC SUN & LIGHTING
+    sun_data = bpy.data.lights.new(name="OMNI_Sun_Light", type='SUN')
+    sun_data.energy = {layout_data.get('sun_intensity_lux', 10.0)}
+    sun_data.color = {layout_data.get('sun_color', [1.0, 1.0, 1.0])}
+    
+    sun_obj = bpy.data.objects.new(name="OMNI_Sun", object_data=sun_data)
+    bpy.context.collection.objects.link(sun_obj)
+    sun_obj.rotation_euler = (0.785, 0.0, 0.5) # Angled sunset/sunrise lighting
+
+    # 3. ATMOSPHERE: VOLUMETRIC FOG (God Rays Setup)
+    bpy.ops.mesh.primitive_cube_add(size=100.0, location=(0,0,10))
+    vol_cube = bpy.context.active_object
+    vol_cube.name = "OMNI_Volume_Domain"
+    vol_cube.display_type = 'WIRE' # Don't block viewport
+    
+    vol_mat = bpy.data.materials.new(name="OMNI_Volumetric_Mat")
+    vol_mat.use_nodes = True
+    nodes = vol_mat.node_tree.nodes
+    links = vol_mat.node_tree.links
+    
+    nodes.clear() # Clear default principled bsdf
+    vol_node = nodes.new(type='ShaderNodeVolumePrincipled')
+    vol_node.inputs['Density'].default_value = {layout_data.get('volumetric_fog_density', 0.1)}
+    vol_node.inputs['Anisotropy'].default_value = 0.8 if {is_anime} else 0.4 # Anime has sharp god rays
+    
+    out_node = nodes.new(type='ShaderNodeOutputMaterial')
+    links.new(vol_node.outputs['Volume'], out_node.inputs['Volume'])
+    vol_cube.data.materials.append(vol_mat)
+
+    # 4. PROCEDURAL TERRAIN GENERATION
     subdiv = {layout_data.get('ground_subdivision_level', 3)}
-    props_count = {layout_data.get('procedural_prop_count', 30)}
-    
-    # 1. Create Organic Ground Plane with Subdivisions & Displacements
-    bpy.ops.mesh.primitive_grid_add(size=30.0, x_subdivisions=2**subdiv, y_subdivisions=2**subdiv, location=(0,0,0))
+    bpy.ops.mesh.primitive_grid_add(size=40.0, x_subdivisions=2**subdiv, y_subdivisions=2**subdiv, location=(0,0,0))
     ground = bpy.context.active_object
-    ground.name = "OMNI_Procedural_Ground"
+    ground.name = "OMNI_Ground_Mesh"
     
-    # Add Displace modifier to make natural ground bumps/craters
-    sub_mod = ground.modifiers.new(name="Ground_Subsurf", type='SUBSURF')
+    sub_mod = ground.modifiers.new(name="Subsurf", type='SUBSURF')
     sub_mod.levels = 2
     
-    disp_mod = ground.modifiers.new(name="Ground_Displace", type='DISPLACE')
-    
-    # Fix: 'STORM' is not a valid Blender texture. Using 'CLOUDS' for organic terrain noise.
+    disp_mod = ground.modifiers.new(name="Displace", type='DISPLACE')
     tex = bpy.data.textures.new("OMNI_Ground_Noise", type='CLOUDS')
-    tex.noise_scale = 1.5
+    tex.noise_scale = 2.0 if {is_anime} else 1.0
     disp_mod.texture = tex
-    disp_mod.strength = 0.8
+    disp_mod.strength = 1.2 if not "plains" in "{preset}" else 0.4
 
-    # 2. Procedural Prop Scattering (Pillars, Debris, Rocks)
-    random.seed(42) # Consistent procedural layout
-    for i in range(min(props_count, 60)): # Safe cap to avoid RAM spikes
-        x = random.uniform(-12.0, 12.0)
-        y = random.uniform(-12.0, 12.0)
+    # 5. PROCEDURAL SHADER NODE NETWORK (The Magic)
+    ground_mat = bpy.data.materials.new(name="OMNI_Ground_Mat")
+    ground_mat.use_nodes = True
+    gnodes = ground_mat.node_tree.nodes
+    bsdf = gnodes.get("Principled BSDF")
+    
+    if "cyberpunk" in "{preset}":
+        # Create glowing neon grid lines
+        bsdf.inputs['Base Color'].default_value = (0.05, 0.05, 0.05, 1) # Dark asphalt
+        bsdf.inputs['Emission Strength'].default_value = {layout_data.get('emission_strength', 5.0)}
+        bsdf.inputs['Emission Color'].default_value = (0.0, 0.8, 1.0, 1) # Cyan glow
+    elif "plains" in "{preset}":
+        bsdf.inputs['Base Color'].default_value = (0.1, 0.5, 0.1, 1) if {is_anime} else (0.05, 0.2, 0.05, 1)
+        bsdf.inputs['Roughness'].default_value = 0.9
+    else: # Ruins
+        bsdf.inputs['Base Color'].default_value = (0.2, 0.18, 0.15, 1)
         
-        if "cyberpunk" in preset.lower():
-            bpy.ops.mesh.primitive_cylinder_add(radius=0.4, depth=random.uniform(4.0, 8.0), location=(x, y, 2.0))
-            prop = bpy.context.active_object
-            prop.name = f"OMNI_Cyber_Pillar_{{i}}"
+    ground.data.materials.append(ground_mat)
+
+    # 6. INSTANCE SCATTERING (Debris/Pillars)
+    random.seed(42)
+    prop_count = {layout_data.get('procedural_prop_count', 30)}
+    for i in range(prop_count):
+        x, y = random.uniform(-15.0, 15.0), random.uniform(-15.0, 15.0)
+        if "cyberpunk" in "{preset}":
+            bpy.ops.mesh.primitive_cylinder_add(radius=0.3, depth=random.uniform(5.0, 10.0), location=(x, y, 2.5))
+            bpy.context.active_object.data.materials.append(ground_mat) # Share neon material
         else:
-            bpy.ops.mesh.primitive_ico_sphere_add(radius=random.uniform(0.5, 1.5), location=(x, y, 0.5))
-            prop = bpy.context.active_object
-            prop.name = f"OMNI_Terrain_Rock_{{i}}"
+            bpy.ops.mesh.primitive_ico_sphere_add(radius=random.uniform(0.5, 2.0), subdivisions=2, location=(x, y, random.uniform(0, 1)))
+        
+        prop = bpy.context.active_object
+        prop.name = f"OMNI_Prop_Scatter_{{i}}"
+        prop.rotation_euler = (random.uniform(0, 0.5), random.uniform(0, 0.5), random.uniform(0, 6.28))
 
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
-    print(f"SUCCESS: Environment preset '{{preset}}' constructed successfully.")
+    print("OMNIMATRIX_ARCHITECT_SUCCESS")
 
 except Exception as e:
-    print(f"ERROR: {{str(e)}}")
+    print(f"OMNIMATRIX_ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join(self.workspace_dir, "temp_environment_script.py")
+        script_path = os.path.join(self.module_d_dir, "temp_environment_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
-    def construct_environments(self):
-        self.log_message("Initializing OmniMatrix Environment Architect...", "INFO")
+    def execute_pipeline(self):
+        self.log("Initializing Agent 34 (Cinematic Environment & Atmosphere)...", "INFO")
+
+        # RULE 7: ATOMIC HANDSHAKE
+        state = {}
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+            except: pass
+
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        config = self._load_master_config()
+        global_style = config.get("global_style", "anime").lower()
+        blender_executable = config.get("blender_executable", "blender")
+        master_blueprint = {}
         
-        demands = self._load_upstream_storyboard()
-        layouts = self._query_architect_brain(demands)
-        
-        master_blueprint = {"environment_layouts": layouts}
+        if not os.path.exists(self.env_dir) or not os.listdir(self.env_dir):
+            self.log("No 3D environments found. Exiting...", "WARNING")
+            sys.exit(0)
+            
+        context = self._load_upstream_context()
         
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
+            if filename.endswith(".blend"):
+                scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
-                layout = layouts[0] if layouts else {}
                 
-                self.log_message(f"--- Building World Layout for {filename} (Theme: {layout.get('environment_preset', 'Default')}) ---", "INFO")
+                self.log(f"--- Sculpting Terrain & Atmosphere for: {scene_name} | Style: {global_style.upper()} ---", "INFO")
                 
-                script_path = self._generate_blender_script(blend_file_path, layout)
+                layout_data = self._query_architect_brain(scene_name, context, global_style)
                 
-                command = [self.blender_path, "-b", "-P", script_path]
+                self.log(f"AI Matrix -> Theme: {layout_data.get('environment_preset')} | Fog Density: {layout_data.get('volumetric_fog_density')} | Sun: {layout_data.get('sun_intensity_lux')} Lux", "INFO")
+                
+                script_path = self._generate_blender_script(blend_file_path, layout_data, global_style)
+                command = [blender_executable, "-b", "-P", script_path]
+                
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0 and "SUCCESS" in result.stdout:
-                        self.log_message(f"Environment successfully structured into {filename}", "SUCCESS")
+                    if "OMNIMATRIX_ARCHITECT_SUCCESS" in result.stdout:
+                        self.log(f"God-Level Environment & Volumetrics baked into {filename}", "SUCCESS")
+                        master_blueprint[scene_name] = layout_data
                     else:
-                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
+                        self.log(f"Blender build failed: {result.stdout[-300:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
+                    self.log(f"Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
@@ -239,8 +317,15 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        self.log_message("Agent 34 Pipeline Complete. Module C is now 100% SECURED AND SEALED!", "INFO")
+        # RULE 7: STATE UPDATE (Handoff to Camera Cinematography)
+        state["last_active_agent"] = self.agent_name
+        state["next_agent"] = "Ai_Agent_35_Camera_Cinematography_Director" 
+        
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+            
+        self.log(f"Module D (Atmosphere) Setup Complete. Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    architect = OmniMatrixEnvironmentArchitect()
-    architect.construct_environments()
+    architect = AiAgent34CinematicEnvironmentArchitect()
+    architect.execute_pipeline()
