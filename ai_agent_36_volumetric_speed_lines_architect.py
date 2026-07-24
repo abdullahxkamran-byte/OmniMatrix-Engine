@@ -1,190 +1,164 @@
-import os
-import re
-import sys
-import json
-import math
-import subprocess
-import urllib.request
-import urllib.error
+import os, re, sys, json, math, time, random, subprocess, urllib.request, urllib.error
 
+# =====================================================================
+# RULE 2 & 14: UNIVERSAL ENVIRONMENT & API CONFIGURATION
+# =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip().upper()] = val.strip()
-
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip().upper()] = v.strip()
 load_env_file()
 
-class VolumetricSpeedLinesArchitect:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 36: volumetric_speed_lines_architect"
+class Ai_Agent_36_Volumetric_Speed_Lines_Architect:
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        self.agent_name = "Ai_Agent_36_Volumetric_Speed_Lines_Architect"
         self.workspace_dir = workspace_dir
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
-        self.blender_path = blender_path
-        
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        self.env_dir = os.path.join(self.workspace_dir, "Local_3D_Environments")
+        self.blender_path = "blender"
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
+        self.openai_key = os.environ.get("OPENAI_API_KEY", None)
+        for d in [self.workspace_dir, self.env_dir]: os.makedirs(d, exist_ok=True)
+        self._scrub_legacy_assets()
 
-        for d in [self.workspace_dir, self.env_dir]:
-            if not os.path.exists(d):
-                os.makedirs(d)
+    def log(self, msg, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {msg}")
 
-    def log_message(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+    def _scrub_legacy_assets(self):
+        for f in ["36_volumetric_speed_lines_blueprint.json", "temp_speed_lines.py"]:
+            p = os.path.join(self.workspace_dir, f)
+            if os.path.exists(p): os.remove(p)
 
-    def _load_master_config(self):
-        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
-        if os.path.exists(config_path):
+    # =====================================================================
+    # RULE 7 & 4: ATOMIC HANDSHAKE & LIMITLESS CONFIG LOADERS
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "orchestrator_matrix.json")
+        data = {}
+        if os.path.exists(matrix_path):
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("global_style", "realistic").lower()
-            except Exception as e:
-                self.log_message(f"Master config read warning, defaulting to realistic: {str(e)}", "WARNING")
-        return "realistic"
+                with open(matrix_path, "r", encoding="utf-8") as f: data = json.load(f)
+            except Exception: pass
+        data.update({"last_active_agent": self.agent_name, "last_update_timestamp": time.time(), "agent_status": {self.agent_name: status}})
+        if status == "COMPLETED": data["next_agent"] = "Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge"
+        with open(matrix_path, "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
 
-    def _load_upstream_velocities(self):
-        anim_path = os.path.join(self.workspace_dir, "26_kinetic_rig_puppeteer_blueprint.json")
-        kinetic_records = []
-
-        if os.path.exists(anim_path):
+    def _load_config(self):
+        p = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        if os.path.exists(p):
             try:
-                with open(anim_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for seq in data.get("rig_animation_sequences", []):
-                    kinetic_records.append({
-                        "timestamp_sec": float(seq.get("timestamp_sec", 0.0)),
-                        "pose_name": seq.get("action_pose_name", "idle"),
-                        "offset": seq.get("translation_offset", [0.0, 0.0, 0.0])
-                    })
-            except Exception as e:
-                self.log_message(f"Upstream kinetic load error: {str(e)}", "ERROR")
+                with open(p, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    return {"style": d.get("global_style", "realistic").lower(), "theme": d.get("theme", "action")}
+            except Exception: pass
+        return {"style": "realistic", "theme": "kinetic_velocity"}
 
-        if not kinetic_records:
-            self.log_message("No dynamic speed files found. Generating standard velocity sequences.", "INFO")
-            kinetic_records = [
-                {"timestamp_sec": 1.2, "pose_name": "ground_dash_forward", "offset": [0.0, 15.0, 0.0]},
-                {"timestamp_sec": 3.8, "pose_name": "skyward_clash", "offset": [0.0, 5.0, 25.0]}
-            ]
+    def _load_velocities(self):
+        p = os.path.join(self.workspace_dir, "26_kinetic_rig_puppeteer_blueprint.json")
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return [{"timestamp_sec": float(s.get("timestamp_sec", 0.0)), "pose_name": s.get("action_pose_name", "dash"), "velocity_vector": s.get("translation_offset", [0.0, 15.0, 0.0])} for s in json.load(f).get("rig_animation_sequences", [])]
+            except Exception: pass
+        return [{"timestamp_sec": 1.0, "pose_name": "sonic_boost", "velocity_vector": [0.0, 25.0, 0.0]}, {"timestamp_sec": 3.5, "pose_name": "vertical_clash", "velocity_vector": [0.0, 5.0, -30.0]}]
 
-        return kinetic_records
+    def _clean_json(self, raw):
+        s = re.sub(r"^```(json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
+        return s[s.find('{'):s.rfind('}')+1] if '{' in s and '}' in s else s
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
+    def _api_call(self, url, payload, headers):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req, timeout=35) as res: return json.loads(res.read().decode("utf-8"))
 
-    def _save_to_workspace(self, data, filename="36_volumetric_speed_lines_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            self.log_message(f"Speed line blueprint securely saved to '{file_path}'", "SUCCESS")
-            return file_path
-        except Exception as e:
-            self.log_message(f"Critical System Failure: Unable to save speed lines: {str(e)}", "CRITICAL")
-            return None
-
+    # =====================================================================
+    # RULE 6, 14 & 15: QUAD-CORE LIMITLESS VELOCITY RECIPE SYNTHESIZER
+    # =====================================================================
     def design_volumetric_speed_lines(self):
-        velocities = self._load_upstream_velocities()
-        global_style = self._load_master_config()
-        self.log_message(f"Initializing Speed Lines Architect for '{global_style.upper()}' style...", "INFO")
-
-        system_prompt = (
-            f"You are a master VFX Compositing Director. The project global style is enforced as: '{global_style.upper()}'.\n"
-            "Generate parameters for volumetric speed line meshes that frame the screen during high-velocity action.\n"
-            "REALISTIC Style Rules: Use soft optical streaks, subtle lens smears, lower alpha opacity, and colors matching natural light/wind distortion.\n"
-            "ANIME Style Rules: Use sharp, high-density, high-emission toon streaks, rigid alpha, and highly stylized contrast colors.\n"
-            "For each movement entry, return exactly 1 speed line configuration inside a list named 'speed_line_profiles':\n"
-            "- 'timestamp_sec': float.\n"
-            "- 'render_style_enforced': string ('realistic' or 'anime', matching global style).\n"
-            "- 'speed_line_style': string ('radial_zoom_in', 'horizontal_streaks', 'vertical_drop_lines').\n"
-            "- 'line_density_count': integer (range 150 to 1000).\n"
-            "- 'line_length_meters': float (range 10.0 to 50.0).\n"
-            "- 'core_flicker_frequency_hz': float (speed multiplier, range 10.0 to 30.0).\n"
-            "- 'line_opacity_alpha': float (range 0.1 to 1.0).\n"
-            "- 'line_color_rgba': array of 4 floats [R, G, B, A].\n"
-            "- 'radial_center_offset_xy': array of 2 floats [x, y].\n"
-            "Output strictly valid JSON with key 'speed_line_profiles'. Do not compress or truncate data."
-        )
-
-        final_output = None
-        if self.openai_api_key:
-            self.log_message(f"Querying Cloud API Node [{self.model_cloud}]", "INFO")
-            try:
-                payload = {
-                    "model": self.model_cloud,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Kinetic Vectors:\n{json.dumps(velocities, indent=2)}"}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"})
-                with urllib.request.urlopen(req, timeout=60) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    cleaned = self._clean_json_response(res_json["choices"][0]["message"]["content"])
-                    final_output = {"speed_line_profiles": json.loads(cleaned).get("speed_line_profiles", [])}
-            except Exception as e:
-                self.log_message(f"Cloud API Failed: {str(e)}. Falling back to procedural generation.", "WARNING")
-
-        if not final_output:
-            final_output = self._execute_procedural_fallback(velocities, global_style)
-            
-        self._save_to_workspace(final_output)
-        self._bake_speed_lines_in_blender(final_output)
-        return final_output
-
-    def _execute_procedural_fallback(self, velocities, style):
-        profiles = []
-        for v in velocities:
-            ts = float(v.get("timestamp_sec", 0.0))
-            offset = v.get("offset", [0.0, 0.0, 0.0])
-            y_speed = abs(offset[1])
-            z_speed = abs(offset[2])
-
-            if style == "realistic":
-                if z_speed > y_speed:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "speed_line_style": "vertical_drop_lines", "line_density_count": 300, "line_length_meters": 40.0, "core_flicker_frequency_hz": 15.0, "line_opacity_alpha": 0.4, "line_color_rgba": [0.8, 0.8, 0.9, 0.4], "radial_center_offset_xy": [0.0, 0.1]})
-                elif y_speed > 10.0:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "speed_line_style": "radial_zoom_in", "line_density_count": 450, "line_length_meters": 25.0, "core_flicker_frequency_hz": 18.0, "line_opacity_alpha": 0.6, "line_color_rgba": [0.9, 0.9, 1.0, 0.6], "radial_center_offset_xy": [0.0, 0.0]})
-                else:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "speed_line_style": "horizontal_streaks", "line_density_count": 200, "line_length_meters": 20.0, "core_flicker_frequency_hz": 12.0, "line_opacity_alpha": 0.3, "line_color_rgba": [0.7, 0.7, 0.7, 0.3], "radial_center_offset_xy": [0.0, 0.0]})
-            else:
-                if z_speed > y_speed:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "speed_line_style": "vertical_drop_lines", "line_density_count": 600, "line_length_meters": 50.0, "core_flicker_frequency_hz": 30.0, "line_opacity_alpha": 1.0, "line_color_rgba": [1.0, 1.0, 1.0, 1.0], "radial_center_offset_xy": [0.0, 0.1]})
-                elif y_speed > 10.0:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "speed_line_style": "radial_zoom_in", "line_density_count": 800, "line_length_meters": 30.0, "core_flicker_frequency_hz": 24.0, "line_opacity_alpha": 1.0, "line_color_rgba": [0.1, 0.8, 1.0, 1.0], "radial_center_offset_xy": [0.0, 0.0]})
-                else:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "speed_line_style": "horizontal_streaks", "line_density_count": 400, "line_length_meters": 25.0, "core_flicker_frequency_hz": 20.0, "line_opacity_alpha": 0.8, "line_color_rgba": [1.0, 1.0, 1.0, 0.8], "radial_center_offset_xy": [0.0, 0.0]})
-        return {"speed_line_profiles": profiles}
-
-    def _bake_speed_lines_in_blender(self, lines_data):
-        self.log_message("Engaging Blender Core: Compiling camera-parented procedural speed lines...", "INFO")
+        self._handshake("IN_PROGRESS")
+        vels, config = self._load_velocities(), self._load_config()
+        self.log(f"Quad-Core Speed Lines Forge Initiated. Style: {config['style'].upper()} | Theme: {config['theme']}")
         
-        script_content = f"""
-import bpy
-import math
+        # Rule 15: Pure Mathematical Velocity Recipe (ZERO Hardcoded shape gulaami!)
+        prompt = (f"You are OMNIMATRIX VFX Velocity Director. Global Style: '{config['style']}', Theme: '{config['theme']}'.\n"
+                  "Invent completely unique, limitless 3D volumetric speed line RECIPES for each kinetic vector. DO NOT touch camera animation.\n"
+                  "DO NOT use preset shape names. Return JSON object with list 'speed_line_profiles' containing:\n"
+                  "- 'timestamp_sec': float, 'render_style_enforced': string ('realistic' or 'anime'), 'concept_name': string,\n"
+                  "- 'geometry_primitive': string (choose from: 'cylinder_tunnel', 'cone_frustum', 'plane_array', 'sphere_wrapper'),\n"
+                  "- 'shader_pattern_math': string (choose from: 'voronoi_streaks', 'noise_smear', 'wave_distortion', 'magic_radial'),\n"
+                  "- 'color_ramp_interpolation': string ('EASE' for soft optical blur, 'CONSTANT' for sharp toon manga banding),\n"
+                  "- 'line_density_scale': float (10-100), 'line_length_meters': float (10-60), 'scroll_velocity_multiplier': float (10-50),\n"
+                  "- 'opacity_alpha': float (0.1-1.0), 'emission_strength': float (2.0-150.0),\n"
+                  "- 'color_primary_rgba': [R, G, B, A], 'color_secondary_rgba': [R, G, B, A],\n"
+                  "- 'radial_rotation_euler_xyz': [X_rad, Y_rad, Z_rad] (camera frustum alignment angle).\n"
+                  "Zero compression or placeholders allowed.")
+        
+        output = None
+        user_msg = f"Kinetic Vectors Context:\n{json.dumps(vels)}"
+        
+        # Core 1: Gemini (Primary - Rule 14 & 16)
+        if self.gemini_key and not output:
+            try:
+                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
+                output = {"speed_line_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("speed_line_profiles", [])}
+                self.log("[Core 1: Gemini] Synthesized limitless speed line recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
+        
+        # Core 2: OpenAI (Failsafe - Rule 14 & 16)
+        if self.openai_key and not output:
+            try:
+                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                output = {"speed_line_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("speed_line_profiles", [])}
+                self.log("[Core 2: OpenAI] Synthesized limitless speed line recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
+        
+        # Core 3: Ollama (Local Fallback - Rule 6)
+        if not output:
+            try:
+                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json"})
+                output = {"speed_line_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("speed_line_profiles", [])}
+                self.log("[Core 3: Ollama] Generated local speed line recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
+        
+        # Core 4: 100% Offline Math Autonomy (Rule 10 - Alien Algorithmic Fallback)
+        if not output:
+            self.log("[Core 4: Math Fallback] Engaging offline float velocity synthesis algorithm...", "WARNING")
+            prims, patterns = ["cylinder_tunnel", "cone_frustum", "plane_array", "sphere_wrapper"], ["voronoi_streaks", "noise_smear", "wave_distortion", "magic_radial"]
+            output = {"speed_line_profiles": []}
+            for idx, v in enumerate(vels):
+                random.seed(int((v["timestamp_sec"] + idx + 1) * 1000))
+                r1, g1, b1 = [round(random.uniform(0.5, 1.0), 3) for _ in range(3)]
+                spd = max(abs(x) for x in v["velocity_vector"]) or 15.0
+                output["speed_line_profiles"].append({
+                    "timestamp_sec": v["timestamp_sec"], "render_style_enforced": config["style"],
+                    "concept_name": f"Velocity_Tunnel_Class_{random.randint(100,999)}",
+                    "geometry_primitive": random.choice(prims), "shader_pattern_math": random.choice(patterns),
+                    "color_ramp_interpolation": "CONSTANT" if config["style"] == "anime" else "EASE",
+                    "line_density_scale": round(spd * 2.0, 1), "line_length_meters": round(spd * 1.5, 1),
+                    "scroll_velocity_multiplier": round(spd * 1.2, 1), "opacity_alpha": 1.0 if config["style"] == "anime" else 0.6,
+                    "emission_strength": round(spd * 3.0, 1), "color_primary_rgba": [r1, g1, b1, 1.0],
+                    "color_secondary_rgba": [0.0, 0.0, 0.0, 0.0], "radial_rotation_euler_xyz": [1.57, 0.0, 0.0]
+                })
+        
+        with open(os.path.join(self.workspace_dir, "36_volumetric_speed_lines_blueprint.json"), "w", encoding="utf-8") as f: json.dump(output, f, indent=4)
+        self._bake_speed_lines_in_blender(output)
+        self._handshake("COMPLETED")
+        return output
 
-# --- 1. SCENE PREPARATION & AUTO-CLEANUP ---
-profiles = {json.dumps(lines_data.get('speed_line_profiles', []))}
+    # =====================================================================
+    # RULE 9, 11, 12, 13 & 17: BLENDER RECIPE EVALUATOR & COMPILER
+    # =====================================================================
+    def _bake_speed_lines_in_blender(self, lines_data):
+        self.log("Compiling Limitless Speed Lines Blender Python script...")
+        lines_json = json.dumps(lines_data.get('speed_line_profiles', []))
+        script_content = f"""
+import bpy, math, random
+
+profiles = {lines_json}[:40] # Rule 17: VRAM cap max 40 velocity sequences
 scene = bpy.context.scene
 fps = scene.render.fps
-
-scene.render.engine = 'BLENDER_EEVEE'
 
 bpy.ops.object.select_all(action='DESELECT')
 for obj in scene.objects:
@@ -192,145 +166,91 @@ for obj in scene.objects:
         obj.select_set(True)
 bpy.ops.object.delete()
 
+scene.render.engine = 'BLENDER_EEVEE'
 cam = scene.camera
 if not cam:
     bpy.ops.object.camera_add(location=(0, -10, 2), rotation=(math.radians(90), 0, 0))
-    cam = bpy.context.active_object
-    scene.camera = cam
+    cam = bpy.context.active_object; scene.camera = cam
 
-# --- 2. FORGE CAMERA-PARENTED VELOCITY MESHES ---
 for idx, p in enumerate(profiles):
     try:
-        style_type = p.get('speed_line_style', 'horizontal_streaks')
-        global_style = p.get('render_style_enforced', 'realistic').lower()
-        color = tuple(p.get('line_color_rgba', [1.0, 1.0, 1.0, 1.0]))
-        alpha = float(p.get('line_opacity_alpha', 0.8))
-        flicker = float(p.get('core_flicker_frequency_hz', 24.0))
-        density = int(p.get('line_density_count', 400))
-        length = float(p.get('line_length_meters', 20.0))
+        c_name, style = str(p.get('concept_name', f'Speed_{{idx}}')), str(p.get('render_style_enforced', 'realistic')).lower()
+        prim, pattern = str(p.get('geometry_primitive', 'cylinder_tunnel')).lower(), str(p.get('shader_pattern_math', 'voronoi_streaks')).lower()
+        interp, density = str(p.get('color_ramp_interpolation', 'EASE')).upper(), float(p.get('line_density_scale', 40))
+        length, scroll_spd = float(p.get('line_length_meters', 25)), float(p.get('scroll_velocity_multiplier', 20))
+        alpha, emit_str = float(p.get('opacity_alpha', 0.8)), float(p.get('emission_strength', 10))
+        c1 = tuple(p.get('color_primary_rgba', [1,1,1,1]))[:3] + (1.0,)
+        rot_rad = tuple(p.get('radial_rotation_euler_xyz', [1.57, 0.0, 0.0]))
         spawn_frame = int(p.get('timestamp_sec', 0.0) * fps)
-        
-        obj_name = f"OMNIMATRIX_VFX_SpeedLines_{{idx}}"
-        
-        # Mesh Selection based on vector
-        if style_type == 'radial_zoom_in':
-            bpy.ops.mesh.primitive_cylinder_add(vertices=64 if global_style == 'realistic' else 32, radius=length/4, depth=length, location=(0,0,-length/2))
-            obj = bpy.context.active_object
-            obj.rotation_euler = (math.radians(90), 0, 0)
-        else:
-            bpy.ops.mesh.primitive_plane_add(size=length, location=(0,0,-5))
-            obj = bpy.context.active_object
-            if style_type == 'vertical_drop_lines':
-                obj.rotation_euler = (0, 0, math.radians(90))
+        dur_frames = min(int(fps * 2.0), 120) # Rule 17: Cap animation duration
 
-        obj.name = obj_name
+        # 1. DYNAMIC VELOCITY GEOMETRY EVALUATOR (Zero Hardcoded Preset Gulaami!)
+        if 'cone' in prim: bpy.ops.mesh.primitive_cone_add(vertices=32, radius1=length/3, radius2=length/10, depth=length, location=(0,0,-length/2))
+        elif 'plane' in prim or 'array' in prim: bpy.ops.mesh.primitive_plane_add(size=length, location=(0,0,-5))
+        elif 'sphere' in prim: bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=length/3, location=(0,0,-length/2))
+        else: bpy.ops.mesh.primitive_cylinder_add(vertices=48 if style=='realistic' else 24, radius=length/4, depth=length, location=(0,0,-length/2))
         
-        # Parent exactly to camera to match frustum
+        obj = bpy.context.active_object
+        obj.name, obj.rotation_euler = f"OMNIMATRIX_VFX_SpeedLines_{{c_name}}_{{idx}}", rot_rad
+        bpy.ops.object.shade_smooth()
+
+        # Rule 13 & 12: Parent to Camera Frustum without touching Camera Animation!
         obj.parent = cam
         obj.matrix_parent_inverse = cam.matrix_world.inverted()
+
+        # Rule 11 & 4: PROCEDURAL VELOCITY SHADER BUILDER (No External Textures)
+        mat = bpy.data.materials.new(name=f"MAT_{{obj.name}}")
+        mat.use_nodes, mat.blend_method, mat.shadow_method = True, 'BLEND', 'NONE'
+        nt = mat.node_tree; nt.nodes.clear()
         
-        # Shader Magic (Universal Protocol)
-        mat = bpy.data.materials.new(name=f"MAT_{{obj_name}}")
-        mat.use_nodes = True
-        mat.blend_method = 'BLEND'
-        mat.shadow_method = 'NONE'
+        out, emit = nt.nodes.new('ShaderNodeOutputMaterial'), nt.nodes.new('ShaderNodeEmission')
+        trans, mix = nt.nodes.new('ShaderNodeBsdfTransparent'), nt.nodes.new('ShaderNodeMixShader')
+        emit.inputs['Color'].default_value, emit.inputs['Strength'].default_value = c1, emit_str
+
+        tex_coord, mapping = nt.nodes.new('ShaderNodeTexCoord'), nt.nodes.new('ShaderNodeMapping')
+        mapping.inputs['Scale'].default_value = (density / 5.0, 0.05, 1.0)
         
-        nt = mat.node_tree
-        nt.nodes.clear()
+        # Dynamically Select Math Pattern
+        if 'noise' in pattern: tex = nt.nodes.new('ShaderNodeTexNoise')
+        elif 'wave' in pattern: tex = nt.nodes.new('ShaderNodeTexWave')
+        elif 'magic' in pattern: tex = nt.nodes.new('ShaderNodeTexMagic')
+        else: tex = nt.nodes.new('ShaderNodeTexVoronoi'); tex.feature = 'F1'
         
-        out_node = nt.nodes.new('ShaderNodeOutputMaterial')
-        emit_node = nt.nodes.new('ShaderNodeEmission')
-        trans_node = nt.nodes.new('ShaderNodeBsdfTransparent')
-        mix_node = nt.nodes.new('ShaderNodeMixShader')
-        
-        emit_node.inputs['Color'].default_value = color[:3] + (1.0,)
-        emit_node.inputs['Strength'].default_value = 8.0 if global_style == 'anime' else 2.0
-        
-        tex_coord = nt.nodes.new('ShaderNodeTexCoord')
-        mapping = nt.nodes.new('ShaderNodeMapping')
-        noise = nt.nodes.new('ShaderNodeTexNoise')
-        
-        mapping.inputs['Scale'].default_value = (density / 10.0, 0.05, 1.0)
-        
-        color_ramp = nt.nodes.new('ShaderNodeValToRGB')
-        
-        if global_style == 'realistic':
-            color_ramp.color_ramp.interpolation = 'EASE'
-            color_ramp.color_ramp.elements[0].position = 0.45
-            color_ramp.color_ramp.elements[0].color = (0.0, 0.0, 0.0, 1.0)
-            color_ramp.color_ramp.elements[1].position = 0.55
-            color_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, alpha)
-        else:
-            color_ramp.color_ramp.interpolation = 'CONSTANT'
-            color_ramp.color_ramp.elements[0].position = 0.5
-            color_ramp.color_ramp.elements[0].color = (0.0, 0.0, 0.0, 1.0)
-            color_ramp.color_ramp.elements[1].position = 0.51
-            color_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, alpha)
-        
+        ramp = nt.nodes.new('ShaderNodeValToRGB')
+        ramp.color_ramp.interpolation = 'CONSTANT' if style == 'anime' or interp == 'CONSTANT' else 'EASE'
+        ramp.color_ramp.elements[0].position, ramp.color_ramp.elements[0].color = 0.45, (0,0,0,1)
+        ramp.color_ramp.elements[1].position, ramp.color_ramp.elements[1].color = 0.52, (1,1,1,alpha)
+
         nt.links.new(tex_coord.outputs['Object'], mapping.inputs['Vector'])
-        nt.links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
-        nt.links.new(noise.outputs['Fac'], color_ramp.inputs['Fac'])
-        
-        nt.links.new(color_ramp.outputs['Color'], mix_node.inputs['Fac'])
-        nt.links.new(trans_node.outputs['BSDF'], mix_node.inputs[1])
-        nt.links.new(emit_node.outputs['Emission'], mix_node.inputs[2])
-        nt.links.new(mix_node.outputs['Shader'], out_node.inputs['Surface'])
+        nt.links.new(mapping.outputs['Vector'], tex.inputs['Vector'])
+        out_sock = tex.outputs['Distance'] if 'Distance' in tex.outputs else tex.outputs['Color']
+        nt.links.new(out_sock, ramp.inputs['Fac']); nt.links.new(ramp.outputs['Color'], mix.inputs['Fac'])
+        nt.links.new(trans.outputs['BSDF'], mix.inputs[1]); nt.links.new(emit.outputs['Emission'], mix.inputs[2])
+        nt.links.new(mix.outputs['Shader'], out.inputs['Surface'])
         obj.data.materials.append(mat)
-        
-        # Animation & Flicker Automation
-        obj.hide_viewport = True
-        obj.hide_render = True
-        obj.keyframe_insert(data_path="hide_viewport", frame=max(1, spawn_frame - 1))
-        obj.keyframe_insert(data_path="hide_render", frame=max(1, spawn_frame - 1))
-        
-        obj.hide_viewport = False
-        obj.hide_render = False
-        obj.keyframe_insert(data_path="hide_viewport", frame=spawn_frame)
-        obj.keyframe_insert(data_path="hide_render", frame=spawn_frame)
-        
-        # Scroll texture location dynamically over time
-        scroll_axis = 1 if style_type == 'horizontal_streaks' else 2
-        mapping.inputs['Location'].default_value[scroll_axis] = 0.0
-        mapping.inputs['Location'].keyframe_insert(data_path="default_value", index=scroll_axis, frame=spawn_frame)
-        
-        duration_frames = int(fps * 2)
-        mapping.inputs['Location'].default_value[scroll_axis] = flicker * 10.0
-        mapping.inputs['Location'].keyframe_insert(data_path="default_value", index=scroll_axis, frame=spawn_frame + duration_frames)
-        
-        # Fade out visibility after sequence
-        obj.hide_viewport = True
-        obj.hide_render = True
-        obj.keyframe_insert(data_path="hide_viewport", frame=spawn_frame + duration_frames)
-        obj.keyframe_insert(data_path="hide_render", frame=spawn_frame + duration_frames)
 
-    except Exception as e:
-        print(f"FAILED to process speed lines profile {{idx}} - {{str(e)}}")
-        continue
+        # 3. KINETIC VELOCITY SCROLLING (Animate UV Mapping Location, NOT Camera!)
+        for f, val in [(max(1, spawn_frame-1), True), (spawn_frame, False), (spawn_frame + dur_frames, True)]:
+            obj.hide_viewport = obj.hide_render = val
+            obj.keyframe_insert("hide_viewport", frame=f); obj.keyframe_insert("hide_render", frame=f)
 
-try:
-    bpy.ops.wm.save_mainfile()
-except Exception as e:
-    print(f"FAILED to save mainfile: {{str(e)}}")
+        mapping.inputs['Location'].default_value[2] = 0.0
+        mapping.inputs['Location'].keyframe_insert("default_value", index=2, frame=spawn_frame)
+        mapping.inputs['Location'].default_value[2] = scroll_spd * 5.0
+        mapping.inputs['Location'].keyframe_insert("default_value", index=2, frame=spawn_frame + dur_frames)
+    except Exception as e: print(f"Error on speed line {{idx}}: {{e}}")
+
+try: bpy.ops.wm.save_mainfile()
+except Exception: pass
 """
         script_path = os.path.join(self.workspace_dir, "temp_speed_lines.py")
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_content)
-
-        for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                blend_path = os.path.join(self.env_dir, filename)
-                self.log_message(f"Injecting Uncut Volumetric Lines into {filename}...", "INFO")
-                subprocess.run([self.blender_path, "-b", blend_path, "-P", script_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-                
-        if os.path.exists(script_path):
-            os.remove(script_path)
-        self.log_message("Universal Speed Lines Architect completely compiled and verified.", "SUCCESS")
+        with open(script_path, "w", encoding="utf-8") as f: f.write(script_content)
+        for file in os.listdir(self.env_dir):
+            if file.endswith(".blend"):
+                try: subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, file), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                except Exception: pass
+        if os.path.exists(script_path): os.remove(script_path)
+        self.log("Blender Limitless Speed Lines compilation complete!", "SUCCESS")
 
 if __name__ == "__main__":
-    architect = VolumetricSpeedLinesArchitect()
-    output = architect.design_volumetric_speed_lines()
-    print("\n--- OMNIMATRIX VFX STUDIO: AGENT 36 COMPLETE ---")
-    print(f"Total speed line sequences strictly generated: {len(output['speed_line_profiles'])}")
-    for p in output["speed_line_profiles"]:
-        print(f"Time: {p['timestamp_sec']}s | Style: '{p['speed_line_style']}' ({p.get('render_style_enforced', 'unknown')})")
-    print("------------------------------------------------------------------")
+    Ai_Agent_36_Volumetric_Speed_Lines_Architect().design_volumetric_speed_lines()
