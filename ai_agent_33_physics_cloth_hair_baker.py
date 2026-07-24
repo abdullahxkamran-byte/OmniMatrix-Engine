@@ -1,5 +1,5 @@
 # ==============================================================================
-# Ai_Agent_33_Omni_Physics_Baker.py
+# agent_33_physics_cloth_hair_baker.py
 # MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL KINETIC PHYSICS & AURA WIND)
 # ==============================================================================
 
@@ -23,10 +23,10 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class AiAgent33OmniPhysicsBaker:
+class Agent33PhysicsClothHairBaker:
     def __init__(self):
-        # RULE 8: STRICT AI NAMING
-        self.agent_name = "Ai_Agent_33_Omni_Physics_Baker"
+        # RULE 8: STRICT AI NAMING (Fixed to match Master List)
+        self.agent_name = "agent_33_physics_cloth_hair_baker"
         
         # RULE 2: UNIVERSAL PATH ISOLATION (No Hardcoded Drives)
         self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
@@ -298,9 +298,9 @@ except Exception as e:
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        # RULE 7: STATE UPDATE (Handoff to Lighting/Render)
+        # RULE 7: STATE UPDATE (FIXED: Correct Handoff to Agent 34 based on the verified list)
         state["last_active_agent"] = self.agent_name
-        state["next_agent"] = "Ai_Agent_34_Cinematic_Lighting_Director" 
+        state["next_agent"] = "ai_agent_34_procedural_3d_environment_architect" 
         
         with open(self.state_file, "w") as f:
             json.dump(state, f, indent=4)
@@ -308,5 +308,5 @@ except Exception as e:
         self.log(f"Physics Baking Complete. Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    baker = AiAgent33OmniPhysicsBaker()
+    baker = Agent33PhysicsClothHairBaker()
     baker.execute_pipeline()
