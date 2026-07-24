@@ -1,3 +1,8 @@
+# ==============================================================================
+# Ai_Agent_21_Kinetic_Camera_Rig_Director.py
+# MODULE C: Blender 3D Heavy Infantry
+# ==============================================================================
+
 import os
 import re
 import sys
@@ -19,131 +24,115 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class UniversalKineticCameraRigDirector:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 21: universal_kinetic_camera_rig_director"
+class AiAgent21KineticCameraRigDirector:
+    def __init__(self):
+        # RULE 8: AI vs NON-AI NAMING
+        self.agent_name = "Ai_Agent_21_Kinetic_Camera_Rig_Director"
         
-        self.workspace_dir = workspace_dir
-        self.audio_dir = os.path.join(self.workspace_dir, "module_b_audio")
-        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        # RULE 2: UNIVERSAL PATH ISOLATION
+        self.workspace_root = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.script_dir = os.path.join(self.workspace_root, "Module_A_Scripting")
+        self.audio_dir = os.path.join(self.workspace_root, "Module_B_Audio")
+        self.module_c_dir = os.path.join(self.workspace_root, "Module_C_Heavy_Infantry")
         
-        self.output_blueprint = os.path.join(self.workspace_dir, "21_universal_camera_rig_blueprint.json")
-        self.blender_path = blender_path
+        # Taking Environments from Agent 57 (Module H - 3D World Forge)
+        self.env_dir = os.path.join(self.workspace_root, "Module_H_Generative", "3d_environments")
+        self.output_blueprint = os.path.join(self.module_c_dir, "21_master_camera_blueprint.json")
         
-        # GEMINI API INTEGRATION RESTORED!
+        # System States (RULE 7)
+        self.state_file = os.path.join(self.workspace_root, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_root, "global_config.json")
+        
+        # API Keys for Quad-Core (RULE 6)
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.workspace_dir, self.audio_dir, self.script_dir, self.env_dir]:
+        for d in [self.workspace_root, self.script_dir, self.audio_dir, self.module_c_dir, self.env_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
+    # RULE 4: LIMITLESS FLUIDITY
     def _load_master_config(self):
-        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
-        if os.path.exists(config_path):
+        default_config = {
+            "global_style": "anime", 
+            "fps": 24, 
+            "blender_executable": "blender",
+            "aspect_ratio": "9:16" # For Shorts/TikTok default
+        }
+        if os.path.exists(self.config_file):
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("global_style", "realistic").lower()
-            except Exception as e:
-                self.log_message(f"Master config read warning: {str(e)}", "WARNING")
-        return "realistic"
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
 
     def _load_upstream_sync_data(self, scene_name):
         sync_triggers = []
         script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
-        beat_file = os.path.join(self.workspace_dir, "14_phonk_beat_drop_map.json")
+        beat_file = os.path.join(self.audio_dir, "14_phonk_beat_drop_map.json")
         
+        # Load Narrative Tension
         if os.path.exists(script_file):
             try:
                 with open(script_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    sync_triggers.append({"timestamp_sec": 0.0, "event_type": "scene_start", "intensity": "moderate", "action": data.get("action_description", "Establishing shot")})
-                    sync_triggers.append({"timestamp_sec": 3.0, "event_type": "action_peak", "intensity": "high", "action": "Main dynamic action"})
-            except Exception as e:
-                self.log_message(f"Script parse warning: {str(e)}", "WARNING")
+                    sync_triggers.append({"timestamp_sec": 0.0, "event_type": "scene_start", "action": data.get("action_description", "Establishing shot")})
+                    if "tension_peak" in data:
+                        sync_triggers.append({"timestamp_sec": float(data["tension_peak"]), "event_type": "action_peak", "action": "Main dynamic action"})
+            except: pass
 
+        # Load Audio Beat Drops for Shake Impacts
         if os.path.exists(beat_file):
             try:
                 with open(beat_file, "r", encoding="utf-8") as f:
                     b_data = json.load(f)
                 for drop in b_data.get("beat_drops", []):
-                    sync_triggers.append({"timestamp_sec": drop.get("timestamp_sec", 1.5), "event_type": "beat_drop_impact", "intensity": "extreme", "action": "Massive screen shake impact"})
-            except:
-                pass
+                    sync_triggers.append({
+                        "timestamp_sec": drop.get("timestamp_sec", 1.5), 
+                        "event_type": "beat_drop_impact", 
+                        "action": "Massive screen shake impact"
+                    })
+            except: pass
 
         sync_triggers = sorted(sync_triggers, key=lambda x: x["timestamp_sec"])
-        
         if not sync_triggers:
             sync_triggers = [
-                {"timestamp_sec": 0.0, "event_type": "intro_pan", "intensity": "moderate", "action": "Look around"},
-                {"timestamp_sec": 2.5, "event_type": "beat_drop_impact", "intensity": "extreme", "action": "Explosion"}
+                {"timestamp_sec": 0.0, "event_type": "intro_pan", "action": "Look around"},
+                {"timestamp_sec": 2.0, "event_type": "beat_drop_impact", "action": "Explosion"}
             ]
         return sync_triggers
 
+    # RULE 5: BULLETPROOF JSON
     def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
+        try:
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_text, flags=re.DOTALL).strip()
+            return json.loads(cleaned)
+        except:
+            start = raw_text.find("{")
+            end = raw_text.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_text[start:end+1])
+                except: pass
+            return None
 
-    def _query_camera_brain(self, scene_name, triggers, style):
-        self.log_message(f"Calculating AAA Camera trajectories for '{scene_name}' (Style: {style.upper()})...", "INFO")
-        
-        system_prompt = (
-            f"You are the Lead Cinematographer. Project style: '{style.upper()}'.\n"
-            "If REALISTIC: Use natural focal lengths (35mm-50mm), low aperture (f/1.8 for deep DoF), smooth dollys, and subtle handheld shake (amplitude < 0.3).\n"
-            "If ANIME: Use extreme wide angles (18mm-24mm), deep focus (f/4.0+), dynamic dutch angles, and massive screen shakes on beat drops (amplitude 1.0 - 2.5).\n"
-            "Output EXACTLY 1 raw JSON object containing 'camera_keyframe_data' (a list of keyframes based on the triggers provided).\n"
-            "Required keys per keyframe:\n"
-            "- 'timestamp_sec': float.\n"
-            "- 'focal_length_mm': float.\n"
-            "- 'camera_location_offset': [X, Y, Z].\n"
-            "- 'focus_target_location': [X, Y, Z] (Where the camera looks and focuses).\n"
-            "- 'screen_shake_amplitude': float (0.0 if no beat drop, >1.0 for massive impacts).\n"
-            "- 'dof_aperture_fstop': float.\n"
-            "Output strictly valid JSON with no backticks."
-        )
-
-        if self.gemini_api_key:
-            try:
-                # GEMINI NATIVE JSON PAYLOAD & PROMPT MERGE
-                combined_prompt = system_prompt + "\n\nTriggers Data:\n" + json.dumps(triggers)
-                payload = {
-                    "contents": [{"parts": [{"text": combined_prompt}]}], 
-                    "generationConfig": {"responseMimeType": "application/json"}
-                }
-                req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    cleaned = self._clean_json_response(res_text)
-                    return json.loads(cleaned).get("camera_keyframe_data", self._get_procedural_fallback(triggers, style))
-            except Exception as e:
-                self.log_message(f"Gemini API Route Failed: {str(e)}. Using procedural fallback.", "WARNING")
-
-        return self._get_procedural_fallback(triggers, style)
-
-    def _get_procedural_fallback(self, triggers, style):
+    # RULE 10: PROCEDURAL FALLBACK
+    def _get_procedural_fallback_keyframes(self, triggers, style):
         keyframes = []
         for trigger in triggers:
             ts = float(trigger.get("timestamp_sec", 0.0))
             event = str(trigger.get("event_type", "")).lower()
 
             if style == "realistic":
-                focal, fstop, loc = 50.0, 1.8, [0.0, -4.0, 1.5]
-                shake = 0.1 if "beat_drop" in event else 0.0
-            else:
-                focal, fstop, loc = 20.0, 4.5, [1.0, -3.0, 1.0]
-                shake = 1.5 if "beat_drop" in event else 0.0
+                focal, fstop, loc = 35.0, 1.8, [0.0, -5.0, 1.5]
+                shake = 0.2 if "beat_drop" in event else 0.0
+                roll = 0.0
+            else: # Anime/Dynamic
+                focal, fstop, loc = 18.0, 4.0, [1.0, -3.0, 1.0]
+                shake = 1.8 if "beat_drop" in event else 0.0
+                roll = 15.0 if "action" in event else 0.0 # Dutch angle
 
             keyframes.append({
                 "timestamp_sec": ts,
@@ -151,47 +140,107 @@ class UniversalKineticCameraRigDirector:
                 "camera_location_offset": loc,
                 "focus_target_location": [0.0, 0.0, 1.0],
                 "screen_shake_amplitude": shake,
+                "camera_roll_degrees": roll,
                 "dof_aperture_fstop": fstop
             })
         return keyframes
 
-    def _generate_blender_script(self, blend_file_path, keyframes, style):
+    # RULE 6: QUAD-CORE FALLBACK
+    def _query_camera_brain(self, scene_name, triggers, config):
+        style = config.get("global_style", "realistic")
+        self.log(f"Calculating AAA Camera trajectories for '{scene_name}' [{style.upper()}]...", "INFO")
+        
+        system_prompt = f"""
+        You are a AAA Cinematographer. Style: '{style.upper()}'.
+        Design a kinetic camera sequence based on these timing triggers: {json.dumps(triggers)}
+        
+        RULES:
+        - REALISTIC: Natural focal lengths (35-50mm), low aperture (f/1.8), smooth dollys, zero roll.
+        - ANIME/SAKUGA: Extreme wide angles (18-24mm), dynamic Dutch Angles (camera_roll_degrees: -20 to 20), massive shakes on 'beat_drop_impact'.
+        
+        Return exactly 1 JSON object with the key 'camera_keyframe_data' containing a list of keyframes.
+        Each keyframe MUST have:
+        - 'timestamp_sec' (float)
+        - 'focal_length_mm' (float)
+        - 'camera_location_offset' ([X, Y, Z] float array)
+        - 'focus_target_location' ([X, Y, Z] float array)
+        - 'screen_shake_amplitude' (float, 0.0 for none, 1.0+ for big hits)
+        - 'camera_roll_degrees' (float, for dutch angles)
+        - 'dof_aperture_fstop' (float)
+        """
+
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": system_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed and "camera_keyframe_data" in parsed: return parsed["camera_keyframe_data"]
+            except: pass
+
+        if self.openai_api_key:
+            try:
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {self.openai_api_key}", "Content-Type": "application/json"}
+                payload = {"model": "gpt-4o", "messages": [{"role": "user", "content": system_prompt}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed and "camera_keyframe_data" in parsed: return parsed["camera_keyframe_data"]
+            except: pass
+
+        self.log("AI failed. Engaging Procedural Cinematographer.", "WARNING")
+        return self._get_procedural_fallback_keyframes(triggers, style)
+
+    # RULE 9 (Abstraction), RULE 12 (Kinetic Physics), RULE 13 (Sockets)
+    def _generate_blender_script(self, blend_file_path, keyframes, config):
         safe_blend_path = blend_file_path.replace("\\", "/")
+        fps = config.get("fps", 24)
+        aspect = config.get("aspect_ratio", "9:16")
+        res_x = 1080 if aspect == "9:16" else 1920
+        res_y = 1920 if aspect == "9:16" else 1080
+        
         kf_json = json.dumps(keyframes)
 
         script_content = f"""
 import bpy
 import json
+import math
 import random
 
-# Load Target Environment
+# --- 0. LOAD SCENE ---
 try:
     bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
 except Exception as e:
-    print(f"Error loading blend: {{e}}")
+    print(f"OMNIMATRIX_ERROR: {{e}}")
     import sys
     sys.exit(1)
 
 scene = bpy.context.scene
-fps = scene.render.fps
+scene.render.fps = {fps}
+scene.render.resolution_x = {res_x}
+scene.render.resolution_y = {res_y}
 
 # --- 1. CLEANUP OLD CAMERAS ---
 for obj in bpy.data.objects:
-    if obj.name.startswith("OMNIMATRIX_Cam") or obj.name.startswith("OMNIMATRIX_Focus"):
+    if "OMNIMATRIX_Cam" in obj.name or "OMNIMATRIX_Focus" in obj.name:
         bpy.data.objects.remove(obj, do_unlink=True)
 
-# --- 2. AAA 3-TIER CAMERA RIG CREATION ---
-# Tier 1: Focus Target (Camera tracks this, DoF locks here)
+# --- 2. 4-TIER AAA KINETIC RIG ---
+# Tier 1: Focus Target
 bpy.ops.object.empty_add(type='SPHERE', radius=0.2, location=(0, 0, 1))
 tracker = bpy.context.active_object
 tracker.name = "OMNIMATRIX_Focus_Target"
 
-# Tier 2: Movement Root (Handles main dolly/pan paths)
+# Tier 2: Movement Root Dolly
 bpy.ops.object.empty_add(type='PLAIN_AXES', radius=0.5, location=(0, -5, 1))
 cam_root = bpy.context.active_object
 cam_root.name = "OMNIMATRIX_Cam_Root"
 
-# Tier 3: Shake Rig (Handles procedural screen shakes)
+# Tier 3: Shake & Roll Rig
 bpy.ops.object.empty_add(type='ARROWS', radius=0.3, location=(0, 0, 0))
 shake_rig = bpy.context.active_object
 shake_rig.name = "OMNIMATRIX_Cam_ShakeRig"
@@ -204,118 +253,167 @@ bpy.context.scene.collection.objects.link(cam_obj)
 cam_obj.parent = shake_rig
 bpy.context.scene.camera = cam_obj
 
-# Setup Tracking & Depth of Field
+# Connect Focus & DoF
 track_constraint = cam_obj.constraints.new('TRACK_TO')
 track_constraint.target = tracker
 track_constraint.track_axis = 'TRACK_NEGATIVE_Z'
 track_constraint.up_axis = 'UP_Y'
 
-cam = cam_obj.data
-cam.dof.use_dof = True
-cam.dof.focus_object = tracker
+cam_data.dof.use_dof = True
+cam_data.dof.focus_object = tracker
+
+# --- RULE 13: SOCKET PROTOCOL AUTO-TRACKING ---
+# If a character or text socket exists, gently parent the focus target to it dynamically
+socket_target = None
+if "CHAR_SOCKET" in bpy.data.objects:
+    socket_target = bpy.data.objects["CHAR_SOCKET"]
+elif "TXT_SOCKET" in bpy.data.objects:
+    socket_target = bpy.data.objects["TXT_SOCKET"]
+
+if socket_target:
+    copy_loc = tracker.constraints.new('COPY_LOCATION')
+    copy_loc.target = socket_target
+    copy_loc.influence = 0.5 # Blend between AI coords and socket coords
 
 # --- 3. BAKE AI KEYFRAMES ---
 kf_data = json.loads('''{kf_json}''')
 
-# Ensure shake rig is zeroed
 shake_rig.location = (0,0,0)
-shake_rig.keyframe_insert(data_path="location", frame=1)
+shake_rig.rotation_euler = (0,0,0)
 
 for kf in kf_data:
-    frame = max(1, int(kf["timestamp_sec"] * fps))
+    frame = max(1, int(kf["timestamp_sec"] * {fps}))
     
-    # Animate Movement Root
-    root_loc = kf.get("camera_location_offset", [0, -5, 1])
-    cam_root.location = (root_loc[0], root_loc[1], root_loc[2])
+    # Root Loc
+    r_loc = kf.get("camera_location_offset", [0, -5, 1])
+    cam_root.location = (r_loc[0], r_loc[1], r_loc[2])
     cam_root.keyframe_insert(data_path="location", frame=frame)
     
-    # Animate Focus Target
-    focus_loc = kf.get("focus_target_location", [0, 0, 1])
-    tracker.location = (focus_loc[0], focus_loc[1], focus_loc[2])
+    # Focus Loc
+    f_loc = kf.get("focus_target_location", [0, 0, 1])
+    tracker.location = (f_loc[0], f_loc[1], f_loc[2])
     tracker.keyframe_insert(data_path="location", frame=frame)
     
-    # Animate Lens & DoF
-    cam.lens = kf.get("focal_length_mm", 35.0)
-    cam.keyframe_insert(data_path="lens", frame=frame)
+    # Lens & DoF
+    cam_data.lens = kf.get("focal_length_mm", 35.0)
+    cam_data.keyframe_insert(data_path="lens", frame=frame)
+    cam_data.dof.aperture_fstop = kf.get("dof_aperture_fstop", 2.8)
+    cam_data.keyframe_insert(data_path="dof.aperture_fstop", frame=frame)
     
-    cam.dof.aperture_fstop = kf.get("dof_aperture_fstop", 2.8)
-    cam.keyframe_insert(data_path="dof.aperture_fstop", frame=frame)
-    
-    # --- PROCEDURAL SHAKE BAKER ---
-    # Instead of broken modifiers, we hard-bake random offsets into the shake rig for the duration of the impact
+    # Dutch Angle (Roll)
+    roll_rad = math.radians(kf.get("camera_roll_degrees", 0.0))
+    shake_rig.rotation_euler[2] = roll_rad # Z-axis of shake rig affects roll
+    shake_rig.keyframe_insert(data_path="rotation_euler", index=2, frame=frame)
+
+    # Hard-Baked Screen Shake on Beats
     shake_amp = kf.get("screen_shake_amplitude", 0.0)
     if shake_amp > 0.2:
-        shake_duration = int(fps * 0.4) # Shake lasts for 0.4 seconds
-        for i in range(shake_duration):
-            shake_frame = frame + i
-            # Dampen the shake as it progresses
-            falloff = 1.0 - (i / float(shake_duration))
-            current_amp = shake_amp * falloff * 0.1 # Multiplier for blender space
-            
-            rx = random.uniform(-current_amp, current_amp)
-            ry = random.uniform(-current_amp, current_amp)
-            rz = random.uniform(-current_amp, current_amp)
-            
-            shake_rig.location = (rx, ry, rz)
-            shake_rig.keyframe_insert(data_path="location", frame=shake_frame)
-            
-        # Lock back to zero after shake
+        shake_frames = int({fps} * 0.4) # Shake lasts 0.4s
+        for i in range(shake_frames):
+            sf = frame + i
+            falloff = 1.0 - (i / float(shake_frames))
+            current_amp = shake_amp * falloff * 0.1
+            shake_rig.location = (random.uniform(-current_amp, current_amp), 
+                                  random.uniform(-current_amp, current_amp), 
+                                  random.uniform(-current_amp, current_amp))
+            shake_rig.keyframe_insert(data_path="location", frame=sf)
         shake_rig.location = (0,0,0)
-        shake_rig.keyframe_insert(data_path="location", frame=frame + shake_duration + 1)
+        shake_rig.keyframe_insert(data_path="location", frame=frame + shake_frames + 1)
 
-# Smooth Interpolation for Main Rig
+# --- 4. ORGANIC HANDHELD NOISE (RULE 12) ---
+# Give the camera root a subtle ambient breathing effect
+cam_root.keyframe_insert(data_path="location", frame=1)
 if cam_root.animation_data and cam_root.animation_data.action:
     for fc in cam_root.animation_data.action.fcurves:
-        for kfp in fc.keyframe_points:
-            kfp.interpolation = 'BEZIER'
-            kfp.easing = 'EASE_IN_OUT'
+        if fc.data_path == 'location':
+            mod = fc.modifiers.new('NOISE')
+            mod.scale = 50.0
+            mod.strength = 0.05 # Very subtle breathing
+            
+            # Smooth out AI keyframes
+            for kfp in fc.keyframe_points:
+                kfp.interpolation = 'BEZIER'
+                kfp.easing = 'EASE_IN_OUT'
 
 try:
     bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
-    print("SUCCESS")
+    print("OMNIMATRIX_BLENDER_SUCCESS")
 except Exception as e:
-    print(f"FAILED TO SAVE: {{str(e)}}")
+    print(f"OMNIMATRIX_ERROR: {{str(e)}}")
+    import sys
+    sys.exit(1)
 """
-        script_path = os.path.join(self.workspace_dir, "temp_camera_script.py")
+        script_path = os.path.join(self.module_c_dir, "temp_camera_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
     def design_camera_keyframes(self):
-        global_style = self._load_master_config()
-        self.log_message(f"Activating AAA Kinetic Camera Director [{global_style.upper()}]...", "INFO")
+        self.log("Initializing Kinetic Camera Matrix...", "INFO")
+
+        # RULE 7: ATOMIC HANDSHAKE
+        state = {}
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+            except: pass
+                
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        config = self._load_master_config()
+        blender_executable = config.get("blender_executable", "blender")
         
         master_blueprint = {}
         
+        # Ensure we have environments to attach cameras to
+        if not os.path.exists(self.env_dir) or not os.listdir(self.env_dir):
+            self.log("No 3D environments found. Camera Director waiting...", "WARNING")
+            sys.exit(0)
+            
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                scene_name = filename.replace("_stage.blend", "")
+            if filename.endswith(".blend"):
+                scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
                 triggers = self._load_upstream_sync_data(scene_name)
-                keyframes = self._query_camera_brain(scene_name, triggers, global_style)
+                keyframes = self._query_camera_brain(scene_name, triggers, config)
                 
-                script_path = self._generate_blender_script(blend_file_path, keyframes, global_style)
+                script_path = self._generate_blender_script(blend_file_path, keyframes, config)
                 
-                command = [self.blender_path, "-b", "-P", script_path]
+                command = [blender_executable, "-b", "-P", script_path]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode == 0 and "SUCCESS" in result.stdout:
-                        self.log_message(f"God-Level Camera Rig injected into: {filename}", "SUCCESS")
+                    if "OMNIMATRIX_BLENDER_SUCCESS" in result.stdout:
+                        self.log(f"God-Level Camera Rig injected into: {filename}", "SUCCESS")
                         master_blueprint[scene_name] = {"keyframes": keyframes}
                     else:
-                        self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
+                        self.log(f"Blender failed: {result.stdout[-250:]}", "ERROR")
                 except Exception as e:
-                    self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
+                    self.log(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
                     
                 if os.path.exists(script_path):
                     os.remove(script_path)
 
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
+            
+        # RULE 7: ATOMIC HANDSHAKE (Advance State)
+        state["last_active_agent"] = self.agent_name
+        # Heading to Atmospheric Lighting Shader Baker!
+        state["next_agent"] = "Ai_Agent_22_Atmospheric_Lighting_Shader_Baker"
         
-        self.log_message("Universal Camera Rig Pipeline Complete.", "INFO")
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+        
+        self.log(f"Kinetic Camera Pipeline Complete! Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    director = UniversalKineticCameraRigDirector()
+    director = AiAgent21KineticCameraRigDirector()
     director.design_camera_keyframes()
+
+# ==============================================================================
+# END OF FILE
+# ==============================================================================
