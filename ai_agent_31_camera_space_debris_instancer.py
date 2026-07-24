@@ -1,3 +1,8 @@
+# ==============================================================================
+# Ai_Agent_31_Camera_VFX_Debris_Instancer.py
+# MODULE C: Blender 3D Heavy Infantry - (GOD-LEVEL VFX & CAMERA DEBRIS)
+# ==============================================================================
+
 import os
 import re
 import sys
@@ -13,152 +18,158 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    # Universal Uppercase API Keys
+                    # RULE 6: UNIVERSAL UPPERCASE API KEYS
                     os.environ[key.strip().upper()] = val.strip()
 
 load_env_file()
 
-class OmniMatrixDebrisInstancer:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 31: aaa_camera_debris_instancer"
+class AiAgent31CameraVFXDebrisInstancer:
+    def __init__(self):
+        # RULE 8: STRICT AI NAMING
+        self.agent_name = "Ai_Agent_31_Camera_VFX_Debris_Instancer"
         
-        # Directories
-        self.workspace_dir = workspace_dir
-        self.script_dir = os.path.join(self.workspace_dir, "module_a_scripts")
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
+        # RULE 2: UNIVERSAL PATH ISOLATION (No Hardcoded D:/ Drives)
+        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
+        self.script_dir = os.path.join(self.workspace_dir, "Module_A_Scripting")
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_c_dir = os.path.join(self.workspace_dir, "Module_C_Heavy_Infantry")
         
-        # Outputs
-        self.output_blueprint = os.path.join(self.workspace_dir, "31_camera_debris_blueprint.json")
-        self.blender_path = blender_path
+        self.output_blueprint = os.path.join(self.module_c_dir, "31_camera_debris_blueprint.json")
+        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.config_file = os.path.join(self.workspace_dir, "global_config.json")
         
-        # GEMINI API INTEGRATION
+        # RULE 6: DUAL API FAILSAFES
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
-        for d in [self.workspace_dir, self.script_dir, self.env_dir]:
+        for d in [self.script_dir, self.env_dir, self.module_c_dir]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
+    def _load_master_config(self):
+        default_config = {"global_style": "anime", "blender_executable": "blender"}
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    default_config.update(json.load(f))
+            except: pass
+        return default_config
+
     def _load_upstream_context(self, scene_name):
-        """Loads visual style and destruction data from Agent 30"""
+        """Loads data from Agent 30 (Destruction) to align VFX perfectly."""
         context = {
-            "visual_style": "omni_neutral",
             "has_destruction": False,
             "impact_frame": 0,
             "fracture_center_xyz": [0.0, 0.0, 0.0]
         }
         
-        # Load Style
-        script_file = os.path.join(self.script_dir, f"{scene_name}_matrix_state.json")
-        if os.path.exists(script_file):
-            try:
-                with open(script_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    context["visual_style"] = data.get("visual_style", "omni_neutral")
-            except Exception as e:
-                self.log_message(f"Style context parse error: {str(e)}", "WARNING")
-
-        # Load Destruction Data (Agent 30)
-        dest_file = os.path.join(self.workspace_dir, "30_destruction_blueprint.json")
+        dest_file = os.path.join(self.module_c_dir, "30_destruction_blueprint.json")
         if os.path.exists(dest_file):
             try:
                 with open(dest_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if scene_name in data:
                         scene_data = data[scene_name]
+                        # Only generate debris if destruction chunk count > 0
                         context["has_destruction"] = scene_data.get("shatter_chunk_count", 0) > 0
-                        context["impact_frame"] = scene_data.get("impact_frame", 0)
+                        context["impact_frame"] = scene_data.get("impact_frame", 24)
                         context["fracture_center_xyz"] = scene_data.get("fracture_center_xyz", [0.0, 0.0, 0.0])
-            except Exception as e:
-                self.log_message(f"Destruction data read error: {str(e)}", "WARNING")
+            except: pass
                 
         return context
 
     def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _query_debris_brain(self, scene_name, context):
-        if not context["has_destruction"]:
-            return self._fallback_debris(False)
-
-        self.log_message(f"Calculating Camera VFX Debris for '{scene_name}'...", "INFO")
-
-        if not self.gemini_api_key:
-            self.log_message("No Gemini API Key found. Using fallback debris setup.", "WARNING")
-            return self._fallback_debris(True, context)
-
-        ai_prompt = (
-            f"You are the VFX Debris TD for the OmniMatrix Engine.\n"
-            f"Scene Name: {scene_name}\n"
-            f"Visual Style: {context['visual_style']}\n"
-            f"Impact Frame: {context['impact_frame']}\n\n"
-            "Design camera-facing particle debris based on the style.\n"
-            "- 'anime': Large chunks, zero gravity (straight line to camera), high speed.\n"
-            "- 'realistic': Fine dust, normal gravity (arc trajectory), medium speed.\n"
-            "- LIMIT particle count to 150 max to save memory.\n"
-            "Return EXACTLY 1 raw JSON object containing:\n"
-            "{\n"
-            f"  \"impact_frame\": {context['impact_frame']},\n"
-            f"  \"epicenter_xyz\": {context['fracture_center_xyz']},\n"
-            "  \"debris_type\": \"heavy_chunks\",\n"
-            "  \"particle_count\": 100,\n"
-            "  \"velocity_towards_camera\": 25.0,\n"
-            "  \"gravity_influence\": 0.0,\n"
-            "  \"rationale\": \"Anime style needs chunks shooting straight at the lens without falling.\"\n"
-            "}"
-        )
-
         try:
-            # NATIVE GEMINI JSON PAYLOAD
-            payload = {
-                "contents": [{"parts": [{"text": ai_prompt}]}], 
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            req = urllib.request.Request(self.gemini_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"].strip()
-                cleaned = self._clean_json_response(res_text)
-                output = json.loads(cleaned)
-                
-                # HARD SAFEGUARD FOR COLAB RAM
-                if output.get("particle_count", 0) > 150:
-                    output["particle_count"] = 150
-                return output
-                
-        except Exception as e:
-            self.log_message(f"AI Debris Director failed: {str(e)}. Using fallback.", "WARNING")
-            return self._fallback_debris(True, context)
+            cleaned = re.sub(r'```(?:json)?\n(.*?)```', r'\1', raw_text, flags=re.DOTALL).strip()
+            return json.loads(cleaned)
+        except:
+            start = raw_text.find("{")
+            end = raw_text.rfind("}")
+            if start != -1 and end != -1:
+                try: return json.loads(raw_text[start:end+1])
+                except: pass
+            return None
 
-    def _fallback_debris(self, has_impact, context=None):
+    def _fallback_debris(self, has_impact, style, context):
         if not has_impact:
             return {
                 "impact_frame": 0, "particle_count": 0, "debris_type": "none",
-                "velocity_towards_camera": 0.0, "gravity_influence": 1.0, "rationale": "No destruction impact detected."
+                "velocity_towards_camera": 0.0, "gravity_influence": 1.0, "particle_scale": 1.0,
+                "rationale": "No impact. Skipped."
             }
+        is_anime = "anime" in style
         return {
-            "impact_frame": context.get("impact_frame", 24), "particle_count": 80, 
-            "epicenter_xyz": context.get("fracture_center_xyz", [0,0,0]), "debris_type": "coarse_dust",
-            "velocity_towards_camera": 15.0, "gravity_influence": 0.5, "rationale": "Fallback standard debris generated."
+            "impact_frame": context.get("impact_frame", 24),
+            "particle_count": 120 if is_anime else 200, 
+            "epicenter_xyz": context.get("fracture_center_xyz", [0,0,0]),
+            "debris_type": "sharp_shards" if is_anime else "coarse_dust",
+            "velocity_towards_camera": 45.0 if is_anime else 18.0,
+            "gravity_influence": 0.0 if is_anime else 1.0,
+            "particle_scale": 2.5 if is_anime else 0.8,
+            "rationale": "Fallback VFX applied based on global style."
         }
 
-    def _generate_blender_script(self, blend_file_path, debris_data):
-        """Python script to generate camera-facing particle systems in Headless Blender."""
+    # LIMITLESS AI VFX BRAIN
+    def _query_debris_brain(self, scene_name, context, style):
+        if not context["has_destruction"]:
+            return self._fallback_debris(False, style, context)
+
+        self.log(f"Calculating Lens-Facing VFX for '{scene_name}' (Style: {style.upper()})...", "INFO")
+
+        ai_prompt = f"""
+        You are the VFX & Sakuga Particle TD for the OmniMatrix Engine.
+        Scene: {scene_name} | Style: {style.upper()}
+        Impact Center: {context['fracture_center_xyz']} | Impact Frame: {context['impact_frame']}
+        
+        MISSION:
+        Design particle debris that shoots EXACTLY towards the camera lens during impact.
+        
+        STYLE RULES:
+        - If ANIME: `debris_type`="sharp_shards". Use ZERO gravity (`gravity_influence`: 0.0). High `velocity_towards_camera` (30.0 - 60.0) so they hit the lens instantly. Exaggerate `particle_scale` (2.0 - 4.0).
+        - If REALISTIC: `debris_type`="coarse_dust". Use normal gravity (`gravity_influence`: 1.0) so debris arcs naturally. Medium velocity (10.0 - 25.0). Smaller `particle_scale` (0.5 - 1.2).
+        - LIMIT `particle_count` strictly between 50 and 250 to save RAM.
+        
+        Return ONLY valid JSON:
+        {{
+            "impact_frame": {context['impact_frame']},
+            "epicenter_xyz": {context['fracture_center_xyz']},
+            "debris_type": "sharp_shards" or "coarse_dust",
+            "particle_count": integer,
+            "velocity_towards_camera": float,
+            "gravity_influence": float,
+            "particle_scale": float,
+            "rationale": "Brief reason"
+        }}
+        """
+
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = self._clean_json_response(res_text)
+                    if parsed:
+                        if parsed.get("particle_count", 0) > 250: parsed["particle_count"] = 250
+                        parsed["epicenter_xyz"] = context["fracture_center_xyz"]
+                        return parsed
+            except: pass
+
+        return self._fallback_debris(True, style, context)
+
+    # GOD-LEVEL BLENDER SCRIPT: CAMERA-TARGETED PARTICLES
+    def _generate_blender_script(self, blend_file_path, debris_data, style):
         safe_blend_path = blend_file_path.replace("\\", "/")
+        is_anime = "True" if "anime" in style else "False"
         
         script_content = f"""
 import bpy
 import mathutils
+import math
 
 try:
     bpy.ops.wm.open_mainfile(filepath="{safe_blend_path}")
@@ -167,121 +178,162 @@ try:
     frame = {debris_data.get('impact_frame', 0)}
     vel = {debris_data.get('velocity_towards_camera', 0.0)}
     grav = {debris_data.get('gravity_influence', 1.0)}
+    scale_fac = {debris_data.get('particle_scale', 1.0)}
     epicenter = {debris_data.get('epicenter_xyz', [0.0, 0.0, 0.0])}
+    is_anime = {is_anime}
 
     if count > 0:
         cam = bpy.context.scene.camera
         if cam:
-            # Cleanup existing emitters and chunks to prevent duplicating on re-runs
-            for obj_name in ["OMNI_Debris_Emitter", "OMNI_Debris_Chunk"]:
+            # Cleanup previous runs
+            for obj_name in ["OMNI_VFX_Emitter", "OMNI_VFX_Chunk"]:
                 existing = bpy.data.objects.get(obj_name)
                 if existing:
                     bpy.data.objects.remove(existing, do_unlink=True)
 
-            # 1. Create Instancing Object (The actual Debris Mesh)
-            bpy.ops.mesh.primitive_ico_sphere_add(radius=0.08, subdivisions=1, location=(0, 0, -10))
+            # 1. CREATE INSTANCE GEOMETRY (Anime vs Realistic)
+            if is_anime:
+                # Anime gets sharp diamond/shards that look like speed streaks
+                bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.1, depth=0.6, location=(0, 0, -10))
+            else:
+                # Realistic gets jagged rocks
+                bpy.ops.mesh.primitive_ico_sphere_add(radius=0.15, subdivisions=2, location=(0, 0, -10))
+                # Add slight displacement for rock realism
+                mod = bpy.context.active_object.modifiers.new(name="RockDisplace", type='DISPLACE')
+                mod.strength = 0.5
+                
             debris_chunk = bpy.context.active_object
-            debris_chunk.name = "OMNI_Debris_Chunk"
+            debris_chunk.name = "OMNI_VFX_Chunk"
             debris_chunk.hide_render = True
             debris_chunk.hide_viewport = True
 
-            # 2. Create Emitter at Impact Location
-            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.3, location=epicenter)
+            # 2. CREATE EMITTER EXACTLY AT IMPACT CENTER
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.2, location=epicenter)
             emitter = bpy.context.active_object
-            emitter.name = "OMNI_Debris_Emitter"
-            emitter.hide_render = True # Hide emitter, only show particles
+            emitter.name = "OMNI_VFX_Emitter"
+            emitter.hide_render = True
             emitter.show_instancer_for_render = False
             
-            # 3. Add Particle System
+            # 3. SET UP PARTICLE SYSTEM
             bpy.ops.object.particle_system_add()
             ps = emitter.particle_systems[0]
             pset = ps.settings
             
             pset.count = count
             pset.frame_start = frame
-            pset.frame_end = frame + 2 # Burst emission
-            pset.lifetime = 100
+            pset.frame_end = frame + 1 # Instant burst
+            pset.lifetime = 50 if is_anime else 100 # Anime particles vanish faster
             
-            # Link instance object
+            # Render Settings
             pset.render_type = 'OBJECT'
             pset.instance_object = debris_chunk
-            pset.particle_size = 1.0
-            pset.size_random = 0.6
+            pset.particle_size = scale_fac
+            pset.size_random = 0.7
             
-            # 4. Calculate Vector to Camera
-            cam_loc = cam.location
+            # 4. MATH: AIM EMITTER DIRECTLY AT CAMERA LENS
+            cam_loc = cam.matrix_world.translation
             emit_loc = mathutils.Vector(epicenter)
             direction = (cam_loc - emit_loc).normalized()
             
-            # 5. Apply Velocity and Physics
-            pset.physics_type = 'NEWTON'
-            pset.normal_factor = 0.0 # Don't shoot along normals
-            
-            # Rotate emitter to face camera
+            # Rotate emitter so its Z-axis points at the camera
             rot_quat = direction.to_track_quat('Z', 'Y')
             emitter.rotation_euler = rot_quat.to_euler()
-            pset.object_factor = vel # Shoot along object Z axis
-            pset.factor_random = vel * 0.4 # Add chaos
             
-            # 6. OmniMatrix Gravity Influence (Anime = 0, Realistic = 1)
+            # 5. VELOCITY & DYNAMICS
+            pset.physics_type = 'NEWTON'
+            pset.normal_factor = 0.0 
+            pset.object_factor = vel # Blast speed towards camera
+            pset.factor_random = vel * 0.3 # Scatter effect
+            
+            # If Anime, align particles to their velocity (speed lines)
+            if is_anime:
+                pset.use_dynamic_rotation = True
+                pset.rotation_mode = 'VELOCITY'
+                
+            # 6. GRAVITY CONTROL
             pset.effector_weights.gravity = grav
 
-        bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
-        print("SUCCESS: OmniMatrix Camera Debris initialized and instanced.")
-    else:
-        print("SUCCESS: No debris needed for this scene.")
+    bpy.ops.wm.save_as_mainfile(filepath="{safe_blend_path}")
+    print("OMNIMATRIX_BLENDER_SUCCESS")
 
 except Exception as e:
-    print(f"ERROR: {{str(e)}}")
+    print(f"OMNIMATRIX_ERROR: {{str(e)}}")
     import sys
     sys.exit(1)
 """
-        script_path = os.path.join(self.workspace_dir, "temp_debris_script.py")
+        script_path = os.path.join(self.module_c_dir, "temp_debris_script.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
         return script_path
 
-    def process_camera_debris(self):
-        self.log_message("Initializing OmniMatrix Camera Debris Instancer...", "INFO")
+    def execute_pipeline(self):
+        self.log("Initializing Agent 31 (Camera VFX & Debris Instancer)...", "INFO")
+
+        # RULE 7: ATOMIC HANDSHAKE
+        state = {}
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+            except: pass
+
+        if state.get("next_agent") != self.agent_name:
+            self.log(f"Execution suspended. Orchestrator expected '{state.get('next_agent')}'.", "WARNING")
+            sys.exit(0)
+
+        config = self._load_master_config()
+        global_style = config.get("global_style", "anime").lower()
+        blender_executable = config.get("blender_executable", "blender")
         master_blueprint = {}
         
+        if not os.path.exists(self.env_dir) or not os.listdir(self.env_dir):
+            self.log("No 3D environments found. Exiting...", "WARNING")
+            sys.exit(0)
+            
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                scene_name = filename.replace("_stage.blend", "")
+            if filename.endswith(".blend"):
+                scene_name = filename.replace("_stage.blend", "").replace(".blend", "")
                 blend_file_path = os.path.join(self.env_dir, filename)
                 
                 context = self._load_upstream_context(scene_name)
                 
                 if context["has_destruction"]:
-                    self.log_message(f"--- Processing Debris for: {scene_name} ---", "INFO")
-                    debris_data = self._query_debris_brain(scene_name, context)
+                    self.log(f"[{scene_name}] Destruction Data Found. Injecting Camera VFX...", "INFO")
+                    debris_data = self._query_debris_brain(scene_name, context, global_style)
                     
-                    self.log_message(f"AI Decision: {debris_data.get('rationale', 'Default')} | Type: {debris_data.get('debris_type')} | Count: {debris_data.get('particle_count')}", "INFO")
+                    self.log(f"AI Brain: Type [{debris_data.get('debris_type')}] | Speed: {debris_data.get('velocity_towards_camera')} | Gravity: {debris_data.get('gravity_influence')}", "INFO")
                     
-                    script_path = self._generate_blender_script(blend_file_path, debris_data)
+                    script_path = self._generate_blender_script(blend_file_path, debris_data, global_style)
+                    command = [blender_executable, "-b", "-P", script_path]
                     
-                    command = [self.blender_path, "-b", "-P", script_path]
                     try:
                         result = subprocess.run(command, capture_output=True, text=True)
-                        if result.returncode == 0 and "SUCCESS" in result.stdout:
-                            self.log_message(f"Camera Debris applied to {filename}", "SUCCESS")
+                        if "OMNIMATRIX_BLENDER_SUCCESS" in result.stdout:
+                            self.log(f"God-Level Debris VFX baked into {filename}", "SUCCESS")
                             master_blueprint[scene_name] = debris_data
                         else:
-                            self.log_message(f"Blender build failed: {result.stdout[-250:]}", "ERROR")
+                            self.log(f"Blender build failed: {result.stdout[-300:]}", "ERROR")
                     except Exception as e:
-                        self.log_message(f"Subprocess Execution failed: {str(e)}", "CRITICAL")
+                        self.log(f"Execution failed: {str(e)}", "CRITICAL")
                         
                     if os.path.exists(script_path):
                         os.remove(script_path)
                 else:
-                    self.log_message(f"[{scene_name}] No destruction detected. Skipping Debris.", "INFO")
-                    master_blueprint[scene_name] = self._fallback_debris(False)
+                    self.log(f"[{scene_name}] No impact data found. Skipping VFX.", "INFO")
+                    master_blueprint[scene_name] = self._fallback_debris(False, global_style, context)
 
         with open(self.output_blueprint, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
             
-        self.log_message("Agent 31 Pipeline Complete. Debris is flying towards the lens!", "INFO")
+        # RULE 7: STATE UPDATE FOR THE NEXT AGENT (Moving to Module D: Lighting or Camera Finalization?)
+        state["last_active_agent"] = self.agent_name
+        state["next_agent"] = "Ai_Agent_32_Atmospheric_Volumetric_Lighting_Engine" 
+        
+        with open(self.state_file, "w") as f:
+            json.dump(state, f, indent=4)
+            
+        self.log(f"Camera VFX Complete. Handoff to {state['next_agent']}.", "SUCCESS")
 
 if __name__ == "__main__":
-    instancer = OmniMatrixDebrisInstancer()
-    instancer.process_camera_debris()
+    instancer = AiAgent31CameraVFXDebrisInstancer()
+    instancer.execute_pipeline()
