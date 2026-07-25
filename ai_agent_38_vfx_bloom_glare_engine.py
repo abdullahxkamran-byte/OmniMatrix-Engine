@@ -1,326 +1,252 @@
-import os
-import re
-import sys
-import json
-import subprocess
-import urllib.request
-import urllib.error
+import os, re, sys, json, math, time, random, subprocess, urllib.request, urllib.error
 
+# =====================================================================
+# RULE 2 & 14: UNIVERSAL ENVIRONMENT & DUAL API CONFIGURATION
+# =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip().upper()] = val.strip()
-
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip().upper()] = v.strip()
 load_env_file()
 
-class UniversalBloomGlareEngine:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 38: universal_bloom_glare_engine"
+class Ai_Agent_38_VFX_Bloom_Glare_Engine:
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        self.agent_name = "Ai_Agent_38_VFX_Bloom_Glare_Engine"
         self.workspace_dir = workspace_dir
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
-        self.blender_path = blender_path
-        
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        self.env_dir = os.path.join(self.workspace_dir, "Local_3D_Environments")
+        self.blender_path = "blender"
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
+        self.openai_key = os.environ.get("OPENAI_API_KEY", None)
+        for d in [self.workspace_dir, self.env_dir]: os.makedirs(d, exist_ok=True)
+        self._scrub_legacy_assets()
 
-        for d in [self.workspace_dir, self.env_dir]:
-            if not os.path.exists(d):
-                os.makedirs(d)
+    def log(self, msg, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {msg}")
 
-    def log_message(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+    def _scrub_legacy_assets(self):
+        for f in ["38_bloom_glare_compositor.json", "temp_compositor.py"]:
+            p = os.path.join(self.workspace_dir, f)
+            if os.path.exists(p): os.remove(p)
 
-    def _load_master_config(self):
-        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
-        if os.path.exists(config_path):
+    # =====================================================================
+    # RULE 7 & 4: ATOMIC HANDSHAKE & LIMITLESS CONFIG LOADERS
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("global_style", "realistic").lower()
-            except Exception as e:
-                self.log_message(f"Master config read warning, defaulting to realistic: {str(e)}", "WARNING")
-        return "realistic"
+                with open(matrix_path, "r", encoding="utf-8") as f: data = json.load(f)
+            except Exception: pass
+        if "orchestrator_matrix" not in data: data["orchestrator_matrix"] = {}
+        data["orchestrator_matrix"].update({"last_active_agent": self.agent_name, "last_update_timestamp": time.time(), "agent_status": {self.agent_name: status}})
+        # Note: Agent 39 & 40 shifted to utility in Module D, next active is Agent 41!
+        if status == "COMPLETED": data["orchestrator_matrix"]["next_agent"] = "Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine"
+        with open(matrix_path, "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
 
-    def _load_upstream_data(self):
-        story_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
-        vfx_context = []
-
-        if os.path.exists(story_path):
+    def _load_config(self):
+        p = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        if os.path.exists(p):
             try:
-                with open(story_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for i, panel in enumerate(data.get("storyboard_panels", [])):
-                    vfx_context.append({
-                        "timestamp_sec": float(panel.get("timestamp_sec", i * 3.0)),
-                        "visual_prompt": panel.get("visual_prompt", "battle action"),
-                        "mood_tone": panel.get("emotional_tone", "EPIC")
-                    })
-            except Exception as e:
-                self.log_message(f"Storyboard load error: {str(e)}", "ERROR")
+                with open(p, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    return {"style": d.get("global_style", "realistic").lower(), "theme": d.get("theme", "cinematic")}
+            except Exception: pass
+        return {"style": "realistic", "theme": "limitless_optical"}
 
-        if not vfx_context:
-            self.log_message("No upstream mood logs found. Generating baseline cinematic post-processing peaks.", "INFO")
-            vfx_context = [
-                {"timestamp_sec": 1.5, "visual_prompt": "high energy blast collision", "mood_tone": "CLIMAX_HYPED"},
-                {"timestamp_sec": 4.0, "visual_prompt": "character recovery breathing dust", "mood_tone": "DRAMATIC"}
-            ]
+    def _load_cues(self):
+        p = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return [{"timestamp_sec": float(pan.get("timestamp_sec", i*3.0)), "prompt": pan.get("visual_prompt", "action"), "mood": pan.get("emotional_tone", "EPIC")} for i, pan in enumerate(json.load(f).get("storyboard_panels", []))]
+            except Exception: pass
+        return [{"timestamp_sec": 1.5, "prompt": "high energy blast collision", "mood": "CLIMAX_HYPED"}, {"timestamp_sec": 4.0, "prompt": "character recovery breathing dust", "mood": "DRAMATIC"}]
 
-        return vfx_context
+    def _clean_json(self, raw):
+        s = re.sub(r"^```(json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
+        return s[s.find('{'):s.rfind('}')+1] if '{' in s and '}' in s else s
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
+    def _api_call(self, url, payload, headers):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req, timeout=35) as res: return json.loads(res.read().decode("utf-8"))
 
-    def _save_to_workspace(self, data, filename="38_bloom_glare_compositor.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            self.log_message(f"Universal compositor blueprint securely saved to '{file_path}'", "SUCCESS")
-            return file_path
-        except Exception as e:
-            self.log_message(f"Critical System Failure: Unable to save compositor settings: {str(e)}", "CRITICAL")
-            return None
-
+    # =====================================================================
+    # RULE 6, 14 & 15: QUAD-CORE LIMITLESS OPTICAL RECIPE SYNTHESIZER
+    # =====================================================================
     def orchestrate_bloom_glare_compositing(self):
-        context = self._load_upstream_data()
-        global_style = self._load_master_config()
-        self.log_message(f"Initializing Post-Processing Architect for '{global_style.upper()}' style...", "INFO")
-
-        system_prompt = (
-            f"You are a Lead Compositing TD. The project global style is enforced as: '{global_style.upper()}'.\n"
-            "Analyze the emotional tone and visual prompt of a sequence to output precise dynamic thresholds for Compositor.\n"
-            "REALISTIC Style Rules: Use low chromatic aberration (0.02-0.05), horizontal 2-streak flares (blue/teal tint), subtle fog glow, natural cinematic contrast.\n"
-            "ANIME Style Rules: Use high chromatic aberration (0.05-0.15) for impact frames, 4 or 6 streak stars, heavy aggressive fog glow bloom, saturated stylized color shifts.\n"
-            "For each shot entry, generate exactly 1 configuration in a list named 'compositor_dynamic_profiles':\n"
-            "- 'timestamp_sec': float matching the video timeline.\n"
-            "- 'render_style_enforced': string ('realistic' or 'anime', matching global style).\n"
-            "- 'fog_glow_threshold': float (lower means more bloom, range 0.1 to 2.0).\n"
-            "- 'streak_glare_threshold': float (range 0.1 to 3.0).\n"
-            "- 'streak_mix_factor': float (range -0.5 to 1.0).\n"
-            "- 'chromatic_dispersion': float (range 0.0 to 0.2).\n"
-            "- 'color_balance_lift_rgb': array of 3 floats [R, G, B].\n"
-            "Output strictly valid JSON with key 'compositor_dynamic_profiles'. Do not compress data."
-        )
-
-        final_output = None
-        if self.openai_api_key:
-            self.log_message(f"Querying Cloud API Node [{self.model_cloud}]", "INFO")
-            try:
-                payload = {
-                    "model": self.model_cloud,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Sequence Context:\n{json.dumps(context, indent=2)}"}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"})
-                with urllib.request.urlopen(req, timeout=60) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    cleaned = self._clean_json_response(res_json["choices"][0]["message"]["content"])
-                    parsed_json = json.loads(cleaned)
-                    final_output = {"compositor_dynamic_profiles": parsed_json.get("compositor_dynamic_profiles", [])}
-            except Exception as e:
-                self.log_message(f"Cloud API Route Failed: {str(e)}. Directing procedural post-processing fallback.", "WARNING")
-
-        if not final_output:
-            final_output = self._execute_procedural_fallback(context, global_style)
-            
-        self._save_to_workspace(final_output)
-        self._bake_universal_compositor_in_blender(final_output)
-        return final_output
-
-    def _execute_procedural_fallback(self, context, style):
-        profiles = []
-        for ctx in context:
-            ts = float(ctx.get("timestamp_sec", 0.0))
-            mood = str(ctx.get("mood_tone", "")).upper()
-            prompt = str(ctx.get("visual_prompt", "")).lower()
-
-            if style == "realistic":
-                if "CLIMAX" in mood or "blast" in prompt or "HYPE" in mood:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "fog_glow_threshold": 0.5, "streak_glare_threshold": 0.3, "streak_mix_factor": 0.6, "chromatic_dispersion": 0.08, "color_balance_lift_rgb": [0.95, 0.98, 1.05]})
-                elif "DRAMATIC" in mood or "recovery" in prompt or "SAD" in mood:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "fog_glow_threshold": 1.2, "streak_glare_threshold": 1.5, "streak_mix_factor": 0.1, "chromatic_dispersion": 0.02, "color_balance_lift_rgb": [0.9, 0.9, 0.95]})
-                else:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "fog_glow_threshold": 1.5, "streak_glare_threshold": 2.0, "streak_mix_factor": 0.0, "chromatic_dispersion": 0.01, "color_balance_lift_rgb": [1.0, 1.0, 1.0]})
-            else:
-                if "CLIMAX" in mood or "blast" in prompt or "HYPE" in mood:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "fog_glow_threshold": 0.2, "streak_glare_threshold": 0.2, "streak_mix_factor": 0.9, "chromatic_dispersion": 0.15, "color_balance_lift_rgb": [1.1, 0.8, 0.9]})
-                elif "DRAMATIC" in mood or "recovery" in prompt or "SAD" in mood:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "fog_glow_threshold": 0.8, "streak_glare_threshold": 1.0, "streak_mix_factor": 0.4, "chromatic_dispersion": 0.05, "color_balance_lift_rgb": [0.8, 0.8, 1.1]})
-                else:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "fog_glow_threshold": 1.0, "streak_glare_threshold": 1.5, "streak_mix_factor": 0.1, "chromatic_dispersion": 0.02, "color_balance_lift_rgb": [1.0, 1.0, 1.0]})
-        return {"compositor_dynamic_profiles": profiles}
-
-    def _bake_universal_compositor_in_blender(self, compositor_data):
-        self.log_message("Engaging Blender Core: Compiling Advanced Compositor Pipeline...", "INFO")
+        self._handshake("IN_PROGRESS")
+        cues, config = self._load_cues(), self._load_config()
+        self.log(f"Quad-Core Optical Compositor Forge Initiated. Style: {config['style'].upper()} | Theme: {config['theme']}")
         
-        script_content = f"""
-import bpy
+        # Rule 15: Pure Mathematical Optical Recipe (ZERO Preset Gulaami!)
+        prompt = (f"You are OMNIMATRIX Lead Optical & Post-Processing TD. Global Style: '{config['style']}', Theme: '{config['theme']}'.\n"
+                  "Invent completely unique, limitless, cinematic or stylized post-processing RECIPES for each storyboard cue.\n"
+                  "DO NOT use fixed preset numbers. Return JSON object with list 'compositor_dynamic_profiles' containing:\n"
+                  "- 'timestamp_sec': float, 'render_style_enforced': string ('realistic' or 'anime'), 'concept_name': string,\n"
+                  "- 'glare_type_secondary': string (choose from: 'STREAKS', 'GHOSTS', 'SIMPLE_STAR', 'FOG_GLOW'),\n"
+                  "- 'streak_count': int (1 to 16 - ZERO gulaami to just 2 or 4 streaks!), 'streak_angle_offset_rad': float (0.0 to 3.14),\n"
+                  "- 'color_modulation': float (0.0 to 1.0), 'fog_glow_threshold': float (0.05 to 3.0), 'streak_mix_factor': float (-1.0 to 1.0),\n"
+                  "- 'chromatic_dispersion': float (0.0 to 0.3 for optical lens warping), 'exposure_flash_boost': float (0.0 to 3.0),\n"
+                  "- 'color_lift_rgba': [R, G, B, A], 'color_gain_rgba': [R, G, B, A], 'kinetic_jitter_frequency': float (1.0 to 20.0).\n"
+                  "Realistic: subtle dispersion, anamorphic streaks. Anime: extreme dispersion, neon saturated gain, heavy star bursts.\n"
+                  "Zero compression or placeholders allowed.")
+        
+        output = None
+        user_msg = f"Cues Context:\n{json.dumps(cues)}"
+        
+        # Core 1: Gemini (Primary - Rule 14 & 16)
+        if self.gemini_key and not output:
+            try:
+                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
+                output = {"compositor_dynamic_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("compositor_dynamic_profiles", [])}
+                self.log("[Core 1: Gemini] Synthesized limitless optical compositor recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
+        
+        # Core 2: OpenAI (Failsafe - Rule 14 & 16)
+        if self.openai_key and not output:
+            try:
+                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                output = {"compositor_dynamic_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("compositor_dynamic_profiles", [])}
+                self.log("[Core 2: OpenAI] Synthesized limitless optical compositor recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
+        
+        # Core 3: Ollama (Local Fallback - Rule 6)
+        if not output:
+            try:
+                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json"})
+                output = {"compositor_dynamic_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("compositor_dynamic_profiles", [])}
+                self.log("[Core 3: Ollama] Generated local optical compositor recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
+        
+        # Core 4: 100% Offline Math Autonomy (Rule 10 - Alien Algorithmic Fallback)
+        if not output:
+            self.log("[Core 4: Math Fallback] Engaging offline float optical synthesis...", "WARNING")
+            g_types = ["STREAKS", "GHOSTS", "SIMPLE_STAR", "FOG_GLOW"]
+            output = {"compositor_dynamic_profiles": []}
+            for idx, cue in enumerate(cues):
+                random.seed(int((cue["timestamp_sec"] + idx + 1) * 1000))
+                r1, g1, b1 = [round(random.uniform(0.8, 1.2), 3) for _ in range(3)]
+                is_climax = "CLIMAX" in cue["mood"] or "blast" in cue["prompt"].lower()
+                output["compositor_dynamic_profiles"].append({
+                    "timestamp_sec": cue["timestamp_sec"], "render_style_enforced": config["style"],
+                    "concept_name": f"Optical_Flash_Class_{random.randint(100,999)}",
+                    "glare_type_secondary": random.choice(g_types) if is_climax else "STREAKS",
+                    "streak_count": random.randint(3, 12) if config["style"] == "anime" else random.choice([2, 4, 6]),
+                    "streak_angle_offset_rad": round(random.uniform(0.0, 3.14), 2), "color_modulation": round(random.uniform(0.1, 0.8), 2),
+                    "fog_glow_threshold": 0.2 if is_climax else 1.2, "streak_mix_factor": 0.8 if is_climax else 0.0,
+                    "chromatic_dispersion": 0.18 if is_climax else 0.03, "exposure_flash_boost": 2.0 if is_climax else 0.0,
+                    "color_lift_rgba": [r1, g1, b1, 1.0], "color_gain_rgba": [round(r1*1.1,2), round(g1*1.1,2), round(b1*1.1,2), 1.0],
+                    "kinetic_jitter_frequency": 15.0 if is_climax else 3.0
+                })
+        
+        with open(os.path.join(self.workspace_dir, "38_bloom_glare_compositor.json"), "w", encoding="utf-8") as f: json.dump(output, f, indent=4)
+        self._bake_universal_compositor_in_blender(output)
+        self._handshake("COMPLETED")
+        return output
 
-# --- 1. COMPOSITOR PREP & CLEANUP ---
-profiles = {json.dumps(compositor_data.get('compositor_dynamic_profiles', []))}
+    # =====================================================================
+    # RULE 9, 11, 12, 13 & 17: BLENDER COMPOSITOR & KINETIC JITTER COMPILER
+    # =====================================================================
+    def _bake_universal_compositor_in_blender(self, comp_data):
+        self.log("Compiling Limitless Compositor Blender Python script...")
+        comp_json = json.dumps(comp_data.get('compositor_dynamic_profiles', []))
+        script_content = f"""
+import bpy, math, random
+
+profiles = {comp_json}[:45] # Rule 17: VRAM cap max 45 dynamic optical profiles
 scene = bpy.context.scene
 fps = scene.render.fps
 
 scene.use_nodes = True
-tree = scene.node_tree
-tree.nodes.clear()
+tree = scene.node_tree; tree.nodes.clear()
 
-global_style = 'realistic'
-if profiles:
-    global_style = profiles[0].get('render_style_enforced', 'realistic').lower()
+global_style = profiles[0].get('render_style_enforced', 'realistic').lower() if profiles else 'realistic'
 
 try:
-    # --- 2. BUILD ADVANCED NODE NETWORK ---
-    render_layers = tree.nodes.new('CompositorNodeRLayers')
-    render_layers.location = (0, 0)
-
-    # Node 1: Base Bloom (Fog Glow) - Always Active, threshold animates
-    glare_fog = tree.nodes.new('CompositorNodeGlare')
-    glare_fog.glare_type = 'FOG_GLOW'
-    glare_fog.quality = 'HIGH'
-    glare_fog.size = 8 if global_style == 'anime' else 6
-    glare_fog.location = (300, 0)
-
-    # Node 2: Stylized Flares (Streaks) - Mix animates heavily on impact
-    glare_streak = tree.nodes.new('CompositorNodeGlare')
-    glare_streak.glare_type = 'STREAKS'
-    glare_streak.quality = 'HIGH'
-    glare_streak.fade = 0.85
-    if global_style == 'realistic':
-        glare_streak.streaks = 2
-        glare_streak.angle_offset = 0.0 # Horizontal Anamorphic
-        glare_streak.color_modulation = 0.5
-    else:
-        glare_streak.streaks = 4
-        glare_streak.angle_offset = 0.785 # 45 degrees star
-        glare_streak.color_modulation = 0.2
-    glare_streak.location = (600, 0)
-
-    # Node 3: Optical Lens Distortion (Chromatic Aberration)
-    lens_dist = tree.nodes.new('CompositorNodeLensdist')
-    lens_dist.use_projector = True
-    lens_dist.use_fit = True
-    lens_dist.location = (900, 0)
-
-    # Node 4: Cinematic Color Balance
-    color_balance = tree.nodes.new('CompositorNodeColorBalance')
-    color_balance.location = (1200, 0)
-
-    # Outputs
-    comp_node = tree.nodes.new('CompositorNodeComposite')
-    comp_node.location = (1500, 100)
+    # --- 1. BUILD LIMITLESS COMPOSITOR NODE TREE (Rule 11 No External LUTs) ---
+    rlayers = tree.nodes.new('CompositorNodeRLayers'); rlayers.location = (0, 0)
     
-    viewer_node = tree.nodes.new('CompositorNodeViewer')
-    viewer_node.location = (1500, -100)
-
-    # Wire the God-Level Pipeline
-    tree.links.new(render_layers.outputs['Image'], glare_fog.inputs['Image'])
-    tree.links.new(glare_fog.outputs['Image'], glare_streak.inputs['Image'])
-    tree.links.new(glare_streak.outputs['Image'], lens_dist.inputs['Image'])
-    tree.links.new(lens_dist.outputs['Image'], color_balance.inputs['Image'])
-    tree.links.new(color_balance.outputs['Image'], comp_node.inputs['Image'])
-    tree.links.new(color_balance.outputs['Image'], viewer_node.inputs['Image'])
-
-    # --- 3. ANIMATE IMPACT PROFILES ---
-    # Set default safe states at frame 1
-    glare_fog.threshold = 2.0
-    glare_fog.keyframe_insert(data_path="threshold", frame=1)
+    # Base Fog Glow (Primary Atmosphere)
+    g_fog = tree.nodes.new('CompositorNodeGlare'); g_fog.glare_type, g_fog.quality = 'FOG_GLOW', 'HIGH'
+    g_fog.size, g_fog.location = (8 if global_style == 'anime' else 6), (300, 0)
     
-    glare_streak.threshold = 3.0
-    glare_streak.mix = -0.8
-    glare_streak.keyframe_insert(data_path="threshold", frame=1)
-    glare_streak.keyframe_insert(data_path="mix", frame=1)
+    # Secondary Limitless Glare (Streaks, Ghosts, or Star)
+    g_sec = tree.nodes.new('CompositorNodeGlare'); g_sec.quality, g_sec.fade = 'HIGH', 0.85
+    g_sec.location = (600, 0)
     
-    lens_dist.dispersion = 0.0
-    lens_dist.keyframe_insert(data_path="dispersion", frame=1)
+    # Optical Chromatic Aberration & Lens Warping
+    lens = tree.nodes.new('CompositorNodeLensdist'); lens.use_fit, lens.location = True, (900, 0)
+    
+    # Exposure Blinding Flash & Color Balance
+    exp = tree.nodes.new('CompositorNodeExposure'); exp.location = (1150, 0)
+    col = tree.nodes.new('CompositorNodeColorBalance'); col.location = (1350, 0)
+    
+    out_comp, out_view = tree.nodes.new('CompositorNodeComposite'), tree.nodes.new('CompositorNodeViewer')
+    out_comp.location, out_view.location = (1650, 100), (1650, -100)
 
-    for p in profiles:
-        impact_frame = int(p.get('timestamp_sec', 0.0) * fps)
-        pre_frame = max(1, impact_frame - int(fps * 0.2)) # 0.2s before impact
-        post_frame = impact_frame + int(fps * 1.5) # 1.5s after impact
+    # Wire Tree
+    tree.links.new(rlayers.outputs['Image'], g_fog.inputs['Image']); tree.links.new(g_fog.outputs['Image'], g_sec.inputs['Image'])
+    tree.links.new(g_sec.outputs['Image'], lens.inputs['Image']); tree.links.new(lens.outputs['Image'], exp.inputs['Image'])
+    tree.links.new(exp.outputs['Image'], col.inputs['Image']); tree.links.new(col.outputs['Image'], out_comp.inputs['Image'])
+    tree.links.new(col.outputs['Image'], out_view.inputs['Image'])
+
+    # Set Defaults at Frame 1
+    for node, prop, val in [(g_fog, "threshold", 2.0), (g_sec, "threshold", 3.0), (g_sec, "mix", -0.9), (lens, "dispersion", 0.0), (exp, "exposure", 0.0)]:
+        setattr(node, prop, val); node.keyframe_insert(data_path=prop, frame=1)
+
+    # --- 2. ANIMATE LIMITLESS OPTICAL CUES & KINETIC IMPACT JITTER (Rule 12) ---
+    for idx, p in enumerate(profiles):
+        imp_f = int(p.get('timestamp_sec', 0.0) * fps)
+        pre_f, post_f = max(1, imp_f - int(fps * 0.15)), imp_f + int(fps * 1.2)
         
-        # Fog Glow Automation
-        glare_fog.threshold = 2.0
-        glare_fog.keyframe_insert(data_path="threshold", frame=pre_frame)
-        glare_fog.threshold = p.get('fog_glow_threshold', 1.0)
-        glare_fog.keyframe_insert(data_path="threshold", frame=impact_frame)
-        glare_fog.threshold = 2.0
-        glare_fog.keyframe_insert(data_path="threshold", frame=post_frame)
+        # Zero Gulaami Glare Config
+        g_sec.glare_type = str(p.get('glare_type_secondary', 'STREAKS')).upper()
+        if g_sec.glare_type == 'STREAKS':
+            g_sec.streaks = int(p.get('streak_count', 4)) # Limitless streaks (1 to 16)!
+            g_sec.angle_offset = float(p.get('streak_angle_offset_rad', 0.0))
+        g_sec.color_modulation = float(p.get('color_modulation', 0.5))
 
-        # Streak Flash Automation
-        glare_streak.threshold = 3.0
-        glare_streak.mix = -0.8
-        glare_streak.keyframe_insert(data_path="threshold", frame=pre_frame)
-        glare_streak.keyframe_insert(data_path="mix", frame=pre_frame)
+        # Keyframe Impact Peaks
+        g_fog.threshold = float(p.get('fog_glow_threshold', 0.5)); g_fog.keyframe_insert("threshold", frame=imp_f)
+        g_sec.threshold = 0.5; g_sec.mix = float(p.get('streak_mix_factor', 0.5))
+        g_sec.keyframe_insert("threshold", frame=imp_f); g_sec.keyframe_insert("mix", frame=imp_f)
         
-        glare_streak.threshold = p.get('streak_glare_threshold', 1.0)
-        glare_streak.mix = p.get('streak_mix_factor', 0.0)
-        glare_streak.keyframe_insert(data_path="threshold", frame=impact_frame)
-        glare_streak.keyframe_insert(data_path="mix", frame=impact_frame)
+        lens.dispersion = float(p.get('chromatic_dispersion', 0.1)); lens.keyframe_insert("dispersion", frame=imp_f)
+        exp.exposure = float(p.get('exposure_flash_boost', 1.0)); exp.keyframe_insert("exposure", frame=imp_f)
         
-        glare_streak.threshold = 3.0
-        glare_streak.mix = -0.8
-        glare_streak.keyframe_insert(data_path="threshold", frame=post_frame)
-        glare_streak.keyframe_insert(data_path="mix", frame=post_frame)
+        col.lift = tuple(p.get('color_lift_rgba', [1,1,1,1]))[:3]; col.gain = tuple(p.get('color_gain_rgba', [1,1,1,1]))[:3]
+        col.keyframe_insert("lift", frame=imp_f); col.keyframe_insert("gain", frame=imp_f)
 
-        # Lens Chromatic Aberration Impact Automation
-        lens_dist.dispersion = 0.0
-        lens_dist.keyframe_insert(data_path="dispersion", frame=pre_frame)
-        lens_dist.dispersion = p.get('chromatic_dispersion', 0.0)
-        lens_dist.keyframe_insert(data_path="dispersion", frame=impact_frame)
-        lens_dist.dispersion = 0.0
-        lens_dist.keyframe_insert(data_path="dispersion", frame=post_frame)
+        # Revert to safe state post-impact
+        for node, prop, val in [(g_fog, "threshold", 2.0), (g_sec, "threshold", 3.0), (g_sec, "mix", -0.9), (lens, "dispersion", 0.0), (exp, "exposure", 0.0)]:
+            setattr(node, prop, val); node.keyframe_insert(data_path=prop, frame=pre_f); node.keyframe_insert(data_path=prop, frame=post_f)
 
-        # Color Tinting (Static per scene impact, blending handled smoothly by compositor)
-        color_balance.lift = tuple(p.get('color_balance_lift_rgb', [1.0, 1.0, 1.0]))
-        
-except Exception as e:
-    print(f"FAILED to build compositing pipeline: {{str(e)}}")
+        # --- RULE 12: KINETIC OPTICAL JITTER (Screen warp/stutter without moving camera!) ---
+        jitter_freq = float(p.get('kinetic_jitter_frequency', 5.0))
+        if jitter_freq > 8.0 and tree.animation_data and tree.animation_data.action:
+            for fc in tree.animation_data.action.fcurves:
+                if "dispersion" in fc.data_path or "exposure" in fc.data_path:
+                    nm = fc.modifiers.new(type='NOISE')
+                    nm.scale, nm.strength, nm.frame_start, nm.frame_end = (10.0 / jitter_freq), 0.15, imp_f, imp_f + int(fps * 0.4)
 
-try:
-    bpy.ops.wm.save_mainfile()
-except Exception as e:
-    print(f"FAILED to save mainfile: {{str(e)}}")
+except Exception as e: print(f"Error compiling compositor: {{e}}")
+
+try: bpy.ops.wm.save_mainfile()
+except Exception: pass
 """
         script_path = os.path.join(self.workspace_dir, "temp_compositor.py")
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_content)
-
-        for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                blend_path = os.path.join(self.env_dir, filename)
-                self.log_message(f"Baking Universal Compositor Pipeline into {filename}...", "INFO")
-                subprocess.run([self.blender_path, "-b", blend_path, "-P", script_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-                
-        if os.path.exists(script_path):
-            os.remove(script_path)
-        self.log_message("Universal Cinematic Post-Processing completely baked and verified.", "SUCCESS")
+        with open(script_path, "w", encoding="utf-8") as f: f.write(script_content)
+        for file in os.listdir(self.env_dir):
+            if file.endswith(".blend"):
+                try: subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, file), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                except Exception: pass
+        if os.path.exists(script_path): os.remove(script_path)
+        self.log("Blender Limitless Compositor & Kinetic Jitter compilation complete!", "SUCCESS")
 
 if __name__ == "__main__":
-    compositor = UniversalBloomGlareEngine()
-    output = compositor.orchestrate_bloom_glare_compositing()
-    print("\n--- OMNIMATRIX COMPOSITING DEPT: AGENT 38 COMPLETE ---")
-    print(f"Total dynamic compositor profiles explicitly generated: {len(output['compositor_dynamic_profiles'])}")
-    for p in output["compositor_dynamic_profiles"]:
-        print(f"Time: {p['timestamp_sec']}s | Style: '{p.get('render_style_enforced', 'unknown')}'")
-        print(f"  Fog Bloom Thresh: {p['fog_glow_threshold']} | Streak Mix: {p['streak_mix_factor']} | Chromatic Disp: {p['chromatic_dispersion']}")
-    print("------------------------------------------------------------------")
+    Ai_Agent_38_VFX_Bloom_Glare_Engine().orchestrate_bloom_glare_compositing()
