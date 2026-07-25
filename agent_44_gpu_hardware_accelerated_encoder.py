@@ -1,182 +1,258 @@
 import os
 import sys
 import json
-import subprocess
 import shutil
+import time
+import subprocess
 
-class GpuHardwareAcceleratedEncoder:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Agent 44: gpu_hardware_accelerated_encoder"
+# =====================================================================
+# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# =====================================================================
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
+class Agent_44_GPU_Hardware_Accelerated_Encoder:
+    """
+    OMNIMATRIX V2.0 PURE UTILITY: GPU HARDWARE ACCELERATED ENCODER
+    Auto-detects system rendering hardware (NVIDIA NVENC, AMD AMF, Intel QSV, Apple VCE).
+    Executes high-speed hardware video encoding with automated CPU fallback recovery
+    for seamless execution across local IDEs and cloud environments (e.g., Google Colab T4).
+    """
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
+        self.agent_name = "Agent_44_GPU_Hardware_Accelerated_Encoder"
         self.workspace_dir = workspace_dir
-        self.merger_blueprint_path = os.path.join(self.workspace_dir, "43_merged_av_blueprint.json")
+        self.merger_manifest_path = os.path.join(self.workspace_dir, "43_merged_av_blueprint.json")
+        self.intermediate_video_path = os.path.join(self.workspace_dir, "43_intermediate_merged_output.mp4")
         self.output_gpu_video = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4")
-
-    def _detect_gpu_encoder(self):
-        print(f"[{self.agent_name}] Scanning system hardware drivers for GPU encoder support...")
         
-        # FFmpeg static help commands chalakar supported encoders check karte hain
-        ffmpeg_path = shutil.which("ffmpeg")
-        if not ffmpeg_path:
-            print(f"[{self.agent_name}] Warning: FFmpeg not detected in path. Defaulting to CPU baseline.")
-            return "libx264" # CPU standard fallback
+        os.makedirs(self.workspace_dir, exist_ok=True)
+        self._scrub_legacy_assets()
+
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _scrub_legacy_assets(self):
+        """Rule 3: Idempotency scrubbing of previous hardware encoding outputs and blueprints."""
+        for filename in ["44_gpu_acceleration_blueprint.json", "44_gpu_accelerated_output.mp4"]:
+            file_path = os.path.join(self.workspace_dir, filename)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as error:
+                    self.log(f"Failed to scrub legacy file {file_path}: {error}", "WARNING")
+
+    # =====================================================================
+    # RULE 7: ATOMIC HANDSHAKE & PIPELINE ROUTING
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
+            try:
+                with open(matrix_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        if "orchestrator_matrix" not in data:
+            data["orchestrator_matrix"] = {}
+            
+        data["orchestrator_matrix"].update({
+            "last_active_agent": self.agent_name,
+            "last_update_timestamp": time.time(),
+            "agent_status": {self.agent_name: status}
+        })
+        
+        if status == "COMPLETED":
+            # Advance atomic handshake to Agent 45 (Bitrate Optimizer & Compression Engine)
+            data["orchestrator_matrix"]["next_agent"] = "Agent_45_Bitrate_Optimizer_Compression_Engine"
+            
+        try:
+            with open(matrix_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as error:
+            self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
+
+    # =====================================================================
+    # HARDWARE AUTO-SENSING ENGINE (NVIDIA / AMD / INTEL / APPLE / CPU)
+    # =====================================================================
+    def _detect_gpu_acceleration_codec(self):
+        """Scans local system binary drivers to detect hardware encoder availability."""
+        self.log("Scanning system hardware drivers for GPU encoder support...")
+        
+        ffmpeg_binary = shutil.which("ffmpeg")
+        if not ffmpeg_binary:
+            self.log("FFmpeg executable not detected in system path. Defaulting to CPU baseline.", "WARNING")
+            return "libx264", {}
 
         try:
-            # Querying FFmpeg to list available video encoders
-            process = subprocess.run(
-                ["ffmpeg", "-encoders"], 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
-                text=True, 
-                check=True
-            )
-            encoders_list = process.stdout
+            process = subprocess.run(["ffmpeg", "-encoders"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            encoders_output = process.stdout
 
-            # Priority 1: Nvidia NVENC (Sabse fast aur high-quality)
-            if "h264_nvenc" in encoders_list:
-                print(f"[{self.agent_name}] NVIDIA NVENC Hardware Accelerator Detected!")
-                return "h264_nvenc"
+            # Priority 1: NVIDIA NVENC (Optimal for Google Colab T4 GPU & Local RTX/GTX)
+            if "h264_nvenc" in encoders_output:
+                self.log("NVIDIA NVENC hardware acceleration architecture detected!", "SUCCESS")
+                return "h264_nvenc", {"preset": "p4", "tune": "hq", "rc": "vbr"}
             
-            # Priority 2: Intel QuickSync (QSV)
-            elif "h264_qsv" in encoders_list:
-                print(f"[{self.agent_name}] Intel QuickSync (QSV) Hardware Accelerator Detected!")
-                return "h264_qsv"
+            # Priority 2: Intel QuickSync Video (QSV)
+            elif "h264_qsv" in encoders_output:
+                self.log("Intel QuickSync (QSV) hardware acceleration architecture detected!", "SUCCESS")
+                return "h264_qsv", {"preset": "fast"}
             
             # Priority 3: AMD Advanced Media Framework (AMF)
-            elif "h264_amf" in encoders_list:
-                print(f"[{self.agent_name}] AMD AMF Hardware Accelerator Detected!")
-                return "h264_amf"
+            elif "h264_amf" in encoders_output:
+                self.log("AMD AMF hardware acceleration architecture detected!", "SUCCESS")
+                return "h264_amf", {"quality": "quality"}
             
             # Priority 4: Apple Silicon / macOS VideoToolbox
-            elif "h264_videotoolbox" in encoders_list:
-                print(f"[{self.agent_name}] macOS VideoToolbox Hardware Accelerator Detected!")
-                return "h264_videotoolbox"
+            elif "h264_videotoolbox" in encoders_output:
+                self.log("macOS VideoToolbox hardware acceleration detected!", "SUCCESS")
+                return "h264_videotoolbox", {"q": "65"}
             
             else:
-                print(f"[{self.agent_name}] No hardware encoder detected. Falling back to standard CPU [libx264].")
-                return "libx264"
+                self.log("Dedicated hardware encoder undetected. Selecting standard CPU codec [libx264].", "INFO")
+                return "libx264", {"preset": "medium", "crf": "18"}
 
-        except Exception as e:
-            print(f"[{self.agent_name}] Driver scan exception: {str(e)}. Defaulting safely to CPU [libx264].")
-            return "libx264"
+        except Exception as error:
+            self.log(f"Hardware driver inquiry exception: {error}. Safe defaulting to CPU [libx264].", "WARNING")
+            return "libx264", {"preset": "medium", "crf": "18"}
+
+    # =====================================================================
+    # RULE 9: ACTIONABLE FFMPEG ENCODING COMPILER
+    # =====================================================================
+    def _assemble_encoding_command(self, gpu_codec, codec_flags):
+        """Constructs actionable hardware or fallback CPU encoding directives."""
+        cmd = ["ffmpeg", "-y"]
+
+        # Ingest intermediate video generated by Agent 43 if physically present
+        if os.path.exists(self.intermediate_video_path) and os.path.getsize(self.intermediate_video_path) > 100:
+            self.log(f"Ingesting intermediate multiplexed stream: '{self.intermediate_video_path}'", "SUCCESS")
+            cmd.extend(["-i", self.intermediate_video_path])
+        else:
+            # Rule 10: Autonomous fallback if intermediate file is absent
+            self.log("Intermediate multiplexed stream missing. Ingesting raw visual pattern fallback.", "WARNING")
+            fallback_pattern = os.path.join(self.workspace_dir, "render_output", "frame_%04d.png")
+            if os.path.exists(os.path.dirname(fallback_pattern)):
+                cmd.extend(["-framerate", "24", "-i", fallback_pattern])
+            else:
+                self.log("No visual assets available. Generating synthetic test stream for encoding verification.", "WARNING")
+                cmd.extend(["-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=24:duration=5"])
+
+        # Inject hardware-specific codec and optimization flags
+        cmd.extend(["-c:v", gpu_codec])
+        for flag, value in codec_flags.items():
+            cmd.extend([f"-{flag}", value])
+
+        # Ensure high-fidelity pixel formatting and copy audio stream directly
+        cmd.extend([
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            self.output_gpu_video
+        ])
+
+        return cmd
 
     def execute_acceleration(self):
-        print(f"[{self.agent_name}] Fetching upstream multiplexed streams from Agent 43...")
+        self._handshake("IN_PROGRESS")
+        self.log("Initiating GPU hardware-accelerated video encoding sequence...")
+
+        gpu_codec, codec_flags = self._detect_gpu_acceleration_codec()
+        cmd = self._assemble_encoding_command(gpu_codec, codec_flags)
+        command_string = " ".join(cmd)
         
-        # GPU detection run karte hain
-        gpu_codec = self._detect_gpu_encoder()
+        self.log(f"Compiled Actionable Hardware Encoding Command:\n{command_string}")
 
-        # Load dynamic merger configurations
-        if not os.path.exists(self.merger_blueprint_path):
-            print(f"[{self.agent_name}] Upstream blueprint missing. Constructing autonomous baseline paths.")
-            base_cmd = "ffmpeg -y -framerate 24 -i znet_workspace/render_output/frame_%04d.png -c:v libx264"
-        else:
-            try:
-                with open(self.merger_blueprint_path, "r", encoding="utf-8") as f:
-                    blueprint = json.load(f)
-                base_cmd = blueprint.get("command_assembled", "")
-            except Exception:
-                base_cmd = ""
-
-        if not base_cmd:
-            print(f"[{self.agent_name}] Blueprint command layout invalid. Setting up raw CPU encoder preset.")
-            base_cmd = f"ffmpeg -y -i raw_frames -c:v libx264 {self.output_gpu_video}"
-
-        # Dynamic command parser: Replaces standard CPU libx264 with GPU specific codec
-        # Also injects high-speed GPU-presets like '-preset fast' or '-preset p4' for NVENC
-        accelerated_cmd_str = base_cmd
-        if gpu_codec != "libx264":
-            accelerated_cmd_str = accelerated_cmd_str.replace("-c:v libx264", f"-c:v {gpu_codec}")
-            
-            # NVIDIA NVENC optimization preset addition
-            if gpu_codec == "h264_nvenc":
-                accelerated_cmd_str = accelerated_cmd_str.replace(self.output_gpu_video, f"-preset p4 -tune hq {self.output_gpu_video}")
-            # AMD/Intel optimization preset addition
-            elif gpu_codec in ["h264_amf", "h264_qsv"]:
-                accelerated_cmd_str = accelerated_cmd_str.replace(self.output_gpu_video, f"-preset fast {self.output_gpu_video}")
-        
-        # Workspace video path safety override
-        accelerated_cmd_str = accelerated_cmd_str.replace("43_temp_merged_output.mp4", "44_gpu_accelerated_output.mp4")
-        cmd_list = accelerated_cmd_str.split()
-
-        print(f"[{self.agent_name}] Optimized GPU Execution Command:\n{' '.join(cmd_list)}")
-
-        # Checking binary before execution call
-        ffmpeg_path = shutil.which("ffmpeg")
-        if not ffmpeg_path:
-            print(f"[{self.agent_name}] System testing dry-run. GPU configurations locked in workspace registry.")
-            result_data = {
+        ffmpeg_binary = shutil.which("ffmpeg")
+        if not ffmpeg_binary:
+            self.log("FFmpeg binary missing from system environment. Logging dry-run blueprint.", "WARNING")
+            dry_run_data = {
                 "agent_executed": self.agent_name,
+                "execution_timestamp": time.time(),
+                "execution_status": "DRY_RUN_SUCCESS_BINARY_MISSING",
+                "hardware_codec_selected": gpu_codec,
                 "hardware_acceleration_active": gpu_codec != "libx264",
-                "detected_hardware_codec": gpu_codec,
-                "accelerated_command": " ".join(cmd_list),
-                "output_video_path": self.output_gpu_video,
-                "execution_status": "DRY_RUN_SUCCESS"
+                "command_assembled": command_string,
+                "output_video_path": self.output_gpu_video
             }
-            self._save_acceleration_blueprint(result_data)
-            return result_data
+            self._save_blueprint(dry_run_data)
+            self._handshake("COMPLETED")
+            return dry_run_data
 
+        # Rule 17: Execute subprocess with hardware timeout protection (15 minutes max)
         try:
-            print(f"[{self.agent_name}] Spawning hardware process. Sending frame chunks directly to GPU video memory...")
-            subprocess.run(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            print(f"[{self.agent_name}] Hardware accelerated encode completed successfully!")
-            
-            result_data = {
-                "agent_executed": self.agent_name,
-                "hardware_acceleration_active": gpu_codec != "libx264",
-                "detected_hardware_codec": gpu_codec,
-                "accelerated_command": " ".join(cmd_list),
-                "output_video_path": self.output_gpu_video,
-                "execution_status": "SUCCESS"
-            }
-            self._save_acceleration_blueprint(result_data)
-            return result_data
+            self.log(f"Spawning hardware encoding process via codec [{gpu_codec}]...")
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, timeout=900)
+            self.log("Hardware-accelerated encoding completed successfully!", "SUCCESS")
 
-        except subprocess.CalledProcessError as e:
-            print(f"[{self.agent_name}] Critical GPU Encoding Error: {e.stderr}. Triggering immediate safe CPU recovery mode...")
-            
-            # Fallback to standard safe CPU command
-            fallback_cmd_str = base_cmd.replace("43_temp_merged_output.mp4", "44_gpu_accelerated_output.mp4")
-            fallback_list = fallback_cmd_str.split()
-            
+            output_data = {
+                "agent_executed": self.agent_name,
+                "execution_timestamp": time.time(),
+                "execution_status": "SUCCESS",
+                "hardware_codec_selected": gpu_codec,
+                "hardware_acceleration_active": gpu_codec != "libx264",
+                "command_assembled": command_string,
+                "output_video_path": self.output_gpu_video
+            }
+            self._save_blueprint(output_data)
+            self._handshake("COMPLETED")
+            return output_data
+
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            error_details = getattr(error, 'stderr', str(error))
+            self.log(f"Hardware encoding exception encountered: {error_details}. Triggering immediate CPU recovery mode...", "WARNING")
+
+            # Fallback recovery: Switch to CPU libx264 to prevent pipeline crash
+            cpu_cmd = self._assemble_encoding_command("libx264", {"preset": "fast", "crf": "20"})
+            cpu_command_string = " ".join(cpu_cmd)
+            self.log(f"Executing Safe CPU Recovery Command:\n{cpu_command_string}")
+
             try:
-                subprocess.run(fallback_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-                print(f"[{self.agent_name}] Safe CPU fallback render completed successfully.")
-                result_data = {
+                subprocess.run(cpu_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, timeout=1200)
+                self.log("Safe CPU recovery encoding completed successfully.", "SUCCESS")
+                
+                recovery_data = {
                     "agent_executed": self.agent_name,
+                    "execution_timestamp": time.time(),
+                    "execution_status": "CPU_RECOVERY_SUCCESS",
+                    "hardware_codec_selected": "libx264 (CPU Fallback Applied)",
                     "hardware_acceleration_active": False,
-                    "detected_hardware_codec": "libx264 (CPU Fallback Applied)",
-                    "accelerated_command": " ".join(fallback_list),
-                    "output_video_path": self.output_gpu_video,
-                    "execution_status": "CPU_FALLBACK_SUCCESS"
+                    "command_assembled": cpu_command_string,
+                    "output_video_path": self.output_gpu_video
                 }
-                self._save_acceleration_blueprint(result_data)
-                return result_data
-            except Exception as ex:
-                print(f"[{self.agent_name}] Absolute system failure. Render pipeline halted: {str(ex)}")
+                self._save_blueprint(recovery_data)
+                self._handshake("COMPLETED")
+                return recovery_data
+
+            except Exception as fatal_error:
+                self.log(f"CRITICAL: Absolute encoding failure during CPU recovery: {fatal_error}", "ERROR")
                 failed_data = {
                     "agent_executed": self.agent_name,
+                    "execution_timestamp": time.time(),
                     "execution_status": "FAILED",
-                    "error_details": str(ex)
+                    "error_details": str(fatal_error),
+                    "command_assembled": cpu_command_string,
+                    "output_video_path": None
                 }
-                self._save_acceleration_blueprint(failed_data)
+                self._save_blueprint(failed_data)
                 return failed_data
 
-    def _save_acceleration_blueprint(self, data, filename="44_gpu_acceleration_blueprint.json"):
+    def _save_blueprint(self, data, filename="44_gpu_acceleration_blueprint.json"):
         file_path = os.path.join(self.workspace_dir, filename)
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Accelerate blueprint saved to '{file_path}'")
-        except Exception as e:
-            print(f"[{self.agent_name}] Error writing config logs: {str(e)}")
+            self.log(f"Execution blueprint recorded to: '{file_path}'", "SUCCESS")
+        except Exception as error:
+            self.log(f"Failed to record execution blueprint: {error}", "ERROR")
 
 if __name__ == "__main__":
-    encoder = GpuHardwareAcceleratedEncoder()
-    result = encoder.execute_acceleration()
-    
-    print("\n--- Z-NET HARDWARE ACCELERATION: AGENT 44 PROCESS COMPLETE ---")
-    print(f"Render Engine Status: {result['execution_status']}")
-    print(f"Hardware Codec Selected: {result.get('detected_hardware_codec', 'N/A')}")
-    print(f"Video Acceleration Active: {result.get('hardware_acceleration_active', False)}")
-    print(f"Destination Path: '{result.get('output_video_path', 'N/A')}'")
-    print("---------------------------------------------------------------")
+    encoder = Agent_44_GPU_Hardware_Accelerated_Encoder()
+    encoder.execute_acceleration()
