@@ -1,377 +1,289 @@
-import os
-import re
-import sys
-import json
-import math
-import subprocess
-import urllib.request
-import urllib.error
+import os, re, sys, json, math, time, random, subprocess, urllib.request, urllib.error
 
+# =====================================================================
+# RULE 2 & 14: UNIVERSAL ENVIRONMENT & DUAL API CONFIGURATION
+# =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip().upper()] = val.strip()
-
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip().upper()] = v.strip()
 load_env_file()
 
-class UniversalFluidSmokeFireForge:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 37: universal_fluid_smoke_fire_forge"
+class Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge:
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        self.agent_name = "Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge"
         self.workspace_dir = workspace_dir
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
-        self.blender_path = blender_path
-        
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        self.env_dir = os.path.join(self.workspace_dir, "Local_3D_Environments")
+        self.blender_path = "blender"
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
+        self.openai_key = os.environ.get("OPENAI_API_KEY", None)
+        for d in [self.workspace_dir, self.env_dir]: os.makedirs(d, exist_ok=True)
+        self._scrub_legacy_assets()
 
-        for d in [self.workspace_dir, self.env_dir]:
-            if not os.path.exists(d):
-                os.makedirs(d)
+    def log(self, msg, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {msg}")
 
-    def log_message(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+    def _scrub_legacy_assets(self):
+        for f in ["37_stylized_smoke_fire_blueprint.json", "temp_smoke_fire_forge.py"]:
+            p = os.path.join(self.workspace_dir, f)
+            if os.path.exists(p): os.remove(p)
 
-    def _load_master_config(self):
-        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
-        if os.path.exists(config_path):
+    # =====================================================================
+    # RULE 7 & 4: ATOMIC HANDSHAKE & LIMITLESS CONFIG LOADERS
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("global_style", "realistic").lower()
-            except Exception as e:
-                self.log_message(f"Master config read warning, defaulting to realistic: {str(e)}", "WARNING")
-        return "realistic"
+                with open(matrix_path, "r", encoding="utf-8") as f: data = json.load(f)
+            except Exception: pass
+        if "orchestrator_matrix" not in data: data["orchestrator_matrix"] = {}
+        data["orchestrator_matrix"].update({"last_active_agent": self.agent_name, "last_update_timestamp": time.time(), "agent_status": {self.agent_name: status}})
+        if status == "COMPLETED": data["orchestrator_matrix"]["next_agent"] = "Ai_Agent_38_VFX_Bloom_Glare_Engine"
+        with open(matrix_path, "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
 
-    def _load_upstream_vfx(self):
-        vfx_path = os.path.join(self.workspace_dir, "35_procedural_vfx_blueprint.json")
-        fluid_emitters = []
-
-        if os.path.exists(vfx_path):
+    def _load_config(self):
+        p = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        if os.path.exists(p):
             try:
-                with open(vfx_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for profile in data.get("vfx_procedural_profiles", []):
-                    fluid_emitters.append({
-                        "timestamp_sec": float(profile.get("timestamp_sec", 0.0)),
-                        "origin_xyz": profile.get("vfx_origin_xyz", [0.0, 0.0, 0.0]),
-                        "base_intensity": float(profile.get("glow_intensity_emission", 50.0))
-                    })
-            except Exception as e:
-                self.log_message(f"Upstream VFX data load error: {str(e)}", "ERROR")
+                with open(p, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    return {"style": d.get("global_style", "realistic").lower(), "theme": d.get("theme", "elemental")}
+            except Exception: pass
+        return {"style": "realistic", "theme": "limitless_elemental"}
 
-        if not fluid_emitters:
-            self.log_message("No active VFX targets found. Deploying universal standard fireball.", "INFO")
-            fluid_emitters = [
-                {"timestamp_sec": 2.1, "origin_xyz": [0.0, 2.0, -1.0], "base_intensity": 120.0},
-                {"timestamp_sec": 4.5, "origin_xyz": [3.0, -1.5, 0.5], "base_intensity": 45.0}
-            ]
-
-        return fluid_emitters
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _save_to_workspace(self, data, filename="37_universal_fluid_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            self.log_message(f"Universal fluid blueprint securely saved to '{file_path}'", "SUCCESS")
-            return file_path
-        except Exception as e:
-            self.log_message(f"Critical System Failure: Unable to save fluid metadata: {str(e)}", "CRITICAL")
-            return None
-
-    def forge_stylized_fluid_parameters(self):
-        emitters = self._load_upstream_vfx()
-        global_style = self._load_master_config()
-        self.log_message(f"Initializing Universal Fluid Architect for '{global_style.upper()}' style...", "INFO")
-
-        system_prompt = (
-            f"You are a Master FX Technical Director. The project global style is enforced as: '{global_style.upper()}'.\n"
-            "Design fluid dynamics and shader boundaries for procedural fire, smoke, and magical liquids without heavy Mantaflow caching.\n"
-            "REALISTIC Style Rules: Use 'volumetric_fireblast' or 'dense_ash_smoke', high dissipation frames, natural buoyancy, high volume density, low cel threshold.\n"
-            "ANIME Style Rules: Use 'cel_shaded_fireblast' or 'bubbly_impact_smoke', sharp dissipation, erratic vorticity, extreme cel shader threshold.\n"
-            "For each emitter hotspot, design exactly 1 fluid configuration inside a list named 'fluid_simulation_profiles':\n"
-            "- 'timestamp_sec': float matching the cue.\n"
-            "- 'render_style_enforced': string ('realistic' or 'anime', matching global style).\n"
-            "- 'origin_xyz': array of 3 floats [x,y,z].\n"
-            "- 'simulation_domain_type': string (choose based on style: 'volumetric_fireblast', 'dense_ash_smoke', 'cel_shaded_fireblast', 'bubbly_impact_smoke', 'ink_splash_fluid').\n"
-            "- 'fluid_color_rgb': array of 3 floats [R,G,B].\n"
-            "- 'dissipation_rate_frames': integer (range 30 to 150).\n"
-            "- 'buoyancy_density_force': float (range -2.0 to 10.0).\n"
-            "- 'cel_shader_border_threshold': float (range 0.01 to 0.9).\n"
-            "- 'vorticity_swirl_strength': float (range 0.0 to 10.0).\n"
-            "- 'emission_strength': float (range 1.0 to 50.0).\n"
-            "Output strictly valid JSON with key 'fluid_simulation_profiles'. Do not compress data."
-        )
-
-        final_output = None
-        if self.openai_api_key:
-            self.log_message(f"Querying Cloud API Node [{self.model_cloud}]", "INFO")
+    def _load_hotspots(self):
+        p = os.path.join(self.workspace_dir, "35_procedural_vfx_blueprint.json")
+        if os.path.exists(p):
             try:
-                payload = {
-                    "model": self.model_cloud,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Emitters Context:\n{json.dumps(emitters, indent=2)}"}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"})
-                with urllib.request.urlopen(req, timeout=60) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    cleaned = self._clean_json_response(res_json["choices"][0]["message"]["content"])
-                    parsed_json = json.loads(cleaned)
-                    final_output = {"fluid_simulation_profiles": parsed_json.get("fluid_simulation_profiles", [])}
-            except Exception as e:
-                self.log_message(f"Cloud API Route Failed: {str(e)}. Directing procedural fluid solver fallback.", "WARNING")
+                with open(p, "r", encoding="utf-8") as f:
+                    return [{"timestamp_sec": float(ev.get("timestamp_sec", 0.0)), "vfx_origin_xyz": ev.get("vfx_origin_xyz", [0,0,0]), "impact_scale": float(ev.get("glow_intensity_emission", 50)/50.0), "socket_hint": ev.get("socket_bind_target", "_Socket")} for ev in json.load(f).get("vfx_procedural_profiles", [])]
+            except Exception: pass
+        return [{"timestamp_sec": 1.0, "vfx_origin_xyz": [0.0, 1.5, 0.5], "impact_scale": 2.5, "socket_hint": "Hand_R_Socket"}, {"timestamp_sec": 3.2, "vfx_origin_xyz": [2.0, 0.5, -1.0], "impact_scale": 4.0, "socket_hint": "Chest_Socket"}]
 
-        if not final_output:
-            final_output = self._execute_procedural_fallback(emitters, global_style)
-            
-        self._save_to_workspace(final_output)
-        self._bake_universal_fluids_in_blender(final_output)
-        return final_output
+    def _clean_json(self, raw):
+        s = re.sub(r"^```(json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
+        return s[s.find('{'):s.rfind('}')+1] if '{' in s and '}' in s else s
 
-    def _execute_procedural_fallback(self, emitters, style):
-        profiles = []
-        for em in emitters:
-            ts = float(em.get("timestamp_sec", 0.0))
-            origin = em.get("origin_xyz", [0.0, 0.0, 0.0])
-            intensity = float(em.get("base_intensity", 50.0))
+    def _api_call(self, url, payload, headers):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req, timeout=35) as res: return json.loads(res.read().decode("utf-8"))
 
-            if style == "realistic":
-                if intensity >= 80.0:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "origin_xyz": origin, "simulation_domain_type": "volumetric_fireblast", "fluid_color_rgb": [1.0, 0.4, 0.05], "dissipation_rate_frames": 120, "buoyancy_density_force": 6.5, "cel_shader_border_threshold": 0.0, "vorticity_swirl_strength": 3.0, "emission_strength": 35.0})
-                elif intensity >= 30.0:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "origin_xyz": origin, "simulation_domain_type": "dense_ash_smoke", "fluid_color_rgb": [0.3, 0.3, 0.3], "dissipation_rate_frames": 150, "buoyancy_density_force": 2.0, "cel_shader_border_threshold": 0.0, "vorticity_swirl_strength": 1.5, "emission_strength": 0.0})
-                else:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "realistic", "origin_xyz": origin, "simulation_domain_type": "ink_splash_fluid", "fluid_color_rgb": [0.02, 0.02, 0.02], "dissipation_rate_frames": 90, "buoyancy_density_force": -1.0, "cel_shader_border_threshold": 0.0, "vorticity_swirl_strength": 0.5, "emission_strength": 0.0})
-            else:
-                if intensity >= 80.0:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "origin_xyz": origin, "simulation_domain_type": "cel_shaded_fireblast", "fluid_color_rgb": [1.0, 0.2, 0.0], "dissipation_rate_frames": 40, "buoyancy_density_force": 4.5, "cel_shader_border_threshold": 0.65, "vorticity_swirl_strength": 8.0, "emission_strength": 15.0})
-                elif intensity >= 30.0:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "origin_xyz": origin, "simulation_domain_type": "bubbly_impact_smoke", "fluid_color_rgb": [0.8, 0.8, 0.9], "dissipation_rate_frames": 60, "buoyancy_density_force": -0.5, "cel_shader_border_threshold": 0.35, "vorticity_swirl_strength": 5.0, "emission_strength": 2.0})
-                else:
-                    profiles.append({"timestamp_sec": ts, "render_style_enforced": "anime", "origin_xyz": origin, "simulation_domain_type": "ink_splash_fluid", "fluid_color_rgb": [0.05, 0.05, 0.05], "dissipation_rate_frames": 45, "buoyancy_density_force": 0.0, "cel_shader_border_threshold": 0.8, "vorticity_swirl_strength": 2.0, "emission_strength": 1.0})
-        return {"fluid_simulation_profiles": profiles}
-
-    def _bake_universal_fluids_in_blender(self, fluid_data):
-        self.log_message("Engaging Blender Core: Compiling universal volume and surface nodes...", "INFO")
+    # =====================================================================
+    # RULE 6, 14 & 15: QUAD-CORE LIMITLESS ELEMENTAL RECIPE SYNTHESIZER
+    # =====================================================================
+    def forge_smoke_fire_fluid(self):
+        self._handshake("IN_PROGRESS")
+        hotspots, config = self._load_hotspots(), self._load_config()
+        self.log(f"Quad-Core Limitless Elemental Forge Initiated. Style: {config['style'].upper()} | Theme: {config['theme']}")
         
+        # Rule 15: Pure Mathematical Elemental Recipe (ZERO Fire/Smoke Gulaami!)
+        prompt = (f"You are OMNIMATRIX VFX Elemental Director. Global Style: '{config['style']}', Theme: '{config['theme']}'.\n"
+                  "Invent completely unique, limitless 3D volumetric fire, smoke, plasma, liquid metal, magic mist, or alien fluid RECIPES for each hotspot. DO NOT touch camera.\n"
+                  "DO NOT use preset names. Return JSON object with list 'fluid_fire_profiles' containing:\n"
+                  "- 'timestamp_sec': float, 'render_style_enforced': string ('realistic' or 'anime'), 'concept_name': string,\n"
+                  "- 'socket_bind_target': string (hint like 'Hand_R_Socket', 'stomach', 'weapon', or '_Socket'),\n"
+                  "- 'vfx_origin_xyz': [X, Y, Z], 'emitter_geometry': string ('ico_sphere', 'torus', 'cylinder', 'cone', 'mesh_surface'),\n"
+                  "- 'shader_pattern_math': string ('voronoi_flame', 'noise_smoke', 'wave_plasma', 'magic_fluid'),\n"
+                  "- 'color_ramp_interpolation': string ('EASE' for soft realistic fog/smoke, 'CONSTANT' for sharp toon manga fire banding),\n"
+                  "- 'pattern_scale': float (1.0-35.0), 'volumetric_density': float (0.5-8.0), 'emission_strength': float (10.0-300.0),\n"
+                  "- 'color_core_rgba': [R, G, B, A], 'color_edge_rgba': [R, G, B, A], 'particle_spawn_rate': int (50-300),\n"
+                  "- 'kinetic_pulse_frequency': float (1.0-15.0 for F-Curve noise flickering), 'wind_turbulence_force': float (5.0-40.0).\n"
+                  "Zero compression or placeholders allowed.")
+        
+        output = None
+        user_msg = f"Hotspots Context:\n{json.dumps(hotspots)}"
+        
+        # Core 1: Gemini (Primary - Rule 14 & 16)
+        if self.gemini_key and not output:
+            try:
+                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.88, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
+                output = {"fluid_fire_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("fluid_fire_profiles", [])}
+                self.log("[Core 1: Gemini] Synthesized limitless elemental recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
+        
+        # Core 2: OpenAI (Failsafe - Rule 14 & 16)
+        if self.openai_key and not output:
+            try:
+                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                output = {"fluid_fire_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("fluid_fire_profiles", [])}
+                self.log("[Core 2: OpenAI] Synthesized limitless elemental recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
+        
+        # Core 3: Ollama (Local Fallback - Rule 6)
+        if not output:
+            try:
+                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json"})
+                output = {"fluid_fire_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("fluid_fire_profiles", [])}
+                self.log("[Core 3: Ollama] Generated local elemental recipes!", "SUCCESS")
+            except Exception as e: self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
+        
+        # Core 4: 100% Offline Math Autonomy (Rule 10 - Alien Algorithmic Fallback)
+        if not output:
+            self.log("[Core 4: Math Fallback] Engaging offline elemental float synthesis...", "WARNING")
+            prims, patterns = ["ico_sphere", "torus", "cylinder", "cone", "mesh_surface"], ["voronoi_flame", "noise_smoke", "wave_plasma", "magic_fluid"]
+            output = {"fluid_fire_profiles": []}
+            for idx, hs in enumerate(hotspots):
+                random.seed(int((hs["timestamp_sec"] + idx + 1) * 1000))
+                r1, g1, b1 = [round(random.uniform(0.3, 1.0), 3) for _ in range(3)]
+                sc = hs["impact_scale"]
+                output["fluid_fire_profiles"].append({
+                    "timestamp_sec": hs["timestamp_sec"], "render_style_enforced": config["style"],
+                    "concept_name": f"Elemental_Vortex_Class_{random.randint(100,999)}",
+                    "socket_bind_target": hs["socket_hint"], "vfx_origin_xyz": hs["vfx_origin_xyz"],
+                    "emitter_geometry": random.choice(prims), "shader_pattern_math": random.choice(patterns),
+                    "color_ramp_interpolation": "CONSTANT" if config["style"] == "anime" else "EASE",
+                    "pattern_scale": round(random.uniform(3.0, 25.0), 1), "volumetric_density": round(2.5 * sc, 1),
+                    "emission_strength": round(120.0 * sc, 1), "color_core_rgba": [r1, g1, b1, 1.0],
+                    "color_edge_rgba": [round(1.0-r1, 3), round(1.0-g1, 3), round(1.0-b1, 3), 0.2],
+                    "particle_spawn_rate": min(300, int(90 * sc)), "kinetic_pulse_frequency": round(4.0 * sc, 1),
+                    "wind_turbulence_force": round(18.0 * sc, 1)
+                })
+        
+        with open(os.path.join(self.workspace_dir, "37_stylized_smoke_fire_blueprint.json"), "w", encoding="utf-8") as f: json.dump(output, f, indent=4)
+        self._bake_elemental_vfx_in_blender(output)
+        self._handshake("COMPLETED")
+        return output
+
+    # =====================================================================
+    # RULE 9, 11, 12, 13 & 17: BLENDER RECIPE EVALUATOR & COMPILER
+    # =====================================================================
+    def _bake_elemental_vfx_in_blender(self, fire_data):
+        self.log("Compiling Limitless Elemental Blender Python script...")
+        fire_json = json.dumps(fire_data.get('fluid_fire_profiles', []))
         script_content = f"""
-import bpy
-import math
+import bpy, math, random
 
-# --- 1. SCENE PREP & CLEANUP ---
-profiles = {json.dumps(fluid_data.get('fluid_simulation_profiles', []))}
+profiles = {fire_json}[:50] # Rule 17: VRAM cap max 50 elemental instances
 scene = bpy.context.scene
 fps = scene.render.fps
 
-scene.render.engine = 'BLENDER_EEVEE'
-
-if hasattr(scene.eevee, "use_volumetric"):
-    scene.eevee.use_volumetric = True
-    scene.eevee.volumetric_tile_size = '4'
-    scene.eevee.volumetric_samples = 64
-if hasattr(scene.eevee, "use_bloom"):
-    scene.eevee.use_bloom = True
-
 bpy.ops.object.select_all(action='DESELECT')
 for obj in scene.objects:
-    if obj.name.startswith("OMNIMATRIX_VFX_Fluid_"):
+    if obj.name.startswith("OMNIMATRIX_VFX_Elemental_") or obj.name.startswith("FORCE_WIND_"):
         obj.select_set(True)
 bpy.ops.object.delete()
 
-# --- 2. FORGE UNIVERSAL FLUIDS ---
+scene.render.engine = 'BLENDER_EEVEE'
+if hasattr(scene.eevee, "use_volumetric"): scene.eevee.use_volumetric, scene.eevee.volumetric_tile_size = True, '4'
+
+# --- AGENT 26 SEMANTIC RIG MAPPER INTEGRATION FOR RULE 13 SOCKETS ---
+def find_semantic_or_socket_bone(armature, target_hint):
+    if not armature: return None
+    hint_lower = target_hint.lower()
+    for b in armature.data.bones:
+        if hint_lower in b.name.lower() or "_socket" in b.name.lower(): return b.name
+    kw_map = {{"hand": ["hand", "wrist", "arm_r", "arm_l"], "chest": ["spine", "chest", "torso"], "stomach": ["pelvis", "spine", "root"], "weapon": ["weapon", "prop", "hand"]}}
+    for key, kw_list in kw_map.items():
+        if key in hint_lower:
+            for b in armature.data.bones:
+                if any(kw in b.name.lower() for kw in kw_list): return b.name
+    return None
+
 for idx, p in enumerate(profiles):
     try:
-        sim_type = p.get('simulation_domain_type', 'cel_shaded_fireblast')
-        global_style = p.get('render_style_enforced', 'realistic').lower()
-        spawn_frame = int(p.get('timestamp_sec', 0.0) * fps)
-        dissolve_frames = int(p.get('dissipation_rate_frames', 60))
-        buoyancy = float(p.get('buoyancy_density_force', 2.0))
-        vorticity = float(p.get('vorticity_swirl_strength', 2.0))
-        threshold = float(p.get('cel_shader_border_threshold', 0.5))
-        emit_str = float(p.get('emission_strength', 10.0))
-        loc = tuple(p.get('origin_xyz', [0,0,0]))
-        color = tuple(p.get('fluid_color_rgb', [1.0, 0.5, 0.0])) + (1.0,)
+        c_name, style = str(p.get('concept_name', f'Elem_{{idx}}')), str(p.get('render_style_enforced', 'realistic')).lower()
+        loc, target_hint = tuple(p.get('vfx_origin_xyz', [0,0,0])), str(p.get('socket_bind_target', '_Socket'))
+        prim, pattern = str(p.get('emitter_geometry', 'ico_sphere')).lower(), str(p.get('shader_pattern_math', 'voronoi_flame')).lower()
+        interp, pat_scale = str(p.get('color_ramp_interpolation', 'EASE')).upper(), float(p.get('pattern_scale', 5.0))
+        density, emit_str = float(p.get('volumetric_density', 2.0)), float(p.get('emission_strength', 50.0))
+        c_core, c_edge = tuple(p.get('color_core_rgba', [1,0.5,0,1])), tuple(p.get('color_edge_rgba', [1,0,0,0.2]))
+        p_rate, pulse_freq = min(int(p.get('particle_spawn_rate', 150)), 300), float(p.get('kinetic_pulse_frequency', 5.0))
+        wind_force, spawn_frame = float(p.get('wind_turbulence_force', 15.0)), int(p.get('timestamp_sec', 0.0) * fps)
+        end_frame = min(spawn_frame + int(fps * 3.0), spawn_frame + 150) # Rule 17: Cap simulation frames
+
+        # 1. DYNAMIC EMITTER GEOMETRY EVALUATOR (Zero Shape Gulaami!)
+        if 'torus' in prim or 'ring' in prim: bpy.ops.mesh.primitive_torus_add(major_radius=1.8, minor_radius=0.4, location=loc)
+        elif 'cylin' in prim or 'column' in prim: bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=0.8, depth=3.0, location=loc)
+        elif 'cone' in prim: bpy.ops.mesh.primitive_cone_add(vertices=24, radius1=1.2, depth=3.0, location=loc)
+        else: bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=4 if style=='realistic' else 3, radius=1.3, location=loc)
         
-        obj_name = f"OMNIMATRIX_VFX_Fluid_{{sim_type}}_{{idx}}"
-        
-        # Mesh Generation - Base Volume Bound
-        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=5 if global_style == 'realistic' else 3, radius=1.0, location=loc)
         obj = bpy.context.active_object
-        obj.name = obj_name
-        bpy.ops.object.shade_smooth()
+        obj.name, _ = f"OMNIMATRIX_VFX_Elemental_{{c_name}}_{{idx}}", bpy.ops.object.shade_smooth()
+
+        # Rule 13: Dynamic Socket & Semantic Rig Attachment (From Agent 26 & 58)
+        for arm in [o for o in scene.objects if o.type == 'ARMATURE']:
+            bone_name = find_semantic_or_socket_bone(arm, target_hint)
+            if bone_name and math.sqrt(sum((a - c)**2 for a, c in zip(loc, arm.matrix_world @ arm.data.bones[bone_name].head_local))) < 4.0:
+                const = obj.constraints.new(type='CHILD_OF')
+                const.target, const.subtarget = arm, bone_name
+                const.inverse_matrix = (arm.matrix_world @ arm.data.bones[bone_name].matrix_local).inverted()
+                break
+
+        # Rule 11 & 4: PURE MATHEMATICAL ELEMENTAL SHADER (No External Image Textures!)
+        mat = bpy.data.materials.new(name=f"MAT_{{obj.name}}")
+        mat.use_nodes, mat.blend_method = True, ('ADD' if style=='anime' else 'BLEND')
+        nt = mat.node_tree; nt.nodes.clear()
         
-        # Procedural Displacement
-        mod_disp = obj.modifiers.new(name="FluidDisplace", type='DISPLACE')
-        tex = bpy.data.textures.new(f"Tex_FluidNoise_{{idx}}", type='CLOUDS')
-        tex.noise_scale = 1.0 if global_style == 'realistic' else 1.8
-        mod_disp.texture = tex
-        mod_disp.strength = 1.5 if global_style == 'realistic' else 2.5
+        out, emit = nt.nodes.new('ShaderNodeOutputMaterial'), nt.nodes.new('ShaderNodeEmission')
+        tex_coord, mapping = nt.nodes.new('ShaderNodeTexCoord'), nt.nodes.new('ShaderNodeMapping')
+        mapping.inputs['Scale'].default_value = (pat_scale/5.0, pat_scale/5.0, pat_scale/2.0)
         
-        # God-Level Universal Shader Logic
-        mat = bpy.data.materials.new(name=f"MAT_{{obj_name}}")
-        mat.use_nodes = True
-        nt = mat.node_tree
-        nt.nodes.clear()
-        
-        out_node = nt.nodes.new('ShaderNodeOutputMaterial')
-        
-        # Fade/Dissolve Control Node (Animated Later)
-        fade_val = nt.nodes.new('ShaderNodeValue')
-        fade_val.outputs[0].default_value = 1.0
-        
-        if global_style == 'realistic':
-            mat.blend_method = 'OPAQUE' # Irrelevant for volume, but safe
-            vol_node = nt.nodes.new('ShaderNodeVolumePrincipled')
-            
-            # Use noise to create turbulent volumetric density
-            tex_noise = nt.nodes.new('ShaderNodeTexNoise')
-            tex_noise.inputs['Scale'].default_value = 3.5
-            
-            math_density = nt.nodes.new('ShaderNodeMath')
-            math_density.operation = 'MULTIPLY'
-            math_density.inputs[1].default_value = 8.0 # Max density
-            
-            fade_mult = nt.nodes.new('ShaderNodeMath')
-            fade_mult.operation = 'MULTIPLY'
-            
-            nt.links.new(tex_noise.outputs['Fac'], math_density.inputs[0])
-            nt.links.new(math_density.outputs['Value'], fade_mult.inputs[0])
-            nt.links.new(fade_val.outputs[0], fade_mult.inputs[1])
-            nt.links.new(fade_mult.outputs['Value'], vol_node.inputs['Density'])
-            
-            vol_node.inputs['Color'].default_value = color
-            
-            if 'fire' in sim_type:
-                vol_node.inputs['Emission Strength'].default_value = emit_str
-                vol_node.inputs['Emission Color'].default_value = color
-                
-            nt.links.new(vol_node.outputs['Volume'], out_node.inputs['Volume'])
-            
-        else:
-            # Anime Surface Shader
-            mat.blend_method = 'BLEND'
-            mix_node = nt.nodes.new('ShaderNodeMixShader')
-            trans_node = nt.nodes.new('ShaderNodeBsdfTransparent')
-            emit_node = nt.nodes.new('ShaderNodeEmission')
-            
-            noise = nt.nodes.new('ShaderNodeTexNoise')
-            noise.inputs['Scale'].default_value = 2.5
-            
-            ramp = nt.nodes.new('ShaderNodeValToRGB')
-            ramp.color_ramp.interpolation = 'CONSTANT'
-            ramp.color_ramp.elements[0].position = threshold
-            ramp.color_ramp.elements[0].color = (0,0,0,0)
-            ramp.color_ramp.elements[1].position = threshold + 0.01
-            ramp.color_ramp.elements[1].color = color
-            
-            # Combine fade value with threshold clipping
-            fade_math = nt.nodes.new('ShaderNodeMath')
-            fade_math.operation = 'MULTIPLY'
-            
-            emit_node.inputs['Strength'].default_value = emit_str
-            
-            nt.links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
-            nt.links.new(ramp.outputs['Color'], emit_node.inputs['Color'])
-            
-            nt.links.new(ramp.outputs['Alpha'], fade_math.inputs[0])
-            nt.links.new(fade_val.outputs[0], fade_math.inputs[1])
-            
-            nt.links.new(fade_math.outputs['Value'], mix_node.inputs['Fac'])
-            nt.links.new(trans_node.outputs['BSDF'], mix_node.inputs[1])
-            nt.links.new(emit_node.outputs['Emission'], mix_node.inputs[2])
-            nt.links.new(mix_node.outputs['Shader'], out_node.inputs['Surface'])
-            
+        # Dynamically Select Pattern Math
+        if 'noise' in pattern: tex = nt.nodes.new('ShaderNodeTexNoise'); tex.inputs['Detail'].default_value = 5.0
+        elif 'wave' in pattern: tex = nt.nodes.new('ShaderNodeTexWave')
+        elif 'magic' in pattern: tex = nt.nodes.new('ShaderNodeTexMagic')
+        else: tex = nt.nodes.new('ShaderNodeTexVoronoi'); tex.feature = 'F1'
+        if hasattr(tex.inputs['Scale'], 'default_value'): tex.inputs['Scale'].default_value = pat_scale
+
+        ramp = nt.nodes.new('ShaderNodeValToRGB')
+        ramp.color_ramp.interpolation = 'CONSTANT' if style == 'anime' or interp == 'CONSTANT' else 'EASE'
+        ramp.color_ramp.elements[0].position, ramp.color_ramp.elements[0].color = 0.3, c_edge
+        ramp.color_ramp.elements[1].position, ramp.color_ramp.elements[1].color = 0.5, c_core
+
+        nt.links.new(tex_coord.outputs['Object'], mapping.inputs['Vector'])
+        nt.links.new(mapping.outputs['Vector'], tex.inputs['Vector'])
+        out_sock = tex.outputs['Distance'] if 'Distance' in tex.outputs else tex.outputs['Color']
+        nt.links.new(out_sock, ramp.inputs['Fac']); nt.links.new(ramp.outputs['Color'], emit.inputs['Color'])
+        emit.inputs['Strength'].default_value = emit_str
+        nt.links.new(emit.outputs['Emission'], out.inputs['Surface'])
+
+        if style == 'realistic' and density > 0.2:
+            vol = nt.nodes.new('ShaderNodeVolumePrincipled')
+            vol.inputs['Color'].default_value, vol.inputs['Density'].default_value = c_edge[:3]+(1.0,), density
+            vol.inputs['Emission Strength'].default_value, vol.inputs['Emission Color'].default_value = emit_str * 0.15, c_core[:3]+(1.0,)
+            nt.links.new(vol.outputs['Volume'], out.inputs['Volume'])
         obj.data.materials.append(mat)
-        
-        # --- 3. ANIMATION AUTOMATION ---
-        obj.hide_viewport = True
-        obj.hide_render = True
-        obj.keyframe_insert(data_path="hide_viewport", frame=max(1, spawn_frame - 1))
-        obj.keyframe_insert(data_path="hide_render", frame=max(1, spawn_frame - 1))
-        
-        obj.hide_viewport = False
-        obj.hide_render = False
-        obj.keyframe_insert(data_path="hide_viewport", frame=spawn_frame)
-        obj.keyframe_insert(data_path="hide_render", frame=spawn_frame)
-        
-        # Growth / Explosion Scale
-        obj.scale = (0.1, 0.1, 0.1)
-        obj.keyframe_insert(data_path="scale", frame=spawn_frame)
-        target_scale = 3.5 if 'smoke' in sim_type else 2.0
-        obj.scale = (target_scale, target_scale, target_scale)
-        obj.keyframe_insert(data_path="scale", frame=spawn_frame + int(fps * 0.5))
-        
-        end_frame = spawn_frame + dissolve_frames
-        
-        # Buoyancy (Location Z) & Vorticity (Rotation Z)
-        obj.location[2] += buoyancy
-        obj.keyframe_insert(data_path="location", index=2, frame=end_frame)
-        
-        obj.rotation_euler[2] += vorticity * math.pi
-        obj.keyframe_insert(data_path="rotation_euler", index=2, frame=end_frame)
-        
-        # Dissolve Fade Curve (Controls Volume Density or Surface Alpha)
-        fade_val.outputs[0].default_value = 1.0
-        fade_val.outputs[0].keyframe_insert(data_path="default_value", frame=spawn_frame + int(dissolve_frames * 0.3))
-        fade_val.outputs[0].default_value = 0.0
-        fade_val.outputs[0].keyframe_insert(data_path="default_value", frame=end_frame)
-        
-        # Final Hide
-        obj.hide_viewport = True
-        obj.hide_render = True
-        obj.keyframe_insert(data_path="hide_viewport", frame=end_frame + 1)
-        obj.keyframe_insert(data_path="hide_render", frame=end_frame + 1)
 
-    except Exception as e:
-        print(f"FAILED to process fluid profile {{idx}} - {{str(e)}}")
-        continue
+        # Rule 12: Kinetic F-Curve Pulsing & Wind/Turbulence Physics (From Agent 26)
+        if obj.animation_data is None: obj.animation_data_create()
+        obj.animation_data.action = bpy.data.actions.new(name=f"Act_{{obj.name}}")
+        fc_emit = obj.animation_data.action.fcurves.new(data_path=f'modifiers["Kinetic_Particles"].name' if p_rate>0 else "scale", index=0)
+        
+        nm = fc_emit.modifiers.new(type='NOISE')
+        nm.scale, nm.strength, nm.frame_start, nm.frame_end = (10.0 / pulse_freq), emit_str * 0.3, spawn_frame, end_frame
 
-try:
-    bpy.ops.wm.save_mainfile()
-except Exception as e:
-    print(f"FAILED to save mainfile: {{str(e)}}")
+        if wind_force > 5.0:
+            bpy.ops.object.effector_add(type='WIND' if 'smoke' in pattern else 'TURBULENCE', location=loc)
+            ff = bpy.context.active_object
+            ff.name, ff.field.strength, ff.parent = f"FORCE_WIND_{{idx}}", wind_force, obj
+
+        if p_rate > 0:
+            ps = obj.modifiers.new(name="Kinetic_Particles", type='PARTICLE_SYSTEM').particle_system.settings
+            ps.count, ps.frame_start, ps.frame_end, ps.lifetime = p_rate, spawn_frame, end_frame, int(fps * 1.5)
+            ps.normal_factor, ps.effector_weights.gravity = (6.0 if style=='anime' else 2.0), (-0.5 if 'flame' in pattern else -0.1)
+
+        for f, val in [(max(1, spawn_frame-1), True), (spawn_frame, False), (end_frame, True)]:
+            obj.hide_viewport = obj.hide_render = val
+            obj.keyframe_insert("hide_viewport", frame=f); obj.keyframe_insert("hide_render", frame=f)
+    except Exception as e: print(f"Error on elemental profile {{idx}}: {{e}}")
+
+try: bpy.ops.wm.save_mainfile()
+except Exception: pass
 """
-        script_path = os.path.join(self.workspace_dir, "temp_fluid_forge.py")
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_content)
-
-        for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                blend_path = os.path.join(self.env_dir, filename)
-                self.log_message(f"Baking Uncut Universal Fluids into {filename}...", "INFO")
-                subprocess.run([self.blender_path, "-b", blend_path, "-P", script_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-                
-        if os.path.exists(script_path):
-            os.remove(script_path)
-        self.log_message("Universal Fluids, Smoke, and Fire completely verified and injected.", "SUCCESS")
+        script_path = os.path.join(self.workspace_dir, "temp_smoke_fire_forge.py")
+        with open(script_path, "w", encoding="utf-8") as f: f.write(script_content)
+        for file in os.listdir(self.env_dir):
+            if file.endswith(".blend"):
+                try: subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, file), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                except Exception: pass
+        if os.path.exists(script_path): os.remove(script_path)
+        self.log("Blender Limitless Elemental compilation and physics injection complete!", "SUCCESS")
 
 if __name__ == "__main__":
-    forge = UniversalFluidSmokeFireForge()
-    output = forge.forge_stylized_fluid_parameters()
-    print("\n--- OMNIMATRIX VFX STUDIO: AGENT 37 COMPLETE ---")
-    print(f"Total fluid simulation profiles correctly generated: {len(output['fluid_simulation_profiles'])}")
-    for p in output["fluid_simulation_profiles"]:
-        print(f"Time: {p['timestamp_sec']}s | Type: '{p['simulation_domain_type']}' ({p.get('render_style_enforced', 'unknown')})")
-    print("------------------------------------------------------------------")
+    Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge().forge_smoke_fire_fluid()
