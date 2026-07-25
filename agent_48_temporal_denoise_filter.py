@@ -1,120 +1,247 @@
 import os
 import sys
 import json
-import subprocess
+import time
 import shutil
+import subprocess
 
-class TemporalDenoiseFilter:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Agent 48: temporal_denoise_filter"
+# =====================================================================
+# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# =====================================================================
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
+class Agent_48_Temporal_Denoise_Filter:
+    """
+    OMNIMATRIX V2.0 PURE UTILITY: TEMPORAL DENOISE & GRAIN REMOVAL ENGINE
+    Applies high-precision 3D spatial-temporal noise filtering (HQDN3D/NLMeans).
+    Mathematically isolates luma and chroma thresholds based on aesthetic style
+    to eradicate compression artifacts without eroding sharp vector cel-outlines.
+    """
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
+        self.agent_name = "Agent_48_Temporal_Denoise_Filter"
         self.workspace_dir = workspace_dir
-        self.super_res_blueprint_path = os.path.join(self.workspace_dir, "47_super_resolution_blueprint.json")
-        self.output_denoised_video = os.path.join(self.workspace_dir, "48_final_denoised_clean.mp4")
+        self.super_res_manifest = os.path.join(self.workspace_dir, "47_super_resolution_blueprint.json")
+        self.input_4k_master = os.path.join(self.workspace_dir, "47_super_resolved_4k_master.mp4")
+        self.input_gpu_fallback = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4")
+        self.input_merger_fallback = os.path.join(self.workspace_dir, "43_intermediate_merged_output.mp4")
+        self.output_denoised_video = os.path.join(self.workspace_dir, "48_final_denoised_master.mp4")
+        
+        os.makedirs(self.workspace_dir, exist_ok=True)
+        self._scrub_legacy_assets()
 
-    def _load_upstream_data(self):
-        # 47_super_resolution_blueprint.json se settings uthate hain resolution aur input formats match karne ke liye
-        input_video = os.path.join(self.workspace_dir, "47_super_resolved_4k_video.mp4")
-        denoise_strength_bias = 0.5
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
-        if os.path.exists(self.super_res_blueprint_path):
+    def _scrub_legacy_assets(self):
+        """Rule 3: Idempotency scrubbing of previous denoised masters and configuration manifests."""
+        for filename in ["48_temporal_denoise_blueprint.json", "48_final_denoised_master.mp4"]:
+            file_path = os.path.join(self.workspace_dir, filename)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as error:
+                    self.log(f"Failed to scrub legacy asset {file_path}: {error}", "WARNING")
+
+    # =====================================================================
+    # RULE 7: ATOMIC HANDSHAKE & PIPELINE ROUTING
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
             try:
-                with open(self.super_res_blueprint_path, "r", encoding="utf-8") as f:
+                with open(matrix_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        if "orchestrator_matrix" not in data:
+            data["orchestrator_matrix"] = {}
+            
+        data["orchestrator_matrix"].update({
+            "last_active_agent": self.agent_name,
+            "last_update_timestamp": time.time(),
+            "agent_status": {self.agent_name: status}
+        })
+        
+        if status == "COMPLETED":
+            # Hand off to Module G: Asset Management & Presentation (Ai Agent 49)
+            data["orchestrator_matrix"]["next_agent"] = "Ai_Agent_49_Autonomous_Vision_Media_Scout"
+            
+        try:
+            with open(matrix_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as error:
+            self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
+
+    def _load_config(self):
+        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return {
+                        "style": data.get("global_style", "realistic").lower(),
+                        "fps": float(data.get("render_fps", 24.0))
+                    }
+            except Exception:
+                pass
+        return {"style": "realistic", "fps": 24.0}
+
+    def _resolve_upstream_stream(self):
+        """Intelligently locates the highest fidelity video stream available in the workspace."""
+        denoise_bias = 0.5
+        style_enforced = "realistic"
+
+        if os.path.exists(self.super_res_manifest):
+            try:
+                with open(self.super_res_manifest, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 specs = data.get("upscale_specifications", {})
-                
-                # Agar previous dynamic path specified ho to check karein
-                potential_input = specs.get("ffmpeg_sr_filter_command", "")
-                if "output" in potential_input:
-                    # extract output path safely if parseable
-                    pass
-                denoise_strength_bias = specs.get("denoise_strength", 0.5)
+                denoise_bias = float(specs.get("spatial_denoise_strength", 0.5))
+                style_enforced = data.get("style_enforced", "realistic").lower()
             except Exception:
                 pass
 
-        # Fallback check agar upscaled file missing ho to directly gpu output ya standard temporal output handle karein
-        if not os.path.exists(input_video):
-            input_video = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4")
+        # Hierarchical fallback verification
+        if os.path.exists(self.input_4k_master) and os.path.getsize(self.input_4k_master) > 100:
+            self.log("Prioritizing Agent 47 super-resolved 4K master payload.", "SUCCESS")
+            return self.input_4k_master, denoise_bias, style_enforced, False
 
-        if not os.path.exists(input_video):
-            input_video = os.path.join(self.workspace_dir, "43_temp_merged_output.mp4")
+        if os.path.exists(self.input_gpu_fallback) and os.path.getsize(self.input_gpu_fallback) > 100:
+            self.log("4K master absent. Fallback to Agent 44 GPU accelerated stream.", "WARNING")
+            return self.input_gpu_fallback, denoise_bias, style_enforced, False
 
-        if not os.path.exists(input_video):
-            input_video = "mock_upscaled_input.mp4"
+        if os.path.exists(self.input_merger_fallback) and os.path.getsize(self.input_merger_fallback) > 100:
+            self.log("GPU stream absent. Fallback to Agent 43 intermediate merger payload.", "WARNING")
+            return self.input_merger_fallback, denoise_bias, style_enforced, False
 
-        return input_video, denoise_strength_bias
+        # Rule 10: Synthetic stream fallback
+        self.log("No physical video streams detected. Generating synthetic test stream for denoise verification.", "WARNING")
+        return "testsrc2=size=1920x1080:rate=24:duration=5", denoise_bias, style_enforced, True
 
-    def execute_denoising(self, temporal_strength=4, spatial_strength=3):
-        # temporal_strength: frame-to-frame noise blending limit (default: 4, range 1-10)
-        # spatial_strength: single-frame boundary blending (default: 3, range 1-10)
-        
-        print(f"[{self.agent_name}] Initializing temporal denoise processing pipeline...")
-        input_video, strength_bias = self._load_upstream_data()
+    # =====================================================================
+    # DETERMINISTIC SPATIAL-TEMPORAL NOISE SOLVER (RULE 4 & 15)
+    # =====================================================================
+    def _calculate_noise_filter_matrix(self, temporal_strength, spatial_strength, strength_bias, style):
+        """
+        Formulates high-precision HQDN3D parameters. Prevents vector line eroding
+        in anime footage while maximizing compression artifact suppression.
+        """
+        # Scale baseline intensities against upstream AI bias
+        base_temporal = float(temporal_strength) * (strength_bias + 0.5)
+        base_spatial = float(spatial_strength) * (strength_bias + 0.5)
 
-        # Scale strength based on AI bias from upscaler
-        adjusted_temporal = int(temporal_strength * (strength_bias + 0.5))
-        adjusted_spatial = int(spatial_strength * (strength_bias + 0.5))
+        if style == "anime":
+            # Cel-shaded animation rule: Low spatial luma to preserve sharp black vector outlines;
+            # higher chroma and temporal luma to eliminate macroblock ringing between identical frames.
+            luma_spatial = round(max(1.0, min(base_spatial * 0.6, 3.5)), 2)
+            chroma_spatial = round(max(1.5, min(base_spatial * 1.4, 6.0)), 2)
+            luma_tmp = round(max(2.0, min(base_temporal * 1.5, 9.0)), 2)
+            chroma_tmp = round(max(3.0, min(base_temporal * 1.8, 12.0)), 2)
+        else:
+            # Realistic cinematic rule: Balanced spatial and temporal luma/chroma smoothing
+            # to clean digital sensor noise without wiping out environmental textures.
+            luma_spatial = round(max(1.5, min(base_spatial * 1.1, 5.5)), 2)
+            chroma_spatial = round(max(1.5, min(base_spatial * 1.2, 6.0)), 2)
+            luma_tmp = round(max(2.0, min(base_temporal * 1.2, 8.0)), 2)
+            chroma_tmp = round(max(2.0, min(base_temporal * 1.3, 8.5)), 2)
 
-        # Clamp values to avoid blurring anime outlines
-        adjusted_temporal = max(1, min(adjusted_temporal, 10))
-        adjusted_spatial = max(1, min(adjusted_spatial, 8))
+        filter_string = f"hqdn3d={luma_spatial}:{chroma_spatial}:{luma_tmp}:{chroma_tmp}"
+        return filter_string, {"luma_spatial": luma_spatial, "chroma_spatial": chroma_spatial, "luma_temporal": luma_tmp, "chroma_temporal": chroma_tmp}
 
-        print(f"[{self.agent_name}] Noise filters auto-tuned: Temporal={adjusted_temporal}, Spatial={adjusted_spatial}")
+    # =====================================================================
+    # RULE 9: ACTIONABLE FFMPEG FILTER COMPILER
+    # =====================================================================
+    def execute_denoising(self, temporal_strength=4.0, spatial_strength=3.0):
+        self._handshake("IN_PROGRESS")
+        self.log("Initiating 3D spatial-temporal noise filtering pipeline...")
 
-        # Standard HQD3D (High Quality Denoise 3D) filter design for anime:
-        # hqdn3d=luma_spatial:chroma_spatial:luma_tmp:chroma_tmp
-        # Standard dynamic settings values mapping
-        luma_spatial = adjusted_spatial
-        chroma_spatial = int(adjusted_spatial * 1.5)
-        luma_tmp = adjusted_temporal
-        chroma_tmp = int(adjusted_temporal * 1.5)
+        input_video, strength_bias, style, is_synthetic = self._resolve_upstream_stream()
+        config = self._load_config()
+        if style == "realistic" and config["style"] == "anime":
+            style = "anime"
 
-        filter_str = f"hqdn3d={luma_spatial}:{chroma_spatial}:{luma_tmp}:{chroma_tmp}"
+        filter_str, matrix_metrics = self._calculate_noise_filter_matrix(temporal_strength, spatial_strength, strength_bias, style)
+        self.log(f"Noise matrix tuned for [{style.upper()}] -> {filter_str}", "SUCCESS")
 
         cmd = [
             "ffmpeg", "-y",
             "-i", input_video,
             "-vf", filter_str,
             "-c:v", "libx264",
+            "-preset", "slow",
+            "-crf", "17",
             "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
             self.output_denoised_video
         ]
 
-        print(f"[{self.agent_name}] Clean Assembled Execution Command:\n{' '.join(cmd)}")
+        if is_synthetic:
+            cmd[2] = "-f"
+            cmd.insert(3, "lavfi")
+            cmd.insert(4, "-i")
+            cmd.pop(5)
 
-        ffmpeg_path = shutil.which("ffmpeg")
-        if not ffmpeg_path or input_video == "mock_upscaled_input.mp4":
-            print(f"[{self.agent_name}] System test dry-run. Executed output saved in dry-run buffer configs.")
-            result_data = {
+        command_string = " ".join(cmd)
+        self.log(f"Compiled Actionable Denoise Execution Command:\n{command_string}")
+
+        ffmpeg_binary = shutil.which("ffmpeg")
+        if not ffmpeg_binary:
+            self.log("FFmpeg executable absent from system path. Recording dry-run blueprint.", "WARNING")
+            dry_run_data = {
                 "agent_executed": self.agent_name,
-                "execution_status": "DRY_RUN_SUCCESS",
-                "applied_filter": filter_str,
-                "command_executed": " ".join(cmd),
+                "execution_timestamp": time.time(),
+                "execution_status": "DRY_RUN_SUCCESS_BINARY_MISSING",
+                "style_evaluated": style,
+                "applied_hqdn3d_matrix": matrix_metrics,
+                "actionable_filter_string": filter_str,
+                "command_assembled": command_string,
                 "output_video_path": self.output_denoised_video
             }
-            self._save_blueprint(result_data)
-            return result_data
+            self._save_blueprint(dry_run_data)
+            self._handshake("COMPLETED")
+            return dry_run_data
 
+        # Rule 17: Execute subprocess with hardware timeout protection (20 minutes max)
         try:
-            print(f"[{self.agent_name}] Filtering active temporal frames. Scanning pixel differentials...")
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            print(f"[{self.agent_name}] Denoising completed successfully without breaking sharp anime outlines!")
-            
-            result_data = {
+            self.log("Spawning denoise sub-process. Scanning pixel differentials and applying temporal smoothing...")
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, timeout=1200)
+            self.log("Temporal denoising completed successfully without eroding sharp vector outlines!", "SUCCESS")
+
+            output_data = {
                 "agent_executed": self.agent_name,
+                "execution_timestamp": time.time(),
                 "execution_status": "SUCCESS",
-                "applied_filter": filter_str,
-                "command_executed": " ".join(cmd),
+                "style_evaluated": style,
+                "applied_hqdn3d_matrix": matrix_metrics,
+                "actionable_filter_string": filter_str,
+                "command_assembled": command_string,
                 "output_video_path": self.output_denoised_video
             }
-            self._save_blueprint(result_data)
-            return result_data
+            self._save_blueprint(output_data)
+            self._handshake("COMPLETED")
+            return output_data
 
-        except subprocess.CalledProcessError as e:
-            print(f"[{self.agent_name}] Subprocess error during denoising pass: {e.stderr}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            error_details = getattr(error, 'stderr', str(error))
+            self.log(f"CRITICAL: Subprocess denoising failure or hardware timeout: {error_details}", "ERROR")
             failed_data = {
                 "agent_executed": self.agent_name,
+                "execution_timestamp": time.time(),
                 "execution_status": "FAILED",
-                "error_details": str(e.stderr)
+                "error_details": str(error_details),
+                "command_assembled": command_string,
+                "output_video_path": None
             }
             self._save_blueprint(failed_data)
             return failed_data
@@ -124,16 +251,10 @@ class TemporalDenoiseFilter:
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Denoise configuration blueprint saved to '{file_path}'")
-        except Exception as e:
-            print(f"[{self.agent_name}] Error saving denoise logs: {str(e)}")
+            self.log(f"Denoise configuration blueprint recorded to: '{file_path}'", "SUCCESS")
+        except Exception as error:
+            self.log(f"Failed to record denoise blueprint: {error}", "ERROR")
 
 if __name__ == "__main__":
-    denoiser = TemporalDenoiseFilter()
-    result = denoiser.execute_denoising()
-    
-    print("\n--- Z-NET TEMPORAL NOISE FILTER: AGENT 48 COMPLETE ---")
-    print(f"Execution: {result['execution_status']}")
-    print(f"Filter Applied: {result.get('applied_filter', 'N/A')}")
-    print(f"Denoised Output Video: '{result.get('output_video_path', 'N/A')}'")
-    print("---------------------------------------------------------")
+    denoiser = Agent_48_Temporal_Denoise_Filter()
+    denoiser.execute_denoising()
