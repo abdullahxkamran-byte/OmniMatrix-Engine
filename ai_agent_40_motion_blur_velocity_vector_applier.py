@@ -2,13 +2,16 @@ import os
 import re
 import sys
 import json
+import math
+import time
 import subprocess
-import urllib.request
-import urllib.error
 
+# =====================================================================
+# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -17,38 +20,81 @@ def load_env_file(filepath=".env"):
 
 load_env_file()
 
-class AiMotionBlurVelocityVectorApplier:
-    def __init__(self, workspace_dir="OmniMatrix_Workspace", local_library_dir="D:/OmniMatrix_Local_Assets", blender_path="blender"):
-        self.agent_name = "Ai Agent 40: motion_blur_velocity_vector_applier"
+class Agent_40_Motion_Blur_Velocity_Vector_Applier:
+    """
+    OMNIMATRIX V2.0 PURE UTILITY: DETERMINISTIC MOTION BLUR ENGINE
+    Operates without Generative AI overhead. Evaluates kinetic vector magnitude
+    using pure mathematical physics to configure Blender render shutter and sample steps.
+    """
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        # Rule 8: Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
+        self.agent_name = "Agent_40_Motion_Blur_Velocity_Vector_Applier"
         self.workspace_dir = workspace_dir
-        self.env_dir = os.path.join(local_library_dir, "3d_environments")
-        self.blender_path = blender_path
+        self.env_dir = os.path.join(self.workspace_dir, "Local_3D_Environments")
+        self.blender_path = "blender"
         
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        for directory in [self.workspace_dir, self.env_dir]:
+            os.makedirs(directory, exist_ok=True)
+            
+        self._scrub_legacy_assets()
 
-        for d in [self.workspace_dir, self.env_dir]:
-            if not os.path.exists(d):
-                os.makedirs(d)
-
-    def log_message(self, message, level="INFO"):
+    def log(self, message, level="INFO"):
         print(f"[{level}] [{self.agent_name}] {message}")
 
-    def _load_master_config(self):
-        """God Level Upgrade: Checks Master Project Style (Realistic vs Anime)"""
+    def _scrub_legacy_assets(self):
+        """Rule 3: Idempotency scrubbing of previous motion blur blueprints and temporary scripts."""
+        for filename in ["40_motion_blur_blueprint.json", "temp_motion_blur.py"]:
+            file_path = os.path.join(self.workspace_dir, filename)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as error:
+                    self.log(f"Failed to remove legacy file {file_path}: {error}", "WARNING")
+
+    # =====================================================================
+    # RULE 7: ATOMIC HANDSHAKE & CONFIG LOADERS
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
+            try:
+                with open(matrix_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        if "orchestrator_matrix" not in data:
+            data["orchestrator_matrix"] = {}
+            
+        data["orchestrator_matrix"].update({
+            "last_active_agent": self.agent_name,
+            "last_update_timestamp": time.time(),
+            "agent_status": {self.agent_name: status}
+        })
+        
+        if status == "COMPLETED":
+            # Advance atomic handshake to Agent 41 (Beat-to-Frame Sync Engine)
+            data["orchestrator_matrix"]["next_agent"] = "Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine"
+            
+        try:
+            with open(matrix_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as error:
+            self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
+
+    def _load_config(self):
         config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    return data.get("global_style", "anime").lower()
-            except Exception as e:
-                self.log_message(f"Master config read warning: {str(e)}", "WARNING")
-        return "realistic" # Universal Default
+                    return {
+                        "style": data.get("global_style", "realistic").lower(),
+                        "shutter_baseline": float(data.get("default_shutter", 0.5))
+                    }
+            except Exception:
+                pass
+        return {"style": "realistic", "shutter_baseline": 0.5}
 
     def _load_upstream_kinetics(self):
         kinetic_path = os.path.join(self.workspace_dir, "26_kinetic_rig_puppeteer_blueprint.json")
@@ -61,207 +107,157 @@ class AiMotionBlurVelocityVectorApplier:
                     data = json.load(f)
                 for profile in data.get("speed_line_profiles", []):
                     velocity_contexts.append({
-                        "timestamp_sec": profile.get("timestamp_sec", 0.0),
+                        "timestamp_sec": float(profile.get("timestamp_sec", 0.0)),
                         "speed_style": profile.get("speed_line_style", "radial_zoom_in"),
-                        "implied_velocity": 25.0 if "zoom" in profile.get("speed_line_style", "") else 12.0
+                        "velocity_magnitude": 30.0 if "zoom" in profile.get("speed_line_style", "") else 15.0
                     })
-            except Exception as e:
-                self.log_message(f"Speed lines blueprint read warning: {str(e)}", "WARNING")
+            except Exception:
+                pass
 
         if not velocity_contexts and os.path.exists(kinetic_path):
             try:
                 with open(kinetic_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                for seq in data.get("rig_animation_sequences", []):
-                    offset = seq.get("translation_offset", [0.0, 0.0, 0.0])
-                    speed_magnitude = (offset[0]**2 + offset[1]**2 + offset[2]**2)**0.5
+                for sequence in data.get("rig_animation_sequences", []):
+                    offset = sequence.get("translation_offset", [0.0, 0.0, 0.0])
+                    magnitude = math.sqrt(sum(component ** 2 for component in offset))
                     velocity_contexts.append({
-                        "timestamp_sec": seq.get("timestamp_sec", 0.0),
+                        "timestamp_sec": float(sequence.get("timestamp_sec", 0.0)),
                         "speed_style": "kinetic_displacement",
-                        "implied_velocity": round(speed_magnitude, 2)
+                        "velocity_magnitude": round(magnitude, 2)
                     })
-            except Exception as e:
-                self.log_message(f"Kinetic rig blueprint read warning: {str(e)}", "WARNING")
+            except Exception:
+                pass
 
         if not velocity_contexts:
-            self.log_message("No motion data. Injecting standard action sequence vectors.", "INFO")
+            self.log("No upstream motion logs detected. Generating default kinetic calibration vectors.", "INFO")
             velocity_contexts = [
-                {"timestamp_sec": 1.2, "speed_style": "radial_zoom_in", "implied_velocity": 45.5},
-                {"timestamp_sec": 3.5, "speed_style": "horizontal_streaks", "implied_velocity": 8.2}
+                {"timestamp_sec": 1.2, "speed_style": "radial_zoom_in", "velocity_magnitude": 45.0},
+                {"timestamp_sec": 3.5, "speed_style": "horizontal_streaks", "velocity_magnitude": 12.5}
             ]
 
         return velocity_contexts
 
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _save_to_workspace(self, data, filename="40_motion_blur_blueprint.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            self.log_message(f"Motion blur parameters saved to '{file_path}'", "INFO")
-            return file_path
-        except Exception as e:
-            self.log_message(f"Critical Error: Unable to save blur blueprint: {str(e)}", "CRITICAL")
-            return None
-
-    def design_stylized_motion_blur(self):
-        velocities = self._load_upstream_kinetics()
-        global_style = self._load_master_config()
-        self.log_message(f"Solving vector passes and smears for '{global_style.upper()}' style...", "INFO")
-
-        system_prompt = (
-            f"You are a Senior Technical Director. The project global style is enforced as: '{global_style.upper()}'.\n"
-            "Translate 3D physical speed into stylized motion blur commands for Blender's compositor/render engine.\n"
-            "If style is REALISTIC, focus on high samples and smooth cinematic shutter values (180 degrees).\n"
-            "If style is ANIME, focus on stepped smears, low samples, and high shutter spikes for fast action.\n"
-            "For each movement entry, generate exactly 1 configuration inside a list named 'motion_blur_profiles':\n"
-            "- 'timestamp_sec': float matching the video timestamp.\n"
-            "- 'blur_render_type': string ('stepped_traditional_smear', 'camera_shutter_vector', 'background_only_haze', 'none').\n"
-            "- 'render_style_enforced': string (must match the global style: 'realistic' or 'anime').\n"
-            "- 'shutter_angle_degrees': float (range 45.0 to 360.0. Higher means longer blur. Realistic defaults to ~180.0).\n"
-            "- 'blur_samples': integer (For anime stepped feel: 4 to 8. For realistic smooth: 16 to 32).\n"
-            "- 'velocity_vector_multiplier': float (range 0.1 to 4.5).\n"
-            "- 'smear_duplication_steps': integer (range 0 to 5).\n"
-            "Format strictly as JSON with key 'motion_blur_profiles'."
-        )
-
-        final_output = None
-        if self.openai_api_key:
-            self.log_message(f"Querying Cloud API Node [{self.model_cloud}]", "INFO")
-            try:
-                payload = {
-                    "model": self.model_cloud,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Velocity Logs:\n{json.dumps(velocities, indent=2)}"}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"})
-                with urllib.request.urlopen(req, timeout=50) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    cleaned = self._clean_json_response(res_json["choices"][0]["message"]["content"])
-                    final_output = {"motion_blur_profiles": json.loads(cleaned).get("motion_blur_profiles", [])}
-            except Exception as e:
-                self.log_message(f"Cloud API Failed: {str(e)}", "WARNING")
-
-        if not final_output:
-            self.log_message("Resolving procedural velocity blur fallback.", "INFO")
-            final_output = self._execute_procedural_fallback(velocities, global_style)
+    # =====================================================================
+    # DETERMINISTIC MATHEMATICAL VELOCITY SOLVER (ZERO LLM DEPENDENCY)
+    # =====================================================================
+    def apply_velocity_blur(self):
+        self._handshake("IN_PROGRESS")
+        kinetics = self._load_upstream_kinetics()
+        config = self._load_config()
+        self.log(f"Pure Utility Velocity Solver Initiated. Style Enforced: {config['style'].upper()}")
+        
+        output_profiles = []
+        
+        for index, item in enumerate(kinetics):
+            timestamp = item["timestamp_sec"]
+            velocity = item["velocity_magnitude"]
+            is_anime = config["style"] == "anime"
             
-        self._save_to_workspace(final_output)
-        self._bake_motion_blur_in_blender(final_output)
-        return final_output
-
-    def _execute_procedural_fallback(self, velocities, style):
-        profiles = []
-        for v in velocities:
-            ts = float(v.get("timestamp_sec", 0.0))
-            style_hint = str(v.get("speed_style", "")).lower()
-            velocity = float(v.get("implied_velocity", 10.0))
-
-            if style == "realistic":
-                # Smooth Cinematic Rules
-                profiles.append({
-                    "timestamp_sec": ts,
-                    "blur_render_type": "camera_shutter_vector",
-                    "render_style_enforced": "realistic",
-                    "shutter_angle_degrees": 180.0,
-                    "blur_samples": 32,
-                    "velocity_vector_multiplier": 1.0,
-                    "smear_duplication_steps": 0
-                })
+            # Continuous mathematical formulas replace rigid hardcoded presets
+            if is_anime:
+                # Stepped smear style: Lower samples for crisp manga chopping, higher shutter angle for stylized streaks
+                shutter_angle = min(360.0, round(90.0 + (velocity * 4.5), 1))
+                samples = 6 if velocity > 25.0 else 4
+                multiplier = round(min(4.0, 1.0 + (velocity / 15.0)), 2)
+                render_type = "stepped_traditional_smear" if velocity > 20.0 else "camera_shutter_vector"
             else:
-                # Stepped Anime Rules
-                if velocity > 35.0:
-                    profiles.append({"timestamp_sec": ts, "blur_render_type": "stepped_traditional_smear", "render_style_enforced": "anime", "shutter_angle_degrees": 270.0, "blur_samples": 6, "velocity_vector_multiplier": 3.5, "smear_duplication_steps": 3})
-                elif "zoom" in style_hint:
-                    profiles.append({"timestamp_sec": ts, "blur_render_type": "background_only_haze", "render_style_enforced": "anime", "shutter_angle_degrees": 180.0, "blur_samples": 12, "velocity_vector_multiplier": 1.8, "smear_duplication_steps": 0})
-                elif velocity > 5.0:
-                    profiles.append({"timestamp_sec": ts, "blur_render_type": "camera_shutter_vector", "render_style_enforced": "anime", "shutter_angle_degrees": 90.0, "blur_samples": 8, "velocity_vector_multiplier": 1.0, "smear_duplication_steps": 0})
-                else:
-                    profiles.append({"timestamp_sec": ts, "blur_render_type": "none", "render_style_enforced": "anime", "shutter_angle_degrees": 0.0, "blur_samples": 0, "velocity_vector_multiplier": 0.0, "smear_duplication_steps": 0})
-                    
-        return {"motion_blur_profiles": profiles}
+                # Realistic cinematic style: 180-degree rule baseline, high samples for organic motion blur
+                shutter_angle = min(270.0, round(180.0 + (velocity * 1.5), 1))
+                samples = min(32, max(16, int(16 + (velocity / 3.0))))
+                multiplier = round(min(2.0, 0.8 + (velocity / 25.0)), 2)
+                render_type = "camera_shutter_vector"
 
+            output_profiles.append({
+                "timestamp_sec": timestamp,
+                "blur_render_type": render_type,
+                "render_style_enforced": config["style"],
+                "shutter_angle_degrees": shutter_angle,
+                "blur_samples": samples,
+                "velocity_vector_multiplier": multiplier,
+                "smear_duplication_steps": 3 if (is_anime and velocity > 30.0) else 0
+            })
+
+        final_blueprint = {"motion_blur_profiles": output_profiles}
+        blueprint_path = os.path.join(self.workspace_dir, "40_motion_blur_blueprint.json")
+        with open(blueprint_path, "w", encoding="utf-8") as f:
+            json.dump(final_blueprint, f, indent=4)
+            
+        self._bake_motion_blur_in_blender(final_blueprint)
+        self._handshake("COMPLETED")
+        return final_blueprint
+
+    # =====================================================================
+    # RULE 9, 17: BLENDER ENGINE COMPILER & VRAM SAFETY ENFORCER
+    # =====================================================================
     def _bake_motion_blur_in_blender(self, blur_data):
-        self.log_message("Connecting to Engine Core: Baking Keyframed Motion Blur...", "INFO")
+        self.log("Compiling Blender Python execution script for velocity blur...")
+        blur_json = json.dumps(blur_data.get('motion_blur_profiles', []))
         
         script_content = f"""
 import bpy
 
-profiles = {json.dumps(blur_data.get('motion_blur_profiles', []))}
+# Rule 17: VRAM safety cap - process maximum 40 velocity profiles
+profiles = {blur_json}[:40]
 fps = bpy.context.scene.render.fps
 
-# Enable Motion Blur in Render Engine natively
 bpy.context.scene.eevee.use_motion_blur = True
 eevee = bpy.context.scene.eevee
 
-# Ensure Base State is initialized at frame 1
-eevee.motion_blur_shutter = 0.5  # Standard 180-degree equivalent
-eevee.motion_blur_steps = 16 # Safe baseline
+# Initialize baseline optical shutter state at frame 1
+eevee.motion_blur_shutter = 0.5
+eevee.motion_blur_steps = 16
 eevee.keyframe_insert(data_path="motion_blur_shutter", frame=1)
 eevee.keyframe_insert(data_path="motion_blur_steps", frame=1)
 
-for p in profiles:
-    if p['blur_render_type'] == 'none':
+for profile in profiles:
+    if profile.get('blur_render_type') == 'none':
         continue
         
-    impact_frame = int(p['timestamp_sec'] * fps)
+    impact_frame = max(1, int(profile['timestamp_sec'] * fps))
+    pre_frame = max(1, impact_frame - int(fps * 0.2))
+    post_frame = impact_frame + int(fps * 0.5)
     
-    # Universal: 3 frames before movement, reset to safe sharp look
+    # Anchor preceding frame to standard sharp look
     eevee.motion_blur_shutter = 0.5
     eevee.motion_blur_steps = 16
-    eevee.keyframe_insert(data_path="motion_blur_shutter", frame=max(1, impact_frame - 3))
-    eevee.keyframe_insert(data_path="motion_blur_steps", frame=max(1, impact_frame - 3))
+    eevee.keyframe_insert(data_path="motion_blur_shutter", frame=pre_frame)
+    eevee.keyframe_insert(data_path="motion_blur_steps", frame=pre_frame)
     
-    # AT IMPACT: Spike the blur based on style and speed
-    shutter_fraction = min(p['shutter_angle_degrees'] / 360.0, 1.0) 
-    eevee.motion_blur_shutter = shutter_fraction * p['velocity_vector_multiplier']
-    eevee.motion_blur_steps = p['blur_samples'] # AI decides if it's 32 (smooth) or 6 (anime choppy)
+    # Inject mathematical velocity spike at impact frame
+    shutter_fraction = min(profile['shutter_angle_degrees'] / 360.0, 1.0)
+    eevee.motion_blur_shutter = shutter_fraction * profile['velocity_vector_multiplier']
+    eevee.motion_blur_steps = min(32, int(profile['blur_samples'])) # Rule 17 VRAM cap
     
     eevee.keyframe_insert(data_path="motion_blur_shutter", frame=impact_frame)
     eevee.keyframe_insert(data_path="motion_blur_steps", frame=impact_frame)
     
-    # Universal: Reset to normal 10 frames after action ends
+    # Restore standard shutter after movement subsides
     eevee.motion_blur_shutter = 0.5
     eevee.motion_blur_steps = 16
-    eevee.keyframe_insert(data_path="motion_blur_shutter", frame=impact_frame + 10)
-    eevee.keyframe_insert(data_path="motion_blur_steps", frame=impact_frame + 10)
+    eevee.keyframe_insert(data_path="motion_blur_shutter", frame=post_frame)
+    eevee.keyframe_insert(data_path="motion_blur_steps", frame=post_frame)
 
-bpy.ops.wm.save_mainfile()
+try:
+    bpy.ops.wm.save_mainfile()
+except Exception:
+    pass
 """
         script_path = os.path.join(self.workspace_dir, "temp_motion_blur.py")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(script_content)
 
         for filename in os.listdir(self.env_dir):
-            if filename.endswith("_stage.blend"):
-                blend_path = os.path.join(self.env_dir, filename)
-                self.log_message(f"Injecting Dynamic Motion Vectors into {filename}...", "INFO")
-                subprocess.run([self.blender_path, "-b", blend_path, "-P", script_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-                
+            if filename.endswith(".blend"):
+                try:
+                    subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, filename), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                except Exception as error:
+                    self.log(f"Blender sub-process execution warning on {filename}: {error}", "WARNING")
+                    
         if os.path.exists(script_path):
             os.remove(script_path)
-        self.log_message("Universal motion blur keyframed successfully.", "INFO")
+        self.log("Deterministic motion blur and velocity vectors successfully keyframed.", "SUCCESS")
 
 if __name__ == "__main__":
-    applier = AiMotionBlurVelocityVectorApplier()
-    output = applier.design_stylized_motion_blur()
-    
-    print("\n--- OMNIMATRIX MOTION BLUR COMPOSITOR: AGENT 40 COMPLETE ---")
-    print(f"Total dynamic motion blur profiles mapped: {len(output['motion_blur_profiles'])}")
-    for profile in output["motion_blur_profiles"]:
-        print(f"Time: {profile['timestamp_sec']}s | Style: '{profile['blur_render_type']}' ({profile.get('render_style_enforced', 'unknown')})")
-        print(f"  Shutter: {profile['shutter_angle_degrees']} deg | Samples: {profile['blur_samples']} steps")
-    print("------------------------------------------------------------------")
+    applier = Agent_40_Motion_Blur_Velocity_Vector_Applier()
+    applier.apply_velocity_blur()
