@@ -1,148 +1,229 @@
 import os
+import re
 import sys
 import json
 import glob
-import re
+import time
 
-class FfmpegRawBufferCollector:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Agent 42: ffmpeg_raw_buffer_collector"
+# =====================================================================
+# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# =====================================================================
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
+class Agent_42_FFmpeg_Raw_Buffer_Collector:
+    """
+    OMNIMATRIX V2.0 PURE UTILITY: RAW BUFFER & STREAM COLLECTOR
+    Scans filesystem render outputs, validates frame continuity, patches sequence
+    gaps dynamically, and constructs actionable FFmpeg concatenation demuxer files.
+    """
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        # Rule 8: Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
+        self.agent_name = "Agent_42_FFmpeg_Raw_Buffer_Collector"
         self.workspace_dir = workspace_dir
         self.render_dir = os.path.join(self.workspace_dir, "render_output")
         self.audio_dir = os.path.join(self.workspace_dir, "audio_output")
-
-        # Ensure directories exist
+        
         for directory in [self.workspace_dir, self.render_dir, self.audio_dir]:
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+            os.makedirs(directory, exist_ok=True)
+            
+        self._scrub_legacy_assets()
 
-    def _extract_frame_number(self, filename):
-        # Filename se numbers extract karne ke liye regex (e.g., frame_0024.png -> 24)
-        match = re.search(r'(\d+)\.(png|jpg|jpeg|exr)$', filename, re.IGNORECASE)
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
+
+    def _scrub_legacy_assets(self):
+        """Rule 3: Idempotency scrubbing of previous manifests and concat directives."""
+        for filename in ["42_raw_buffer_manifest.json", "ffmpeg_concat_demuxer.txt"]:
+            file_path = os.path.join(self.workspace_dir, filename)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as error:
+                    self.log(f"Failed to scrub legacy buffer file {file_path}: {error}", "WARNING")
+
+    # =====================================================================
+    # RULE 7: ATOMIC HANDSHAKE & TIMELINE SYNCHRONIZATION
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
+            try:
+                with open(matrix_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        if "orchestrator_matrix" not in data:
+            data["orchestrator_matrix"] = {}
+            
+        data["orchestrator_matrix"].update({
+            "last_active_agent": self.agent_name,
+            "last_update_timestamp": time.time(),
+            "agent_status": {self.agent_name: status}
+        })
+        
+        if status == "COMPLETED":
+            # Hand off to Agent 43 (Multi-Track Audio/Video Merger)
+            data["orchestrator_matrix"]["next_agent"] = "Agent_43_Multi_Track_AV_Merger"
+            
+        try:
+            with open(matrix_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as error:
+            self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
+
+    def _load_target_fps(self):
+        """Fetches synchronized timeline framerate from Module D upstream assets."""
+        config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return float(json.load(f).get("render_fps", 24.0))
+            except Exception:
+                pass
+        return 24.0
+
+    def _extract_frame_index(self, filename):
+        """Extracts numeric frame index from arbitrary rendering nomenclature."""
+        match = re.search(r'(\d+)\.(png|jpg|jpeg|exr|tiff|webp)$', filename, re.IGNORECASE)
         return int(match.group(1)) if match else None
 
-    def _scan_and_validate_frames(self):
-        print(f"[{self.agent_name}] Scanning render directory for raw visual buffers: '{self.render_dir}'")
-        
-        # Supported image formats scan karte hain
-        extensions = ['*.png', '*.jpg', '*.jpeg', '*.exr']
-        found_files = []
+    # =====================================================================
+    # DETERMINISTIC STREAM DISCOVERY & GAP AUTO-PATCHING ENGINE
+    # =====================================================================
+    def _scan_and_validate_visual_buffers(self, fps):
+        self.log(f"Scanning visual buffers in directory: '{self.render_dir}'")
+        extensions = ['*.png', '*.jpg', '*.jpeg', '*.exr', '*.tiff', '*.webp']
+        discovered_files = []
         for ext in extensions:
-            found_files.extend(glob.glob(os.path.join(self.render_dir, ext)))
+            discovered_files.extend(glob.glob(os.path.join(self.render_dir, ext)))
 
-        if not found_files:
-            print(f"[{self.agent_name}] Warning: No active render frames found in '{self.render_dir}'. Creating mock sequence for testing.")
-            # Testing ke liye dummy frames generate kar rahe hain workspace flow break na ho
-            mock_files = []
-            for i in range(1, 121): # 5 seconds of footage at 24fps
-                mock_filename = f"frame_{i:04d}.png"
-                mock_filepath = os.path.join(self.render_dir, mock_filename)
-                # Create empty mock file just to validate structure
-                with open(mock_filepath, 'w') as f:
-                    f.write("mock_frame_data")
-                mock_files.append(mock_filepath)
-            found_files = mock_files
+        # Rule 10: 100% Offline Autonomy fallback if rendering directory is unpopulated
+        if not discovered_files:
+            self.log("No rendered visual buffers detected. Generating FFmpeg synthetic test stream directive.", "WARNING")
+            return [], [], True
 
-        # Frame number ke hisab se sort karte hain sorted() key logic se
+        # Rule 17: VRAM/Memory cap - sort and process maximum 15,000 frames
         sorted_frames = []
-        for f in found_files:
-            fn = self._extract_frame_number(f)
-            if fn is not None:
-                sorted_frames.append((fn, f))
+        for file_path in discovered_files[:15000]:
+            index = self._extract_frame_index(file_path)
+            if index is not None:
+                sorted_frames.append((index, file_path))
         
         sorted_frames.sort(key=lambda x: x[0])
 
-        # Validate sequence continuity (Gap Detection)
-        missing_frames = []
-        if sorted_frames:
-            start_frame = sorted_frames[0][0]
-            end_frame = sorted_frames[-1][0]
-            expected_set = set(range(start_frame, end_frame + 1))
-            actual_set = set([item[0] for item in sorted_frames])
-            
-            missing_frames = list(expected_set - actual_set)
-            if missing_frames:
-                print(f"[{self.agent_name}] CRITICAL: Detected gaps in render frames! Missing frame numbers: {missing_frames}")
-            else:
-                print(f"[{self.agent_name}] Success: Integrity check passed. Frame sequence is continuous ({len(sorted_frames)} frames).")
+        if not sorted_frames:
+            return [], [], True
 
-        return [item[1] for item in sorted_frames], missing_frames
+        start_index = sorted_frames[0][0]
+        end_index = sorted_frames[-1][0]
+        expected_indices = set(range(start_index, end_index + 1))
+        actual_indices = set([item[0] for item in sorted_frames])
+        missing_indices = sorted(list(expected_indices - actual_indices))
+
+        if missing_indices:
+            self.log(f"Sequence discontinuity detected. Missing frame indices: {len(missing_indices)} frames. Initiating auto-patch protocol.", "WARNING")
+        else:
+            self.log(f"Visual stream continuity verified successfully. Total frames: {len(sorted_frames)}.", "SUCCESS")
+
+        return sorted_frames, missing_indices, False
 
     def _collect_audio_buffers(self):
-        print(f"[{self.agent_name}] Scanning audio directory for audio buffers: '{self.audio_dir}'")
-        audio_extensions = ['*.mp3', '*.wav', '*.ogg', '*.m4a']
-        found_audio = []
-        for ext in audio_extensions:
-            found_audio.extend(glob.glob(os.path.join(self.audio_dir, ext)))
+        self.log(f"Scanning acoustic buffers in directory: '{self.audio_dir}'")
+        extensions = ['*.wav', '*.flac', '*.mp3', '*.m4a', '*.aac', '*.ogg']
+        discovered_audio = []
+        for ext in extensions:
+            discovered_audio.extend(glob.glob(os.path.join(self.audio_dir, ext)))
 
-        # Agar output folder empty ho toh standard fallback audio mapping direct workspace se read karte hain
-        if not found_audio:
-            # Checking master mix output if available
-            master_mix = os.path.join(self.workspace_dir, "19_final_master_mix.wav")
-            if os.path.exists(master_mix):
-                found_audio.append(master_mix)
-            else:
-                print(f"[{self.agent_name}] Workspace Alert: No audio files found. Creating mock alignment.")
-                dummy_audio = os.path.join(self.audio_dir, "fallback_soundtrack.wav")
-                with open(dummy_audio, 'w') as f:
-                    f.write("mock_audio_data")
-                found_audio.append(dummy_audio)
+        # Prioritize Module B finalized master audio mix if present in root workspace
+        master_mix_path = os.path.join(self.workspace_dir, "19_final_master_mix.wav")
+        if os.path.exists(master_mix_path):
+            self.log("Module B finalized master acoustic mix detected and prioritized.", "SUCCESS")
+            discovered_audio.insert(0, master_mix_path)
 
-        return found_audio
+        if not discovered_audio:
+            self.log("No acoustic buffers found. Pipeline will assemble silent visual stream.", "WARNING")
 
-    def _save_to_workspace(self, data, filename="42_raw_buffer_manifest.json"):
-        file_path = os.path.join(self.workspace_dir, filename)
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Manifest written to '{file_path}'")
-            return file_path
-        except Exception as e:
-            print(f"[{self.agent_name}] Error saving raw buffer manifest: {str(e)}")
-            return None
+        return discovered_audio
+
+    # =====================================================================
+    # RULE 9: ACTIONABLE FFMPEG DEMUXER COMPILER
+    # =====================================================================
+    def _compile_actionable_ffconcat(self, sorted_frames, missing_indices, fps):
+        """
+        Rule 9 & 10: Compiles an executable FFmpeg concat file. If frames are missing,
+        it automatically extends the duration of the preceding valid frame to bridge gaps
+        without causing rendering blackouts or demuxer crashes!
+        """
+        concat_file_path = os.path.join(self.workspace_dir, "ffmpeg_concat_demuxer.txt")
+        frame_duration = 1.0 / fps
+        missing_set = set(missing_indices)
+
+        with open(concat_file_path, "w", encoding="utf-8") as f:
+            f.write("ffconcat version 1.0\n")
+            
+            for i, (index, file_path) in enumerate(sorted_frames):
+                safe_path = file_path.replace("\\", "/")
+                f.write(f"file '{safe_path}'\n")
+                
+                # Check how many consecutive frames are missing right after this frame
+                gap_count = 0
+                check_index = index + 1
+                while check_index in missing_set:
+                    gap_count += 1
+                    check_index += 1
+                
+                # Extend duration to patch the missing gap perfectly
+                total_duration = frame_duration * (1 + gap_count)
+                f.write(f"duration {total_duration:.6f}\n")
+                
+        self.log(f"Actionable FFmpeg concat demuxer compiled: '{concat_file_path}'", "SUCCESS")
+        return concat_file_path
 
     def execute_collection(self):
-        print(f"[{self.agent_name}] Initiating raw asset discovery process...")
+        self._handshake("IN_PROGRESS")
+        fps = self._load_target_fps()
         
-        frames, missing_frames = self._scan_and_validate_frames()
-        audio_files = self._collect_audio_buffers()
+        sorted_frames, missing_indices, is_synthetic_fallback = self._scan_and_validate_visual_buffers(fps)
+        audio_buffers = self._collect_audio_buffers()
 
-        # Upstream timing cues read karte hain targeted frame rate find karne ke liye
-        beat_sync_path = os.path.join(self.workspace_dir, "41_beat_sync_blueprint.json")
-        target_fps = 24.0 # Baseline Default
-        
-        if os.path.exists(beat_sync_path):
-            try:
-                with open(beat_sync_path, "r", encoding="utf-8") as f:
-                    sync_data = json.load(f)
-                # target fps validation (can be updated dynamically by system properties)
-                print(f"[{self.agent_name}] Syncing timeline with Agent 41 beat metadata.")
-            except Exception:
-                pass
+        actionable_directive = None
+        if not is_synthetic_fallback and sorted_frames:
+            actionable_directive = self._compile_actionable_ffconcat(sorted_frames, missing_indices, fps)
+        else:
+            # Rule 10: Complete offline synthetic test stream fallback for downstream assembler
+            actionable_directive = f"testsrc2=size=1920x1080:rate={int(fps)}"
 
         manifest = {
             "agent_executed": self.agent_name,
-            "validation_status": "PASS" if not missing_frames else "FAILED_GAPS_DETECTED",
-            "frame_rate_fps": target_fps,
-            "total_frames_collected": len(frames),
-            "frame_sequence_start": frames[0] if frames else None,
-            "frame_sequence_end": frames[-1] if frames else None,
-            "missing_frames_indices": missing_frames,
-            "raw_video_buffer_paths": frames,
-            "raw_audio_buffer_paths": audio_files
+            "execution_timestamp": time.time(),
+            "stream_integrity_status": "SYNTHETIC_TEST_FALLBACK" if is_synthetic_fallback else ("AUTO_PATCHED_GAPS" if missing_indices else "CONTINUOUS_VERIFIED"),
+            "target_framerate_fps": fps,
+            "total_visual_frames_mapped": len(sorted_frames),
+            "missing_frame_indices_count": len(missing_indices),
+            "actionable_ffmpeg_directive": actionable_directive,
+            "mapped_visual_stream_start": sorted_frames[0][1] if sorted_frames else None,
+            "mapped_visual_stream_end": sorted_frames[-1][1] if sorted_frames else None,
+            "mapped_audio_buffer_paths": audio_buffers
         }
 
-        self._save_to_workspace(manifest)
+        manifest_path = os.path.join(self.workspace_dir, "42_raw_buffer_manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=4)
+            
+        self.log(f"Raw buffer collection manifest locked: '{manifest_path}'", "SUCCESS")
+        self._handshake("COMPLETED")
         return manifest
 
 if __name__ == "__main__":
-    collector = FfmpegRawBufferCollector()
-    result = collector.execute_collection()
-    
-    print("\n--- Z-NET RAW BUFFER COLLECTOR: AGENT 42 SUMMARY ---")
-    print(f"Status: {result['validation_status']}")
-    print(f"Frames Collected: {result['total_frames_collected']}")
-    print(f"Audio Buffers Mapped: {len(result['raw_audio_buffer_paths'])}")
-    if result['missing_frames_indices']:
-        print(f"CRITICAL WARNING: Missing frames check failed! Gap count: {len(result['missing_frames_indices'])}")
-    print("-----------------------------------------------------")
+    collector = Agent_42_FFmpeg_Raw_Buffer_Collector()
+    collector.execute_collection()
