@@ -1,41 +1,111 @@
 import os
 import sys
 import json
+import time
+import shutil
 import platform
 
-class FontsSystemLoader:
-    def __init__(self, workspace_dir="znet_workspace"):
-        self.agent_name = "Agent 53: fonts_system_loader"
+# =====================================================================
+# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# =====================================================================
+def load_env_file(filepath=".env"):
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip().upper()] = val.strip()
+
+load_env_file()
+
+class Agent_53_Fonts_System_Loader:
+    """
+    OMNIMATRIX V2.0 PURE UTILITY: SYSTEM FONTS LOADER & TYPOGRAPHY INDEXER
+    Traverses cross-platform operating system font repositories (Windows, macOS, Linux).
+    Classifies typefaces into production-ready aesthetic categories (High-CTR, Anime Display,
+    Cinematic Serif, Cyberpunk Tech) and enforces I/O memory caps to generate a unified,
+    actionable typography manifest for downstream rendering engines.
+    """
+    def __init__(self, workspace_dir="OmniMatrix_Workspace"):
+        # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
+        self.agent_name = "Agent_53_Fonts_System_Loader"
         self.workspace_dir = workspace_dir
-        self.output_fonts_manifest = os.path.join(self.workspace_dir, "53_fonts_system_manifest.json")
+        self.local_fonts_dir = os.path.join(self.workspace_dir, "Local_Fonts_Repository")
+        self.output_manifest_path = os.path.join(self.workspace_dir, "53_fonts_system_manifest.json")
+        
+        for directory in [self.workspace_dir, self.local_fonts_dir]:
+            os.makedirs(directory, exist_ok=True)
+            
+        self._scrub_legacy_assets()
 
-        if not os.path.exists(self.workspace_dir):
-            os.makedirs(self.workspace_dir)
+    def log(self, message, level="INFO"):
+        print(f"[{level}] [{self.agent_name}] {message}")
 
+    def _scrub_legacy_assets(self):
+        """Rule 3: Idempotency scrubbing of previous font registries and manifests."""
+        if os.path.exists(self.output_manifest_path):
+            try:
+                os.remove(self.output_manifest_path)
+            except Exception as error:
+                self.log(f"Failed to scrub legacy manifest {self.output_manifest_path}: {error}", "WARNING")
+
+    # =====================================================================
+    # RULE 7: ATOMIC HANDSHAKE & PIPELINE ROUTING
+    # =====================================================================
+    def _handshake(self, status="IN_PROGRESS"):
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
+        data = {}
+        if os.path.exists(matrix_path):
+            try:
+                with open(matrix_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        if "orchestrator_matrix" not in data:
+            data["orchestrator_matrix"] = {}
+            
+        data["orchestrator_matrix"].update({
+            "last_active_agent": self.agent_name,
+            "last_update_timestamp": time.time(),
+            "agent_status": {self.agent_name: status}
+        })
+        
+        if status == "COMPLETED":
+            # Hand off to Agent 54 (System Path & Dependency Validator - Pure Utility)
+            data["orchestrator_matrix"]["next_agent"] = "Agent_54_System_Path_Dependency_Validator"
+            
+        try:
+            with open(matrix_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as error:
+            self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
+
+    # =====================================================================
+    # CROSS-PLATFORM REPOSITORY DISCOVERY ENGINE
+    # =====================================================================
     def _get_os_font_directories(self):
-        # Alag-alag Operating Systems ke default font directories identify karta hai
+        """Resolves standard typography directories across Windows, macOS, and Linux."""
         current_os = platform.system().lower()
         directories = []
 
         if current_os == "windows":
-            # Windows standard path
             windir = os.environ.get("WINDIR", "C:\\Windows")
             directories.append(os.path.join(windir, "Fonts"))
-            # User specific local fonts path (Windows 10/11)
             local_app_data = os.environ.get("LOCALAPPDATA", "")
             if local_app_data:
-                directories.append(os.path.join(local_app_data, "Microsoft\\Windows\\Fonts"))
+                directories.append(os.path.join(local_app_data, "Microsoft", "Windows", "Fonts"))
 
         elif current_os == "darwin":
-            # macOS standard paths
             directories.extend([
                 "/Library/Fonts",
                 "/System/Library/Fonts",
+                "/System/Library/Fonts/Supplemental",
                 os.path.expanduser("~/Library/Fonts")
             ])
 
         else:
-            # Linux standard paths
+            # Linux and Docker container standard paths
             directories.extend([
                 "/usr/share/fonts",
                 "/usr/local/share/fonts",
@@ -43,90 +113,166 @@ class FontsSystemLoader:
                 os.path.expanduser("~/.fonts")
             ])
 
-        return directories
+        # Always include project local workspace repository
+        directories.append(self.local_fonts_dir)
+        return [d for d in directories if os.path.exists(d)]
+
+    # =====================================================================
+    # STYLE-AWARE TYPOGRAPHY CLASSIFICATION (RULE 4 & 15)
+    # =====================================================================
+    def _classify_font_style(self, font_name):
+        """Mathematically maps typefaces into aesthetic production categories."""
+        name_lower = font_name.lower().replace(" ", "_").replace("-", "_")
+        
+        categories = []
+        
+        # Category 1: High-CTR YouTube/TikTok Impact Typefaces
+        if any(k in name_lower for k in ["impact", "bebas", "montserrat", "gotham", "black", "heavy", "bold", "anton"]):
+            categories.append("high_ctr_impact")
+            
+        # Category 2: Anime & Manga Action Typefaces
+        if any(k in name_lower for k in ["bangers", "komika", "manga", "anime", "brush", "marker", "ninja", "samurai", "action"]):
+            categories.append("anime_styled_display")
+            
+        # Category 3: Realistic Cinematic & Theatrical Serifs
+        if any(k in name_lower for k in ["trajan", "garamond", "bodoni", "cinzel", "serif", "times", "georgia", "baskerville", "classic"]):
+            categories.append("cinematic_theatrical")
+            
+        # Category 4: Cyberpunk & Sci-Fi Monospace Tech Typefaces
+        if any(k in name_lower for k in ["console", "courier", "mono", "tech", "digital", "pixel", "cyber", "code", "matrix"]):
+            categories.append("cyberpunk_tech")
+            
+        # Category 5: Clean Modern Minimalist Sans-Serifs
+        if any(k in name_lower for k in ["arial", "helvetica", "roboto", "open_sans", "lato", "futura", "segoe", "tahoma"]):
+            categories.append("modern_minimalist")
+            
+        if not categories:
+            categories.append("general_purpose")
+            
+        return categories
+
+    # =====================================================================
+    # DETERMINISTIC FONT SCANNING & INDEXING ENGINE
+    # =====================================================================
+    def _create_physical_fallback_font(self, font_name):
+        """Rule 10: Synthesizes physical placeholder TTF files to prevent downstream crash."""
+        fallback_path = os.path.join(self.local_fonts_dir, f"{font_name}.ttf")
+        if not os.path.exists(fallback_path):
+            try:
+                with open(fallback_path, "wb") as f:
+                    # Write minimal binary signature to simulate TTF structure
+                    f.write(b"\x00\x01\x00\x00\x00\x00OMNIMATRIX_FONT_PLACEHOLDER")
+            except Exception:
+                pass
+        return fallback_path
 
     def scan_and_load_fonts(self):
-        print(f"[{self.agent_name}] Initializing system fonts loader & scanner...")
+        self._handshake("IN_PROGRESS")
+        self.log("Initiating cross-platform system fonts discovery and style indexing...")
+        
         font_dirs = self._get_os_font_directories()
+        self.log(f"Active repositories identified for traversal: {len(font_dirs)} directories.")
         
         registered_fonts = {}
-        high_ctr_keywords = ["impact", "arial", "bold", "black", "montserrat", "bebas", "gotham"]
+        category_counts = {
+            "high_ctr_impact": 0,
+            "anime_styled_display": 0,
+            "cinematic_theatrical": 0,
+            "cyberpunk_tech": 0,
+            "modern_minimalist": 0,
+            "general_purpose": 0
+        }
+        
+        # Rule 17: I/O and memory safeguard - cap indexing at 800 fonts to prevent JSON manifest bloat
+        max_fonts_to_index = 800
+        total_fonts_indexed = 0
 
-        print(f"[{self.agent_name}] Scanning system paths: {font_dirs}")
-
-        # Walking through directories to find TTF and OTF fonts
-        font_count = 0
         for directory in font_dirs:
-            if not os.path.exists(directory):
-                continue
-            
+            if total_fonts_indexed >= max_fonts_to_index:
+                self.log(f"Rule 17 Safeguard: Indexing ceiling ({max_fonts_to_index}) reached. Terminating traversal safely.", "WARNING")
+                break
+                
             for root, dirs, files in os.walk(directory):
-                for file in files:
-                    ext = os.path.splitext(file)[1].lower()
-                    if ext in [".ttf", ".otf"]:
-                        font_name = os.path.splitext(file)[0]
-                        font_path = os.path.join(root, file)
+                if total_fonts_indexed >= max_fonts_to_index:
+                    break
+                    
+                for file_name in files:
+                    if total_fonts_indexed >= max_fonts_to_index:
+                        break
                         
-                        # Normalize name for easy matching
-                        normalized_name = font_name.lower().replace(" ", "_")
+                    extension = os.path.splitext(file_name)[1].lower()
+                    if extension in [".ttf", ".otf", ".woff", ".woff2"]:
+                        font_family = os.path.splitext(file_name)[0]
+                        absolute_path = os.path.join(root, file_name).replace("\\", "/")
                         
-                        # Category Tagging: Check if this font is ideal for High-CTR Anime thumbnails
-                        is_high_ctr = any(keyword in normalized_name for keyword in high_ctr_keywords)
+                        try:
+                            size_kb = round(os.path.getsize(absolute_path) / 1024.0, 2)
+                        except Exception:
+                            size_kb = 0.0
+
+                        style_categories = self._classify_font_style(font_family)
                         
-                        registered_fonts[font_name] = {
-                            "font_family": font_name,
-                            "file_name": file,
-                            "absolute_path": font_path,
-                            "extension": ext,
-                            "is_high_ctr_recommended": is_high_ctr
+                        registered_fonts[font_family] = {
+                            "font_family_name": font_family,
+                            "file_name": file_name,
+                            "absolute_file_path": absolute_path,
+                            "file_extension": extension,
+                            "file_size_kb": size_kb,
+                            "production_style_categories": style_categories,
+                            "is_high_ctr_recommended": "high_ctr_impact" in style_categories
                         }
-                        font_count += 1
+                        
+                        for cat in style_categories:
+                            if cat in category_counts:
+                                category_counts[cat] += 1
+                                
+                        total_fonts_indexed += 1
 
-        # Fallback layer: Agar system me security restrictions ki wajah se fonts na milein (or dry-run test)
-        if font_count == 0:
-            print(f"[{self.agent_name}] No system fonts scanned. Creating standard web-safe fallback registry.")
-            fallback_fonts = ["Arial", "Impact", "Helvetica", "TrebuchetMS"]
-            for f in fallback_fonts:
-                registered_fonts[f] = {
-                    "font_family": f,
-                    "file_name": f"{f}.ttf",
-                    "absolute_path": f"system_fallback_path/{f}.ttf",
-                    "extension": ".ttf",
-                    "is_high_ctr_recommended": True if f in ["Impact", "Arial"] else False
+        # Rule 10: 100% Offline Autonomy - Inject physical fallbacks if system repositories are unpopulated
+        if total_fonts_indexed == 0:
+            self.log("No system fonts detected. Synthesizing physical fallback typefaces and default registry.", "WARNING")
+            
+            fallbacks = [
+                ("Impact_Omni", ["high_ctr_impact", "modern_minimalist"]),
+                ("Bangers_Omni", ["anime_styled_display", "high_ctr_impact"]),
+                ("Cinzel_Omni", ["cinematic_theatrical"]),
+                ("CyberMono_Omni", ["cyberpunk_tech"]),
+                ("Arial_Omni", ["modern_minimalist", "general_purpose"])
+            ]
+            
+            for name, cats in fallbacks:
+                phys_path = self._create_physical_fallback_font(name)
+                registered_fonts[name] = {
+                    "font_family_name": name,
+                    "file_name": f"{name}.ttf",
+                    "absolute_file_path": phys_path.replace("\\", "/"),
+                    "file_extension": ".ttf",
+                    "file_size_kb": 1.0,
+                    "production_style_categories": cats,
+                    "is_high_ctr_recommended": "high_ctr_impact" in cats
                 }
-            font_count = len(fallback_fonts)
+                for c in cats:
+                    if c in category_counts:
+                        category_counts[c] += 1
+                total_fonts_indexed += 1
 
-        # Output payload compilation
         manifest_payload = {
             "agent_executed": self.agent_name,
-            "detected_os": platform.system(),
-            "scanned_directories": font_dirs,
-            "total_fonts_registered": font_count,
-            "fonts_database": registered_fonts
+            "execution_timestamp": time.time(),
+            "operating_system_environment": platform.system(),
+            "traversed_directories": font_dirs,
+            "total_fonts_cataloged": total_fonts_indexed,
+            "style_category_distribution": category_counts,
+            "typography_database": registered_fonts
         }
 
-        self._save_manifest(manifest_payload)
+        with open(self.output_manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest_payload, f, indent=4)
+
+        self.log(f"Typography system manifest locked: '{self.output_manifest_path}'", "SUCCESS")
+        self._handshake("COMPLETED")
         return manifest_payload
 
-    def _save_manifest(self, data):
-        try:
-            with open(self.output_fonts_manifest, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            print(f"[{self.agent_name}] Fonts system loader manifest saved to '{self.output_fonts_manifest}'")
-        except Exception as e:
-            print(f"[{self.agent_name}] Error writing fonts database manifest: {str(e)}")
-
 if __name__ == "__main__":
-    loader = FontsSystemLoader()
-    result = loader.scan_and_load_fonts()
-    
-    print("\n--- Z-NET FONTS SYSTEM LOADER: AGENT 53 COMPLETE ---")
-    print(f"Operating System: {result['detected_os']}")
-    print(f"Total Fonts Scanned & Registered: {result['total_fonts_registered']}")
-    
-    # Recommended high CTR fonts display filter
-    high_ctr_list = [meta["font_family"] for name, meta in result["fonts_database"].items() if meta["is_high_ctr_recommended"]]
-    print(f"High-CTR Recommended Fonts Found: {len(high_ctr_list)}")
-    if high_ctr_list:
-        print(f"  Top Picks: {', '.join(high_ctr_list[:8])}...")
-    print("---------------------------------------------------------")
+    loader = Agent_53_Fonts_System_Loader()
+    loader.scan_and_load_fonts()
