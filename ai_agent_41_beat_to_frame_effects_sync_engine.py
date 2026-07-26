@@ -8,6 +8,7 @@ import random
 import subprocess
 import urllib.request
 import urllib.error
+from datetime import datetime
 
 # =====================================================================
 # RULE 2 & 14: UNIVERSAL ENVIRONMENT & DUAL API CONFIGURATION
@@ -30,15 +31,17 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
     and hit-stop frame freezing directly to acoustic beat maps and frequency bands.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
-        # Rule 8: AI vs Non-AI Naming enforcement
         self.agent_name = "Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine"
-        self.workspace_dir = workspace_dir
-        self.env_dir = os.path.join(self.workspace_dir, "Local_3D_Environments")
-        self.blender_path = "blender"
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_d_dir = os.path.join(self.workspace_dir, "Module_D_VFX_Studio")
+        
+        self.blender_path = os.environ.get("BLENDER_EXECUTABLE", "blender")
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
         
-        for directory in [self.workspace_dir, self.env_dir]:
+        for directory in [self.workspace_dir, self.env_dir, self.module_d_dir]:
             os.makedirs(directory, exist_ok=True)
             
         self._scrub_legacy_assets()
@@ -47,9 +50,8 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
         print(f"[{level}] [{self.agent_name}] {message}")
 
     def _scrub_legacy_assets(self):
-        """Rule 3: Idempotency scrubbing of previous beat sync blueprints and temporary scripts."""
         for filename in ["41_beat_sync_blueprint.json", "temp_beat_sync.py"]:
-            file_path = os.path.join(self.workspace_dir, filename)
+            file_path = os.path.join(self.module_d_dir, filename)
             if os.path.exists(file_path):
                 try:
                     os.remove(file_path)
@@ -79,7 +81,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
         
         if status == "COMPLETED":
             # Handoff to Module E: FFmpeg Video Assembler
-            data["orchestrator_matrix"]["next_agent"] = "Agent_42_FFmpeg_Raw_Buffer_Collector"
+            data["orchestrator_matrix"]["next_agent"] = "agent_42_ffmpeg_raw_buffer_collector"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
@@ -94,25 +96,23 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return {
-                        "style": data.get("global_style", "realistic").lower(),
+                        "style": data.get("global_style", "anime_cel_shaded").lower(),
                         "theme": data.get("theme", "kinetic_action")
                     }
             except Exception:
                 pass
-        return {"style": "realistic", "theme": "limitless_rhythm"}
+        return {"style": "anime_cel_shaded", "theme": "limitless_rhythm"}
 
     def _load_rhythm_events(self):
-        """Fetches audio beat drops from Module B or visual cues from Module A/D."""
         matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
-        blur_path = os.path.join(self.workspace_dir, "40_motion_blur_blueprint.json")
+        blur_path = os.path.join(self.module_d_dir, "40_motion_blur_blueprint.json")
         rhythm_contexts = []
 
-        # 1. Attempt to extract acoustic beat maps from Module B Audio Commandos
         if os.path.exists(matrix_path):
             try:
                 with open(matrix_path, "r", encoding="utf-8") as f:
                     state = json.load(f)
-                    beat_events = state.get("module_b_audio", {}).get("phonk_beat_map", {}).get("beat_sync_events", [])
+                    beat_events = state.get("orchestrator_matrix", {}).get("module_b_audio", {}).get("phonk_beat_map", {}).get("beat_sync_events", [])
                     for event in beat_events:
                         rhythm_contexts.append({
                             "timestamp_sec": float(event.get("timestamp_sec", 0.0)),
@@ -122,7 +122,6 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
             except Exception:
                 pass
 
-        # 2. Fallback to velocity peaks from Agent 40 Motion Blur
         if not rhythm_contexts and os.path.exists(blur_path):
             try:
                 with open(blur_path, "r", encoding="utf-8") as f:
@@ -148,7 +147,6 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
         return rhythm_contexts
 
     def _clean_json(self, raw_text):
-        """Rule 5: Bulletproof JSON scrubber."""
         cleaned = re.sub(r"^```(json)?\s*|\s*```$", "", raw_text.strip(), flags=re.IGNORECASE)
         start_index = cleaned.find('{')
         end_index = cleaned.rfind('}')
@@ -170,7 +168,6 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
         config = self._load_config()
         self.log(f"Quad-Core Beat Sync Forge Initiated. Style: {config['style'].upper()} | Theme: {config['theme']}")
         
-        # Rule 15: Pure Mathematical Rhythm Recipe (ZERO Hardcoded Preset Gulaami!)
         prompt = (
             f"You are OMNIMATRIX Lead VFX Rhythm Specialist. Global Style: '{config['style']}', Theme: '{config['theme']}'.\n"
             "Invent completely unique, limitless kinetic synchronization RECIPES for each acoustic rhythm event.\n"
@@ -189,10 +186,10 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
         output = None
         user_msg = f"Rhythm Events Context:\n{json.dumps(rhythms)}"
         
-        # Core 1: Gemini (Primary - Rule 14 & 16)
+        # Core 1: Gemini
         if self.gemini_key and not output:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_key}"
                 payload = {
                     "contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}],
                     "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}
@@ -203,7 +200,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
             except Exception as e:
                 self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
         
-        # Core 2: OpenAI (Failsafe - Rule 14 & 16)
+        # Core 2: OpenAI
         if self.openai_key and not output:
             try:
                 url = "https://api.openai.com/v1/chat/completions"
@@ -218,7 +215,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
             except Exception as e:
                 self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
         
-        # Core 3: Ollama (Local Fallback - Rule 6)
+        # Core 3: Ollama
         if not output:
             try:
                 url = "http://localhost:11434/api/chat"
@@ -234,7 +231,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
             except Exception as e:
                 self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
         
-        # Core 4: 100% Offline Math Autonomy (Rule 10 - Algorithmic Rhythm Synthesis)
+        # Core 4: 100% Offline Math Autonomy
         if not output:
             self.log("[Core 4: Math Fallback] Engaging offline acoustic float synthesis algorithm...", "WARNING")
             bands = ["sub_bass_drop", "mid_range_melody", "transient_snare_spike", "high_presence_tick"]
@@ -243,7 +240,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
                 random.seed(int((item["timestamp_sec"] + index + 41) * 1000))
                 energy = float(item.get("implied_energy", 1.5))
                 is_heavy = energy > 1.8 or "bass" in str(item.get("intensity_band", "")).lower()
-                is_anime = config["style"] == "anime"
+                is_anime = "anime" in config["style"]
                 
                 output["beat_sync_profiles"].append({
                     "timestamp_sec": item["timestamp_sec"],
@@ -257,7 +254,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
                     "rgb_split_chromatic_aberration": round(energy * 0.06, 3) if is_heavy else 0.0
                 })
         
-        blueprint_path = os.path.join(self.workspace_dir, "41_beat_sync_blueprint.json")
+        blueprint_path = os.path.join(self.module_d_dir, "41_beat_sync_blueprint.json")
         with open(blueprint_path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=4)
             
@@ -277,14 +274,12 @@ import bpy
 import math
 import random
 
-# Rule 17: VRAM safety cap - process maximum 60 acoustic synchronization events
 profiles = {sync_json}[:60]
 profiles.sort(key=lambda x: x.get('timestamp_sec', 0.0))
 
 scene = bpy.context.scene
 fps = scene.render.fps
 
-# 1. Setup Compositor for RGB Chromatic Aberration
 scene.use_nodes = True
 tree = scene.node_tree
 
@@ -303,7 +298,6 @@ if not lens_node:
         tree.links.new(render_layers.outputs[0], lens_node.inputs[0])
         tree.links.new(lens_node.outputs[0], composite.inputs[0])
 
-# Initialize optical dispersion baseline at frame 1
 lens_node.inputs['Dispersion'].default_value = 0.0
 lens_node.inputs['Dispersion'].keyframe_insert(data_path="default_value", frame=1)
 
@@ -313,7 +307,6 @@ for profile in profiles:
     impact_frame = max(1, int(profile['timestamp_sec'] * fps))
     style = str(profile.get('render_style_enforced', 'realistic')).lower()
     
-    # A. Execute RGB Split Chromatic Aberration Pulse
     aberration = float(profile.get('rgb_split_chromatic_aberration', 0.0))
     if aberration > 0.0:
         lens_node.inputs['Dispersion'].default_value = 0.0
@@ -322,11 +315,10 @@ for profile in profiles:
         lens_node.inputs['Dispersion'].default_value = aberration
         lens_node.inputs['Dispersion'].keyframe_insert(data_path="default_value", frame=impact_frame)
         
-        fade_duration = 4 if style == 'anime' else 12
+        fade_duration = 4 if 'anime' in style else 12
         lens_node.inputs['Dispersion'].default_value = 0.0
         lens_node.inputs['Dispersion'].keyframe_insert(data_path="default_value", frame=impact_frame + fade_duration)
     
-    # B. Execute Physical Camera Shake & Acoustic Resonance (Rule 12)
     amplitude = float(profile.get('camera_shake_amplitude', 0.0))
     vibe_freq = float(profile.get('acoustic_vibration_frequency', 0.0))
     
@@ -336,13 +328,12 @@ for profile in profiles:
         
         camera_object.keyframe_insert(data_path="location", frame=max(1, impact_frame - 1))
         
-        # Immediate physical kinetic impact
         camera_object.location.x += random.uniform(-displacement, displacement)
         camera_object.location.y += random.uniform(-displacement, displacement)
         camera_object.location.z += random.uniform(-displacement, displacement)
         camera_object.keyframe_insert(data_path="location", frame=impact_frame)
         
-        decay_steps = 4 if style == 'anime' else 10
+        decay_steps = 4 if 'anime' in style else 10
         for step in range(1, decay_steps):
             decay_factor = displacement / (step + 1)
             camera_object.location.x = original_location.x + random.uniform(-decay_factor, decay_factor)
@@ -353,7 +344,6 @@ for profile in profiles:
         camera_object.location = original_location
         camera_object.keyframe_insert(data_path="location", frame=impact_frame + decay_steps)
 
-        # Rule 12: Inject F-Curve Noise modifier for continuous acoustic sub-bass resonance
         if vibe_freq > 4.0 and camera_object.animation_data and camera_object.animation_data.action:
             for fcurve in camera_object.animation_data.action.fcurves:
                 if fcurve.data_path == "location":
@@ -363,15 +353,13 @@ for profile in profiles:
                     noise_modifier.frame_start = impact_frame
                     noise_modifier.frame_end = impact_frame + decay_steps + 8
 
-        # Enforce style interpolation
         if camera_object.animation_data and camera_object.animation_data.action:
             for fcurve in camera_object.animation_data.action.fcurves:
                 if fcurve.data_path == "location":
                     for keyframe in fcurve.keyframe_points:
                         if impact_frame - 1 <= keyframe.co.x <= impact_frame + decay_steps:
-                            keyframe.interpolation = 'CONSTANT' if style == 'anime' else 'BEZIER'
+                            keyframe.interpolation = 'CONSTANT' if 'anime' in style else 'BEZIER'
                             
-    # C. Execute Hit-Stop Timeline Markers (FPS Stutter Freeze for Anime Impacts)
     if profile.get('fps_stutter_trigger', False):
         marker_name = f"OMNIMATRIX_HIT_STOP_{{impact_frame}}"
         if marker_name not in scene.timeline_markers:
@@ -382,21 +370,23 @@ try:
 except Exception:
     pass
 """
-        script_path = os.path.join(self.workspace_dir, "temp_beat_sync.py")
+        script_path = os.path.join(self.module_d_dir, "temp_beat_sync.py")
         with open(script_path, "w", encoding="utf-8") as f:
-  f.write(script_content)
-
-        for filename in os.listdir(self.env_dir):
-            if filename.endswith(".blend"):
-                try:
-                    subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, filename), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
-                except Exception as error:
-                    self.log(f"Blender sub-process execution warning on {filename}: {error}", "WARNING")
-                    
+            f.write(script_content)
+            
+        if os.path.exists(self.env_dir):
+            for file in os.listdir(self.env_dir):
+                if file.endswith(".blend"):
+                    try:
+                        subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, file), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                    except Exception as e:
+                        self.log(f"Blender sync execution exception on {file}: {e}", "WARNING")
+                        
         if os.path.exists(script_path):
             os.remove(script_path)
-        self.log("Universal acoustic beat synchronization and kinetic impacts keyframed successfully.", "SUCCESS")
+            
+        self.log("Blender kinetic beat synchronization compilation complete!", "SUCCESS")
 
 if __name__ == "__main__":
     engine = Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine()
-    engine.design_beat_sync_keyframes()
+  
