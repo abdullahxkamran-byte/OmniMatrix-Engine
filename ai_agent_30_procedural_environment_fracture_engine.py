@@ -52,7 +52,7 @@ class Ai_Agent_30_Procedural_Environment_Fracture_Engine:
         
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.ollama_url = "http://localhost:11434/api/chat"
         self.model_local = "llama3"
@@ -304,7 +304,7 @@ try:
             target_obj.hide_render = True
             target_obj.hide_viewport = True
             
-            # 4. RIGID BODY KINEMATIC STATE TRANSITION (THE PROOF!)
+            # 4. RIGID BODY KINEMATIC STATE TRANSITION
             bpy.ops.object.select_all(action='DESELECT')
             fractured_chunks = [obj for obj in bpy.context.scene.objects if target_obj.name + "_cell" in obj.name]
             
@@ -318,7 +318,7 @@ try:
                 chunk.rigid_body.mass = mass
                 chunk.rigid_body.type = 'ACTIVE'
                 chunk.rigid_body.collision_shape = 'CONVEX_HULL'
-                chunk.rigid_body.kinematic = True # Locked prior to impact
+                chunk.rigid_body.kinematic = True
                 
                 # Release physics EXACTLY on impact frame
                 chunk.rigid_body.keyframe_insert(data_path="kinematic", frame=max(1, frame - 1))
@@ -338,18 +338,16 @@ try:
             bomb.field.strength = 0.0
             bomb.field.keyframe_insert(data_path="strength", frame=frame + 2)
                 
-            # 6. SAKUGA ANTI-GRAVITY MANIPULATION (ANIME FLOAT PROOF!)
+            # 6. SAKUGA ANTI-GRAVITY MANIPULATION
             scene = bpy.context.scene
             if behavior == "anti_gravity_float":
                 scene.use_gravity = True
                 scene.gravity[2] = -9.81
                 scene.keyframe_insert(data_path="gravity", index=2, frame=max(1, frame - 1))
                 
-                # Zero-G upward float during sakuga freeze
                 scene.gravity[2] = 2.5
                 scene.keyframe_insert(data_path="gravity", index=2, frame=frame)
                 
-                # Heavy slam back down to earth
                 scene.gravity[2] = 2.5
                 scene.keyframe_insert(data_path="gravity", index=2, frame=frame + 28)
                 scene.gravity[2] = -24.0
@@ -389,8 +387,8 @@ except Exception as error:
                     if context["has_heavy_impact"]:
                         self.log(f"[{scene_name}] Heavy impact mapped at Frame {context['impact_frame']}. Executing Voronoi fracture protocol...", "INFO")
                         dest_data = self._query_destruction_intelligence(scene_name, context)
-     
-self.log(f"[{scene_name}] Fracture Verdict -> {dest_data['rationale']} (Chunks: {dest_data['shatter_chunk_count']} | Force: {dest_data['explosion_strength']})", "INFO")
+                        
+                        self.log(f"[{scene_name}] Fracture Verdict -> {dest_data['rationale']} (Chunks: {dest_data['shatter_chunk_count']} | Force: {dest_data['explosion_strength']})", "INFO")
                         
                         script_path = self._compile_blender_destruction_script(blend_path, dest_data, context["global_style"])
                         cmd = [context["blender_executable"], "-b", "-P", script_path]
