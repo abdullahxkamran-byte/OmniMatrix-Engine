@@ -4,6 +4,7 @@ import json
 import shutil
 import time
 import subprocess
+import glob
 
 # =====================================================================
 # RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
@@ -21,15 +22,18 @@ load_env_file()
 
 class Agent_44_GPU_Hardware_Accelerated_Encoder:
     """
-    OMNIMATRIX V2.0 PURE UTILITY: GPU HARDWARE ACCELERATED ENCODER
+    OMNIMATRIX V2.0 PURE UTILITY: GPU HARDWARE ACCELERATED ENCODER (SUPERCHARGED)
     Auto-detects system rendering hardware (NVIDIA NVENC, AMD AMF, Intel QSV, Apple VCE).
     Executes high-speed hardware video encoding with automated CPU fallback recovery
     for seamless execution across local IDEs and cloud environments (e.g., Google Colab T4).
+    Features smart upstream intermediate stream discovery.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
         # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
         self.agent_name = "Agent_44_GPU_Hardware_Accelerated_Encoder"
-        self.workspace_dir = workspace_dir
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        
         self.merger_manifest_path = os.path.join(self.workspace_dir, "43_merged_av_blueprint.json")
         self.intermediate_video_path = os.path.join(self.workspace_dir, "43_intermediate_merged_output.mp4")
         self.output_gpu_video = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4")
@@ -38,7 +42,8 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
         self._scrub_legacy_assets()
 
     def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+        formatted = f"[{level}] [{self.agent_name}] {message}"
+        print(formatted)
 
     def _scrub_legacy_assets(self):
         """Rule 3: Idempotency scrubbing of previous hardware encoding outputs and blueprints."""
@@ -72,14 +77,45 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
         })
         
         if status == "COMPLETED":
-            # Advance atomic handshake to Agent 45 (Bitrate Optimizer & Compression Engine)
-            data["orchestrator_matrix"]["next_agent"] = "Agent_45_Bitrate_Optimizer_Compression_Engine"
+            # Advance atomic handshake to Agent 45 in strict lowercase standard
+            data["orchestrator_matrix"]["next_agent"] = "agent_45_bitrate_optimizer_compression_engine"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
         except Exception as error:
             self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
+
+    # =====================================================================
+    # SMART UPSTREAM VIDEO DISCOVERY (RULE 10)
+    # =====================================================================
+    def _find_intermediate_input(self):
+        """Locates intermediate video stream from Agent 43 or autonomous scanning."""
+        if os.path.exists(self.intermediate_video_path) and os.path.getsize(self.intermediate_video_path) > 100:
+            self.log(f"Verified intermediate video stream at default path: '{self.intermediate_video_path}'", "SUCCESS")
+            return self.intermediate_video_path
+
+        if os.path.exists(self.merger_manifest_path):
+            try:
+                with open(self.merger_manifest_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    recorded_path = data.get("output_video_path")
+                    if recorded_path and os.path.exists(recorded_path) and os.path.getsize(recorded_path) > 100:
+                        self.log(f"Discovered intermediate video via manifest: '{recorded_path}'", "SUCCESS")
+                        return recorded_path
+            except Exception:
+                pass
+
+        # Fallback: recursively search for any recent mp4 file created in the workspace
+        self.log("Default intermediate file missing. Searching workspace for multiplexed video assets...", "WARNING")
+        mp4_files = glob.glob(os.path.join(self.workspace_dir, "**", "*.mp4"), recursive=True)
+        for mp4 in mp4_files:
+            if "43_" in os.path.basename(mp4) or "intermediate" in os.path.basename(mp4):
+                if os.path.getsize(mp4) > 100:
+                    self.log(f"Autonomous scanner located intermediate stream: '{mp4}'", "SUCCESS")
+                    return mp4
+
+        return None
 
     # =====================================================================
     # HARDWARE AUTO-SENSING ENGINE (NVIDIA / AMD / INTEL / APPLE / CPU)
@@ -100,17 +136,18 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
             # Priority 1: NVIDIA NVENC (Optimal for Google Colab T4 GPU & Local RTX/GTX)
             if "h264_nvenc" in encoders_output:
                 self.log("NVIDIA NVENC hardware acceleration architecture detected!", "SUCCESS")
-                return "h264_nvenc", {"preset": "p4", "tune": "hq", "rc": "vbr"}
+                # Optimized Colab T4 flags: p4 preset, constant quality 19, zero max bitrate bottlenecks
+                return "h264_nvenc", {"preset": "p4", "tune": "hq", "rc": "vbr", "cq": "19", "b:v": "0"}
             
             # Priority 2: Intel QuickSync Video (QSV)
             elif "h264_qsv" in encoders_output:
                 self.log("Intel QuickSync (QSV) hardware acceleration architecture detected!", "SUCCESS")
-                return "h264_qsv", {"preset": "fast"}
+                return "h264_qsv", {"preset": "fast", "global_quality": "20"}
             
             # Priority 3: AMD Advanced Media Framework (AMF)
             elif "h264_amf" in encoders_output:
                 self.log("AMD AMF hardware acceleration architecture detected!", "SUCCESS")
-                return "h264_amf", {"quality": "quality"}
+                return "h264_amf", {"quality": "quality", "rc": "vbr_latency", "qp_p": "18"}
             
             # Priority 4: Apple Silicon / macOS VideoToolbox
             elif "h264_videotoolbox" in encoders_output:
@@ -119,28 +156,26 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
             
             else:
                 self.log("Dedicated hardware encoder undetected. Selecting standard CPU codec [libx264].", "INFO")
-                return "libx264", {"preset": "medium", "crf": "18"}
+                return "libx264", {"preset": "fast", "crf": "18"}
 
         except Exception as error:
             self.log(f"Hardware driver inquiry exception: {error}. Safe defaulting to CPU [libx264].", "WARNING")
-            return "libx264", {"preset": "medium", "crf": "18"}
+            return "libx264", {"preset": "fast", "crf": "18"}
 
     # =====================================================================
     # RULE 9: ACTIONABLE FFMPEG ENCODING COMPILER
     # =====================================================================
-    def _assemble_encoding_command(self, gpu_codec, codec_flags):
+    def _assemble_encoding_command(self, gpu_codec, codec_flags, input_path):
         """Constructs actionable hardware or fallback CPU encoding directives."""
         cmd = ["ffmpeg", "-y"]
 
-        # Ingest intermediate video generated by Agent 43 if physically present
-        if os.path.exists(self.intermediate_video_path) and os.path.getsize(self.intermediate_video_path) > 100:
-            self.log(f"Ingesting intermediate multiplexed stream: '{self.intermediate_video_path}'", "SUCCESS")
-            cmd.extend(["-i", self.intermediate_video_path])
+        if input_path and os.path.exists(input_path):
+            cmd.extend(["-i", input_path])
         else:
             # Rule 10: Autonomous fallback if intermediate file is absent
             self.log("Intermediate multiplexed stream missing. Ingesting raw visual pattern fallback.", "WARNING")
             fallback_pattern = os.path.join(self.workspace_dir, "render_output", "frame_%04d.png")
-            if os.path.exists(os.path.dirname(fallback_pattern)):
+            if os.path.exists(os.path.dirname(fallback_pattern)) and glob.glob(os.path.join(self.workspace_dir, "render_output", "*.png")):
                 cmd.extend(["-framerate", "24", "-i", fallback_pattern])
             else:
                 self.log("No visual assets available. Generating synthetic test stream for encoding verification.", "WARNING")
@@ -151,7 +186,7 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
         for flag, value in codec_flags.items():
             cmd.extend([f"-{flag}", value])
 
-        # Ensure high-fidelity pixel formatting and copy audio stream directly
+        # Ensure high-fidelity pixel formatting and copy audio stream directly to preserve DSP quality
         cmd.extend([
             "-pix_fmt", "yuv420p",
             "-c:a", "copy",
@@ -164,8 +199,9 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
         self._handshake("IN_PROGRESS")
         self.log("Initiating GPU hardware-accelerated video encoding sequence...")
 
+        input_video = self._find_intermediate_input()
         gpu_codec, codec_flags = self._detect_gpu_acceleration_codec()
-        cmd = self._assemble_encoding_command(gpu_codec, codec_flags)
+        cmd = self._assemble_encoding_command(gpu_codec, codec_flags, input_video)
         command_string = " ".join(cmd)
         
         self.log(f"Compiled Actionable Hardware Encoding Command:\n{command_string}")
@@ -207,10 +243,10 @@ class Agent_44_GPU_Hardware_Accelerated_Encoder:
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
             error_details = getattr(error, 'stderr', str(error))
-            self.log(f"Hardware encoding exception encountered: {error_details}. Triggering immediate CPU recovery mode...", "WARNING")
+            self.log(f"Hardware encoding exception encountered: {error_details[-500:]}\nTriggering immediate CPU recovery mode...", "WARNING")
 
             # Fallback recovery: Switch to CPU libx264 to prevent pipeline crash
-            cpu_cmd = self._assemble_encoding_command("libx264", {"preset": "fast", "crf": "20"})
+            cpu_cmd = self._assemble_encoding_command("libx264", {"preset": "fast", "crf": "19"}, input_video)
             cpu_command_string = " ".join(cpu_cmd)
             self.log(f"Executing Safe CPU Recovery Command:\n{cpu_command_string}")
 
