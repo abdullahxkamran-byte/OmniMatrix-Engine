@@ -3,10 +3,13 @@ import re
 import sys
 import json
 import time
-import random
+import math
+import shutil
+import platform
 import urllib.request
 import urllib.parse
 import urllib.error
+from datetime import datetime
 
 # =====================================================================
 # RULE 2 & 14: UNIVERSAL ENVIRONMENT & DUAL API CONFIGURATION
@@ -33,8 +36,15 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
         # Rule 8: AI vs Non-AI Naming enforcement
         self.agent_name = "Ai_Agent_49_Autonomous_Vision_Media_Scout"
-        self.workspace_dir = workspace_dir
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        
         self.output_blueprint_path = os.path.join(self.workspace_dir, "49_media_scout_blueprint.json")
+        self.storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
+        
+        # Rule 17: Hardware and I/O safety ceilings
+        self.max_stock_downloads = 3
+        self.max_hero_frames_retained = 15
         
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
@@ -44,12 +54,15 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.ollama_url = "http://localhost:11434/api/chat"
+        self.model_local = "llama3"
+        self.model_cloud = "gpt-4o-mini"
         
         os.makedirs(self.workspace_dir, exist_ok=True)
         self._scrub_legacy_assets()
 
     def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+        formatted = f"[{level}] [{self.agent_name}] {message}"
+        print(formatted)
 
     def _scrub_legacy_assets(self):
         """Rule 3: Idempotency scrubbing of previous media scout blueprints."""
@@ -60,7 +73,7 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
                 self.log(f"Failed to scrub legacy blueprint {self.output_blueprint_path}: {error}", "WARNING")
 
     # =====================================================================
-    # RULE 7 & 4: ATOMIC HANDSHAKE & CONFIGURATION LOADERS
+    # RULE 7: ATOMIC HANDSHAKE & PIPELINE ROUTING
     # =====================================================================
     def _handshake(self, status="IN_PROGRESS"):
         matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
@@ -82,7 +95,7 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         
         if status == "COMPLETED":
             # Hand off to Agent 50 (High CTR Frame Extractor - Pure Utility)
-            data["orchestrator_matrix"]["next_agent"] = "Agent_50_High_CTR_Frame_Extractor"
+            data["orchestrator_matrix"]["next_agent"] = "agent_50_high_ctr_frame_extractor"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
@@ -105,10 +118,10 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         return valid_assets
 
     def _load_storyboard_scenes(self):
-        story_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
-        if os.path.exists(story_path):
+        """Ingests narrative visual sequences from Module A."""
+        if os.path.exists(self.storyboard_path):
             try:
-                with open(story_path, "r", encoding="utf-8") as f:
+                with open(self.storyboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return [
                         {
@@ -118,12 +131,14 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
                         }
                         for idx, panel in enumerate(data.get("storyboard_panels", []))
                     ]
-            except Exception:
-                pass
+            except Exception as error:
+                self.log(f"Storyboard ingestion exception: {error}", "WARNING")
+        
+        self.log("Storyboard sequence absent. Injecting baseline acoustic narrative scenes.", "INFO")
         return [
-            {"timestamp_sec": 1.5, "description": "dark anime background with storm clouds and lightning", "mood": "HYPED_CLIMAX"},
-            {"timestamp_sec": 4.2, "description": "cinematic retro neon city street raining at night", "mood": "EPIC_REVEAL"},
-            {"timestamp_sec": 7.8, "description": "glowing stars celestial galaxy deep space background", "mood": "COOL_NIGHT_AESTHETIC"}
+            {"timestamp_sec": 1.5, "description": "High-contrast cyberpunk atmosphere with crackling plasma lightning", "mood": "HYPED_CLIMAX"},
+            {"timestamp_sec": 4.5, "description": "Cinematic wide shot of ruined monoliths under torrential rain", "mood": "EPIC_REVEAL"},
+            {"timestamp_sec": 8.0, "description": "Extreme close-up of protagonist eyes reflecting crimson energy", "mood": "SHOWDOWN_INTENSITY"}
         ]
 
     def _clean_json(self, raw_text):
@@ -146,7 +161,7 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
     def _download_remote_media(self, url, filename):
         file_path = os.path.join(self.workspace_dir, filename)
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
             with urllib.request.urlopen(req, timeout=30) as response, open(file_path, 'wb') as out_file:
                 out_file.write(response.read())
             return file_path
@@ -197,7 +212,7 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
             except Exception as error:
                 self.log(f"Pixabay API inquiry failure: {error}", "WARNING")
 
-        self.log(f"Stock asset matching failed or API keys unpopulated for query: '{query_string}'", "INFO")
+        self.log(f"Stock asset matching failed or API keys absent for query: '{query_string}'", "INFO")
         return None
 
     # =====================================================================
@@ -210,25 +225,26 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         
         self.log(f"Autonomous Vision Scout Initiated. Local Master Assets Detected: {len(local_videos)}")
 
-        # Rule 17: Rate limit safeguard - download maximum 3 stock clips if local assets are insufficient
+        # Rule 17: Rate limit safeguard - download maximum 3 stock clips if local assets are absent
         scouted_stock_paths = []
         if not local_videos or len(local_videos) == 0:
             self.log("Local master video undetected. Initiating auxiliary stock b-roll acquisition...", "WARNING")
-            for scene in scenes[:3]: # Cap at top 3 scenes to preserve API bandwidth
-                clean_query = " ".join(re.findall(r'\b[a-zA-Z]{3,}\b', scene.get("description", ""))[:3])
-                if clean_query:
-                    clip_path = self.scout_stock_background_video(clean_query)
-                    if clip_path:
-                        scouted_stock_paths.append(clip_path)
+            for scene in scenes[:self.max_stock_downloads]:
+                # Extract high-value semantic tokens for search query
+                tokens = re.findall(r'\b[a-zA-Z]{4,}\b', scene.get("description", ""))
+                clean_query = " ".join(tokens[:3]) if tokens else "cinematic background"
+                clip_path = self.scout_stock_background_video(clean_query)
+                if clip_path:
+                    scouted_stock_paths.append(clip_path)
 
-        # Rule 15: Pure mathematical & visual CTR scoring formulation
+        # Rule 15: Limitless continuous CTR scoring formulation
         prompt = (
             "You are OMNIMATRIX Lead Computer Vision & High-CTR Media Scout.\n"
-            "Analyze the storyboard sequence and media inventory to predict and map exact timestamp coordinates for the most visually stunning, high-energy Hero Frames.\n"
+            "Analyze storyboard sequences and media inventory to predict and map exact timestamp coordinates for peak Click-Through Rate (CTR) Hero Frames.\n"
             "CRITICAL CTR RULES:\n"
             "1. Evaluate emotional intensity, visual action, lighting contrast, and character presence.\n"
-            "2. Assign a precise float score (0.0 to 1.0) indicating viral thumbnail attractiveness.\n"
-            "Return STRICTLY a JSON object with key 'scouted_frames' containing a list of objects with:\n"
+            "2. Assign a continuous float score between 0.50 and 0.99 indicating viral thumbnail attractiveness.\n"
+            "Output STRICTLY a JSON object with key 'scouted_frames' containing a list of objects with:\n"
             "- 'timestamp_sec': float (exact second in sequence).\n"
             "- 'scout_score': float (rating from 0.50 to 0.99).\n"
             "- 'visual_description': string (detailed composition of the predicted frame).\n"
@@ -245,28 +261,21 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
 
         output = None
 
-        # Core 1: Gemini (Rule 14 & 16)
+        # Core 1: Gemini
         if self.gemini_key and not output:
             try:
                 url = f"{self.gemini_url}?key={self.gemini_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": f"{prompt}\n\nUser Context:\n{user_msg}"}]}],
-                    "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}
-                }
+                payload = {"contents": [{"parts": [{"text": f"{prompt}\n\nUser Context:\n{user_msg}"}]}], "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}}
                 res = self._api_call(url, payload, {"Content-Type": "application/json"})
                 output = json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"]))
                 self.log("[Core 1: Gemini] Synthesized high-CTR Hero Frame visual mapping!", "SUCCESS")
             except Exception as e:
                 self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
 
-        # Core 2: OpenAI Failsafe (Rule 14 & 16)
+        # Core 2: OpenAI Failsafe
         if self.openai_key and not output:
             try:
-                payload = {
-                    "model": "gpt-4o-mini",
-                    "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
-                    "response_format": {"type": "json_object"}
-                }
+                payload = {"model": self.model_cloud, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}
                 res = self._api_call(self.openai_url, payload, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
                 output = json.loads(self._clean_json(res["choices"][0]["message"]["content"]))
                 self.log("[Core 2: OpenAI] Synthesized high-CTR Hero Frame visual mapping!", "SUCCESS")
@@ -276,46 +285,47 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         # Core 3: Ollama Local Fallback
         if not output:
             try:
-                payload = {
-                    "model": "llama3",
-                    "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
-                    "format": "json",
-                    "stream": False
-                }
+                payload = {"model": self.model_local, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}
                 res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json"})
                 output = json.loads(self._clean_json(res.get("message", {}).get("content", "{}")))
                 self.log("[Core 3: Ollama] Generated local Hero Frame visual mapping!", "SUCCESS")
             except Exception as e:
                 self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
 
-        # Core 4: 100% Offline Math Autonomy (Rule 10)
+        # Core 4: 100% Offline Continuous Statistical CTR Alchemist (Rule 10)
         if not output:
-            self.log("[Core 4: Math Fallback] Engaging offline continuous CTR scoring algorithm...", "WARNING")
+            self.log("[Core 4: Math Fallback] Engaging offline continuous statistical CTR evaluation...", "WARNING")
             scouted_list = []
             for idx, scene in enumerate(scenes):
-                random.seed(int((scene.get("timestamp_sec", 1.0) + idx + 49) * 1000))
+                desc = str(scene.get("description", "")).upper()
                 mood = str(scene.get("mood", "")).upper()
-                is_climax = any(k in mood for k in ["CLIMAX", "HYPED", "ACTION", "EPIC", "SHOWDOWN"])
+                
+                # Continuous CTR scoring math based on action keyword density and temporal cadence
+                action_keywords = ["CLIMAX", "HYPED", "ACTION", "EPIC", "SHOWDOWN", "BLAST", "EXPLOSION", "STRIKE", "SLASH"]
+                density = sum(1 for kw in action_keywords if kw in desc or kw in mood)
+                base_score = 0.70 + min(0.28, (density * 0.08) + (math.sin(idx + 1) * 0.05))
+                computed_score = round(max(0.50, min(0.99, base_score)), 2)
                 
                 scouted_list.append({
                     "timestamp_sec": float(scene.get("timestamp_sec", idx * 3.0)),
-                    "scout_score": round(random.uniform(0.92, 0.98), 2) if is_climax else round(random.uniform(0.75, 0.88), 2),
-                    "visual_description": f"Hero frame extracted at peak action: {scene.get('description', 'cinematic atmosphere')}",
-                    "potential_use_case": "Primary YouTube Thumbnail" if is_climax else "TikTok Hook Preview",
-                    "color_dominance_prediction": "High-contrast vivid neon glow with deep cinematic shadows" if is_climax else "Balanced ambient atmospheric tones"
+                    "scout_score": computed_score,
+                    "visual_description": f"Hero frame evaluated at coordinate {scene.get('timestamp_sec', idx * 3.0)}s: {scene.get('description', 'nominal atmosphere')}",
+                    "potential_use_case": "Primary YouTube Thumbnail" if computed_score >= 0.88 else "TikTok Hook Preview",
+                    "color_dominance_prediction": "High-contrast vivid neon glow with deep cinematic shadows" if computed_score >= 0.88 else "Balanced ambient atmospheric tones"
                 })
             output = {"scouted_frames": scouted_list}
 
-        # Rule 17 Safeguard: Cap at top 15 Hero Frames by score to prevent downstream extraction overload
+        # Rule 17 Safeguard: Retain top 15 Hero Frames by score to prevent downstream extraction bloat
         frames = output.get("scouted_frames", [])
         frames.sort(key=lambda x: float(x.get("scout_score", 0.0)), reverse=True)
-        capped_frames = frames[:15]
+        capped_frames = frames[:self.max_hero_frames_retained]
 
         final_blueprint = {
             "agent_executed": self.agent_name,
-            "execution_timestamp": time.time(),
+            "execution_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "target_video_scouted": local_videos[0] if local_videos else "none",
             "scouted_stock_broll_clips": scouted_stock_paths,
+            "total_hero_frames_mapped": len(capped_frames),
             "scouted_frames": capped_frames
         }
 
