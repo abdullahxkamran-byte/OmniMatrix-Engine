@@ -282,11 +282,9 @@ try:
             for obj in bpy.context.scene.objects:
                 if obj.animation_data and obj.animation_data.action:
                     for fcurve in obj.animation_data.action.fcurves:
-                        # Skip camera location curves so camera shake remains active during the world pause!
                         if obj.type == 'CAMERA' and fcurve.data_path == 'location':
                             continue
                             
-                        # Shift all keyframes AFTER the impact point to create a true physical hold
                         for kf in fcurve.keyframe_points:
                             if kf.co[0] > impact_frame:
                                 kf.co[0] += freeze_frames
@@ -298,7 +296,6 @@ try:
         elif not is_anime and time_scale < 1.0:
             print("EXECUTING REALISTIC OPTICAL TIME DILATION...")
             bpy.context.scene.render.use_simplify = False
-            # Scale Blender rendering timeline FPS mapping
             bpy.context.scene.render.fps_base = 1.0 / max(0.1, time_scale)
 
         # --- 3. DYNAMIC OPTICAL PUNCH-IN ZOOM ---
@@ -310,11 +307,9 @@ try:
             cam.data.keyframe_insert(data_path="lens", frame=max(1, impact_frame - 1))
             original_lens = cam.data.lens
             
-            # Violent focal length punch-in
             cam.data.lens = original_lens + (zoom_amp * 18.0)
             cam.data.keyframe_insert(data_path="lens", frame=impact_frame)
             
-            # Snap back to nominal focal length post-freeze
             cam.data.lens = original_lens
             cam.data.keyframe_insert(data_path="lens", frame=impact_frame + freeze_frames + 3)
 
@@ -324,15 +319,13 @@ try:
             if cam.animation_data and cam.animation_data.action:
                 for fcurve in cam.animation_data.action.fcurves:
                     if fcurve.data_path == "location":
-                        # Scrub pre-existing noise modifiers
                         for mod in fcurve.modifiers:
                             if mod.type == 'NOISE':
                                 fcurve.modifiers.remove(mod)
                         
-                        # Inject high-frequency impact judder
                         mod = fcurve.modifiers.new('NOISE')
                         mod.strength = shake_str * 0.025
-                        mod.scale = 4.5 # High frequency rapid oscillation
+                        mod.scale = 4.5
                         mod.use_restricted_range = True
                         mod.frame_start = impact_frame
                         mod.frame_end = impact_frame + max(freeze_frames, 12)
@@ -383,7 +376,7 @@ except Exception as error:
                                 self.log(f"Hit-stop temporal dilation & camera judder baked successfully -> '{file_name}'", "SUCCESS")
                                 master_blueprint[scene_name] = time_data
                             else:
-   self.log(f"Blender temporal execution exception: {res.stdout[-300:]}", "ERROR")
+                                self.log(f"Blender temporal execution exception: {res.stdout[-300:]}", "ERROR")
                         except Exception as error:
                             self.log(f"Subprocess execution exception: {error}", "ERROR")
 
@@ -391,7 +384,7 @@ except Exception as error:
                             os.remove(script_path)
                     else:
                         self.log(f"[{scene_name}] No impact collision detected. Preserving nominal continuous timeline.", "INFO")
-                        master_blueprint[scene_name] = self._query_temporal_intelligence(scene_name, context)
+                master_blueprint[scene_name] = self._query_temporal_intelligence(scene_name, context)
 
         with open(self.output_blueprint_path, "w", encoding="utf-8") as f:
             json.dump(master_blueprint, f, indent=4)
