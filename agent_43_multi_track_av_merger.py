@@ -1,8 +1,10 @@
 import os
+import re
 import sys
 import json
-import shutil
+import glob
 import time
+import shutil
 import subprocess
 
 # =====================================================================
@@ -21,15 +23,18 @@ load_env_file()
 
 class Agent_43_Multi_Track_AV_Merger:
     """
-    OMNIMATRIX V2.0 PURE UTILITY: MULTI-TRACK AUDIO-VISUAL MULTIPLEXER
+    OMNIMATRIX V2.0 PURE UTILITY: MULTI-TRACK AUDIO-VISUAL MULTIPLEXER (SUPERCHARGED)
     Ingests actionable FFmpeg concatenation demuxers and multi-layered audio streams.
-    Executes advanced DSP audio mixing with loudness normalization to assemble
-    uncompressed master intermediate video payloads.
+    Executes advanced DSP audio mixing with sample-rate normalization and loudness
+    leveling to assemble uncompressed master intermediate video payloads.
+    Features autonomous self-healing asset discovery if upstream manifests are missing.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
         # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
         self.agent_name = "Agent_43_Multi_Track_AV_Merger"
-        self.workspace_dir = workspace_dir
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        
         self.manifest_path = os.path.join(self.workspace_dir, "42_raw_buffer_manifest.json")
         self.concat_demuxer_path = os.path.join(self.workspace_dir, "ffmpeg_concat_demuxer.txt")
         self.output_intermediate_video = os.path.join(self.workspace_dir, "43_intermediate_merged_output.mp4")
@@ -38,7 +43,8 @@ class Agent_43_Multi_Track_AV_Merger:
         self._scrub_legacy_assets()
 
     def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+        formatted = f"[{level}] [{self.agent_name}] {message}"
+        print(formatted)
 
     def _scrub_legacy_assets(self):
         """Rule 3: Idempotency scrubbing of legacy multiplexed payloads and execution manifests."""
@@ -72,8 +78,8 @@ class Agent_43_Multi_Track_AV_Merger:
         })
         
         if status == "COMPLETED":
-            # Advance atomic handshake to Agent 44 (GPU Hardware Accelerated Encoder)
-            data["orchestrator_matrix"]["next_agent"] = "Agent_44_GPU_Hardware_Accelerated_Encoder"
+            # Advance atomic handshake to Agent 44 in strict lowercase standard
+            data["orchestrator_matrix"]["next_agent"] = "agent_44_gpu_hardware_accelerated_encoder"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
@@ -91,15 +97,36 @@ class Agent_43_Multi_Track_AV_Merger:
         return False
 
     def _load_upstream_manifest(self):
-        if not os.path.exists(self.manifest_path):
-            self.log("Upstream buffer manifest missing. Triggering offline fallback parameters.", "WARNING")
-            return None
-        try:
-            with open(self.manifest_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as error:
-            self.log(f"Manifest read exception encountered: {error}", "ERROR")
-            return None
+        if os.path.exists(self.manifest_path):
+            try:
+                with open(self.manifest_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as error:
+                self.log(f"Manifest read exception encountered: {error}", "ERROR")
+        
+        self.log("Upstream buffer manifest missing or unreadable. Engaging autonomous self-healing scanner...", "WARNING")
+        return None
+
+    # =====================================================================
+    # AUTONOMOUS SELF-HEALING ASSET DISCOVERY (RULE 10)
+    # =====================================================================
+    def _autonomous_audio_discovery(self):
+        """Recursively scans workspace for audio tracks if upstream manifest fails."""
+        valid_exts = ('.wav', '.flac', '.mp3', '.m4a', '.aac', '.ogg')
+        discovered_audio = []
+        
+        for root, dirs, files in os.walk(self.workspace_dir):
+            for file in files:
+                if file.lower().endswith(valid_exts):
+                    discovered_audio.append(os.path.join(root, file))
+                    
+        master_mix_path = os.path.join(self.workspace_dir, "19_final_master_mix.wav")
+        if os.path.exists(master_mix_path):
+            if master_mix_path in discovered_audio:
+                discovered_audio.remove(master_mix_path)
+            discovered_audio.insert(0, master_mix_path)
+            
+        return discovered_audio
 
     # =====================================================================
     # DETERMINISTIC MULTIPLEX COMMAND ASSEMBLER (RULE 9 PAYOFF)
@@ -111,6 +138,16 @@ class Agent_43_Multi_Track_AV_Merger:
         if manifest:
             fps = float(manifest.get("target_framerate_fps", 24.0))
             audio_paths = manifest.get("mapped_audio_buffer_paths", [])
+        else:
+            # Self-healing fallback
+            audio_paths = self._autonomous_audio_discovery()
+            config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        fps = float(json.load(f).get("render_fps", 24.0))
+                except Exception:
+                    pass
 
         cmd = ["ffmpeg", "-y"]
 
@@ -121,7 +158,7 @@ class Agent_43_Multi_Track_AV_Merger:
         else:
             # Rule 10 Autonomy Fallback: Use pattern matching or synthetic test visual stream
             fallback_pattern = os.path.join(self.workspace_dir, "render_output", "frame_%04d.png")
-            if os.path.exists(os.path.dirname(fallback_pattern)):
+            if os.path.exists(os.path.dirname(fallback_pattern)) and glob.glob(os.path.join(self.workspace_dir, "render_output", "*.png")):
                 self.log("Concat demuxer unavailable. Fallback to sequential frame pattern.", "WARNING")
                 cmd.extend(["-framerate", str(fps), "-i", fallback_pattern])
             else:
@@ -135,18 +172,23 @@ class Agent_43_Multi_Track_AV_Merger:
                 cmd.extend(["-i", audio_file])
                 valid_audio_count += 1
 
-        # Build advanced DSP filter complex for multi-track audio mixing
+        # Build advanced DSP filter complex for multi-track audio mixing with sample rate normalization
         if valid_audio_count > 0:
             if valid_audio_count > 1:
-                # Prevent digital clipping during multi-track mix via normalization
+                # Normalizing sample rates and layouts prevents FFmpeg amix crashes across heterogeneous audio files
                 filter_chain = ""
                 for idx in range(1, valid_audio_count + 1):
-                    filter_chain += f"[{idx}:a]"
+                    filter_chain += f"[{idx}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a{idx}];"
+                
+                for idx in range(1, valid_audio_count + 1):
+                    filter_chain += f"[a{idx}]"
+                    
                 filter_chain += f"amix=inputs={valid_audio_count}:duration=first:dropout_transition=2,loudnorm=I=-14:TP=-1.0:LRA=11[aout]"
                 
                 cmd.extend(["-filter_complex", filter_chain, "-map", "0:v", "-map", "[aout]"])
             else:
-                cmd.extend(["-map", "0:v", "-map", "1:a"])
+                # Single audio stream: apply loudnorm directly
+                cmd.extend(["-filter_complex", "[1:a]aresample=48000,loudnorm=I=-14:TP=-1.0:LRA=11[aout]", "-map", "0:v", "-map", "[aout]"])
         else:
             self.log("No valid audio streams mapped. Multiplexer will render visual-only payload.", "INFO")
             cmd.extend(["-map", "0:v"])
@@ -157,6 +199,8 @@ class Agent_43_Multi_Track_AV_Merger:
             "-preset", "superfast",
             "-crf", "18",
             "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "320k",
             "-r", str(fps),
             self.output_intermediate_video
         ])
@@ -192,7 +236,7 @@ class Agent_43_Multi_Track_AV_Merger:
         # Rule 17: Subprocess execution with strict hardware timeout protection (10 minutes max)
         try:
             self.log("Spawning FFmpeg sub-process. Multiplexing intermediate video payload...")
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, timeout=600)
+            process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, timeout=600)
             self.log("Audio-visual multiplexing completed successfully.", "SUCCESS")
             
             output_data = {
@@ -209,7 +253,7 @@ class Agent_43_Multi_Track_AV_Merger:
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
             error_msg = getattr(error, 'stderr', str(error))
-            self.log(f"CRITICAL: Subprocess rendering failure or hardware timeout: {error_msg}", "ERROR")
+            self.log(f"CRITICAL: Subprocess rendering failure or hardware timeout!\nFFMPEG LOG:\n{error_msg[-800:]}", "ERROR")
             failed_data = {
                 "agent_executed": self.agent_name,
                 "execution_timestamp": time.time(),
