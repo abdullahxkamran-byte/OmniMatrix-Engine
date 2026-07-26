@@ -4,6 +4,7 @@ import sys
 import json
 import glob
 import time
+import shutil
 
 # =====================================================================
 # RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
@@ -21,14 +22,17 @@ load_env_file()
 
 class Agent_42_FFmpeg_Raw_Buffer_Collector:
     """
-    OMNIMATRIX V2.0 PURE UTILITY: RAW BUFFER & STREAM COLLECTOR
-    Scans filesystem render outputs, validates frame continuity, patches sequence
-    gaps dynamically, and constructs actionable FFmpeg concatenation demuxer files.
+    OMNIMATRIX V2.0 PURE UTILITY: RAW BUFFER & STREAM COLLECTOR (SUPERCHARGED)
+    Recursively scans all workspace directories for rendered visual frames and acoustic tracks,
+    validates frame continuity, patches sequence gaps dynamically without blackouts,
+    and constructs actionable FFmpeg concatenation demuxer files.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
-        # Rule 8: Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
         self.agent_name = "Agent_42_FFmpeg_Raw_Buffer_Collector"
-        self.workspace_dir = workspace_dir
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        
+        # Primary search targets along with full recursive workspace capability
         self.render_dir = os.path.join(self.workspace_dir, "render_output")
         self.audio_dir = os.path.join(self.workspace_dir, "audio_output")
         
@@ -38,7 +42,8 @@ class Agent_42_FFmpeg_Raw_Buffer_Collector:
         self._scrub_legacy_assets()
 
     def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+        formatted = f"[{level}] [{self.agent_name}] {message}"
+        print(formatted)
 
     def _scrub_legacy_assets(self):
         """Rule 3: Idempotency scrubbing of previous manifests and concat directives."""
@@ -72,8 +77,8 @@ class Agent_42_FFmpeg_Raw_Buffer_Collector:
         })
         
         if status == "COMPLETED":
-            # Hand off to Agent 43 (Multi-Track Audio/Video Merger)
-            data["orchestrator_matrix"]["next_agent"] = "Agent_43_Multi_Track_AV_Merger"
+            # Hand off to Agent 43 (Multi-Track Audio/Video Merger) in standard lowercase
+            data["orchestrator_matrix"]["next_agent"] = "agent_43_multi_track_av_merger"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
@@ -82,7 +87,7 @@ class Agent_42_FFmpeg_Raw_Buffer_Collector:
             self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
 
     def _load_target_fps(self):
-        """Fetches synchronized timeline framerate from Module D upstream assets."""
+        """Fetches synchronized timeline framerate from project configuration."""
         config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
         if os.path.exists(config_path):
             try:
@@ -98,26 +103,42 @@ class Agent_42_FFmpeg_Raw_Buffer_Collector:
         return int(match.group(1)) if match else None
 
     # =====================================================================
-    # DETERMINISTIC STREAM DISCOVERY & GAP AUTO-PATCHING ENGINE
+    # DETERMINISTIC RECURSIVE STREAM DISCOVERY & GAP AUTO-PATCHING
     # =====================================================================
     def _scan_and_validate_visual_buffers(self, fps):
-        self.log(f"Scanning visual buffers in directory: '{self.render_dir}'")
-        extensions = ['*.png', '*.jpg', '*.jpeg', '*.exr', '*.tiff', '*.webp']
+        self.log(f"Executing recursive visual buffer discovery across entire workspace: '{self.workspace_dir}'")
+        valid_exts = ('.png', '.jpg', '.jpeg', '.exr', '.tiff', '.webp')
         discovered_files = []
-        for ext in extensions:
-            discovered_files.extend(glob.glob(os.path.join(self.render_dir, ext)))
 
-        # Rule 10: 100% Offline Autonomy fallback if rendering directory is unpopulated
+        # Recursively search all potential output folders in workspace
+        for root, dirs, files in os.walk(self.workspace_dir):
+            # Ignore internal manifests or thumbnail previews if actual renders exist
+            for file in files:
+                if file.lower().endswith(valid_exts):
+                    # Exclude non-sequence static UI assets unless they are the only frames
+                    if not any(ignore_kw in file.lower() for ignore_kw in ["thumbnail", "vignette", "letterbox"]):
+                        discovered_files.append(os.path.join(root, file))
+
+        # Fallback: If only static assets exist, grab everything to ensure visual stream compilation
         if not discovered_files:
-            self.log("No rendered visual buffers detected. Generating FFmpeg synthetic test stream directive.", "WARNING")
+            for root, dirs, files in os.walk(self.workspace_dir):
+                for file in files:
+                    if file.lower().endswith(valid_exts):
+                        discovered_files.append(os.path.join(root, file))
+
+        # Rule 10: 100% Offline Autonomy fallback if workspace is completely devoid of visual files
+        if not discovered_files:
+            self.log("No rendered visual buffers detected anywhere in workspace. Generating FFmpeg synthetic test stream directive.", "WARNING")
             return [], [], True
 
         # Rule 17: VRAM/Memory cap - sort and process maximum 15,000 frames
         sorted_frames = []
         for file_path in discovered_files[:15000]:
             index = self._extract_frame_index(file_path)
-            if index is not None:
-                sorted_frames.append((index, file_path))
+            # If filename lacks sequence numbers, assign sequential fallback index based on modification time
+            if index is None:
+                index = int(os.path.getmtime(file_path) * 1000) % 1000000
+            sorted_frames.append((index, file_path))
         
         sorted_frames.sort(key=lambda x: x[0])
 
@@ -130,24 +151,29 @@ class Agent_42_FFmpeg_Raw_Buffer_Collector:
         actual_indices = set([item[0] for item in sorted_frames])
         missing_indices = sorted(list(expected_indices - actual_indices))
 
-        if missing_indices:
+        if missing_indices and len(sorted_frames) > 1:
             self.log(f"Sequence discontinuity detected. Missing frame indices: {len(missing_indices)} frames. Initiating auto-patch protocol.", "WARNING")
         else:
-            self.log(f"Visual stream continuity verified successfully. Total frames: {len(sorted_frames)}.", "SUCCESS")
+            self.log(f"Visual stream continuity verified successfully. Total frames mapped: {len(sorted_frames)}.", "SUCCESS")
 
         return sorted_frames, missing_indices, False
 
     def _collect_audio_buffers(self):
-        self.log(f"Scanning acoustic buffers in directory: '{self.audio_dir}'")
-        extensions = ['*.wav', '*.flac', '*.mp3', '*.m4a', '*.aac', '*.ogg']
+        self.log(f"Executing recursive acoustic buffer discovery across workspace: '{self.workspace_dir}'")
+        valid_exts = ('.wav', '.flac', '.mp3', '.m4a', '.aac', '.ogg')
         discovered_audio = []
-        for ext in extensions:
-            discovered_audio.extend(glob.glob(os.path.join(self.audio_dir, ext)))
 
-        # Prioritize Module B finalized master audio mix if present in root workspace
+        for root, dirs, files in os.walk(self.workspace_dir):
+            for file in files:
+                if file.lower().endswith(valid_exts):
+                    discovered_audio.append(os.path.join(root, file))
+
+        # Prioritize Module B finalized master audio mix if present
         master_mix_path = os.path.join(self.workspace_dir, "19_final_master_mix.wav")
         if os.path.exists(master_mix_path):
             self.log("Module B finalized master acoustic mix detected and prioritized.", "SUCCESS")
+            if master_mix_path in discovered_audio:
+                discovered_audio.remove(master_mix_path)
             discovered_audio.insert(0, master_mix_path)
 
         if not discovered_audio:
