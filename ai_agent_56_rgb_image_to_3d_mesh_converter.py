@@ -49,7 +49,6 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
     2.5D UV-mapped billboards during offline fallbacks and normalizes geometry.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
-        # Rule 8: AI vs Non-AI Naming enforcement
         self.agent_name = "Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter"
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
@@ -63,14 +62,10 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
         self.output_blueprint_path = os.path.join(self.outputs_dir, "56_master_mesh_blueprint.json")
         self.blender_script_path = os.path.join(self.outputs_dir, "56_actionable_blender_import.py")
         
-        # Rule 17: Hardware and memory safety ceilings
         self.max_texture_dimension_px = 2048
         self.max_model_scale_units = 1.5
         
-        # Zero-Budget Free Hugging Face API Token (HF_TOKEN or HF_API_KEY)
         self.hf_token = os.environ.get("HF_TOKEN", os.environ.get("HF_API_KEY", None))
-        
-        # Smart Bypass & Memory Reuse Registry
         self.model_library_registry = {}
 
         for directory in [self.workspace_dir, self.module_h_dir, self.inputs_dir, self.outputs_dir]:
@@ -83,7 +78,6 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
         print(formatted)
 
     def _scrub_legacy_assets(self):
-        """Rule 3: Idempotency scrubbing of previous 3D mesh generations."""
         if os.path.exists(self.outputs_dir):
             for file_name in os.listdir(self.outputs_dir):
                 file_path = os.path.join(self.outputs_dir, file_name)
@@ -119,7 +113,6 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
             data["orchestrator_matrix"]["Module_H_Mesh_Registry"] = blueprint_manifest
             
         if status == "COMPLETED":
-            # Hand off to Ai Agent 57 (Dynamic 2D Panel to 3D World Forge)
             data["orchestrator_matrix"]["next_agent"] = "ai_agent_57_dynamic_2d_panel_to_3d_world_forge"
             
         try:
@@ -129,7 +122,6 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
             self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
 
     def _load_global_config(self):
-        """Ingests 3D generation modes and stylistic constraints."""
         default_config = {"mesh_generation_mode": "auto", "target_style": "anime_cel_shaded"}
         if os.path.exists(self.config_path):
             try:
@@ -143,8 +135,7 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
     # MATHEMATICAL GEOMETRY NORMALIZATION ENGINE (RULE 17 SAFEGUARD)
     # =====================================================================
     def _normalize_mesh_coordinates(self, mesh_path):
-        """Centers 3D vertex geometry around origin (0,0,0) and scales to safe bounding box."""
-        if not os.path.exists(mesh_path):
+        if not os.path.exists(mesh_path) or not os.path.isfile(mesh_path):
             return
 
         try:
@@ -186,15 +177,13 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
     # RULE 10: 100% OFFLINE PROCEDURAL 2.5D BILLBOARD ALCHEMIST (ZERO COST)
     # =====================================================================
     def _generate_procedural_25d_billboard(self, image_path, obj_path, mtl_path, tex_path):
-        """Synthesizes a mathematically UV-mapped 2.5D flat plane during offline execution."""
         self.log("Engaging Offline Procedural Alchemist: Synthesizing 2.5D UV-mapped billboard (0$ Cost)...", "WARNING")
         
         width_ratio, height_ratio = 1.0, 1.0
         
-        if PIL_AVAILABLE and os.path.exists(image_path):
+        if PIL_AVAILABLE and os.path.exists(image_path) and os.path.isfile(image_path):
             try:
                 img = Image.open(image_path)
-                # Rule 17: Cap texture resolution to prevent downstream GPU memory bloat
                 if max(img.size) > self.max_texture_dimension_px:
                     img.thumbnail((self.max_texture_dimension_px, self.max_texture_dimension_px), Image.Resampling.LANCZOS)
                 img.save(tex_path, "PNG")
@@ -207,9 +196,9 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
                 self.log(f"PIL texture processing exception: {error}", "WARNING")
                 shutil.copy(image_path, tex_path)
         else:
-            shutil.copy(image_path, tex_path)
+            if os.path.exists(image_path) and os.path.isfile(image_path):
+                shutil.copy(image_path, tex_path)
 
-        # Compile procedural Wavefront OBJ plane with exact [0.0, 1.0] UV bounds
         try:
             hw, hh = (width_ratio * self.max_model_scale_units) / 2.0, (height_ratio * self.max_model_scale_units) / 2.0
             with open(obj_path, "w", encoding="utf-8") as f:
@@ -226,7 +215,6 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
         except Exception as error:
             self.log(f"Billboard OBJ compilation exception: {error}", "ERROR")
 
-        # Compile Wavefront MTL with diffuse mapping and alpha transparency hooks
         try:
             with open(mtl_path, "w", encoding="utf-8") as f:
                 f.write("newmtl Material_Billboard_Alpha\n")
@@ -253,10 +241,9 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
             return {"mesh_obj_path": mesh_out, "material_mtl_path": mtl_out, "texture_png_path": tex_out}
 
         # Core 1: 100% FREE Hugging Face TripoSR Space via Gradio Client
-        if GRADIO_AVAILABLE and mode in ["auto", "full_3d"] and not success:
+        if GRADIO_AVAILABLE and mode in ["auto", "full_3d"] and not success and os.path.exists(image_path) and os.path.isfile(image_path):
             self.log(f"Executing Core 1 (FREE HuggingFace TripoSR Space) for '{char_name}'...", "INFO")
             try:
-                # Using official stabilityai/TripoSR public free space
                 client = Client("stabilityai/TripoSR", hf_token=self.hf_token)
                 result = client.predict(image=file(image_path), api_name="/generate_3d")
                 
@@ -274,11 +261,10 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
             except Exception as error:
                 self.log(f"FREE TripoSR Space inference exception: {error}. Routing to Core 2...", "WARNING")
 
-        # Core 2: 100% FREE Hugging Face InstantMesh Space via Gradio Client (Backup Free Engine)
-        if GRADIO_AVAILABLE and mode in ["auto", "full_3d"] and not success:
+        # Core 2: 100% FREE Hugging Face InstantMesh Space via Gradio Client
+        if GRADIO_AVAILABLE and mode in ["auto", "full_3d"] and not success and os.path.exists(image_path) and os.path.isfile(image_path):
             self.log(f"Executing Core 2 (FREE HuggingFace InstantMesh Space) for '{char_name}'...", "INFO")
             try:
-                # Using official TencentARC/InstantMesh public free space
                 client = Client("TencentARC/InstantMesh", hf_token=self.hf_token)
                 result = client.predict(image=file(image_path), api_name="/generate_obj")
                 
@@ -297,7 +283,7 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
             except Exception as error:
                 self.log(f"FREE InstantMesh Space inference exception: {error}. Routing to Core 3...", "WARNING")
 
-        # Core 3: 100% Offline Procedural 2.5D Billboard Alchemist (Rule 10 - Zero Budget Guarantee)
+        # Core 3: 100% Offline Procedural 2.5D Billboard Alchemist (Rule 10)
         if not success:
             self.log(f"Free online 3D AI spaces busy/offline. Engaging Core 3 (0$ Cost 2.5D Billboard) for '{char_name}'...", "WARNING")
             self._generate_procedural_25d_billboard(image_path, mesh_out, mtl_out, tex_out)
@@ -314,7 +300,6 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
     # RULE 9: ACTIONABLE BLENDER IMPORTER COMPILER
     # =====================================================================
     def _compile_actionable_blender_script(self, master_blueprint):
-        """Compiles a standalone executable Blender Python script to ingest all converted 3D assets."""
         script_content = [
             "import bpy",
             "import os",
@@ -332,12 +317,10 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
             "        return",
             "    obj = imported_objs[0]",
             "    obj.name = target_name",
-            "    # Configure alpha hashing and transparency blending for 2.5D billboards and 3D meshes",
             "    for mat_slot in obj.material_slots:",
             "        if mat_slot.material:",
             "            mat_slot.material.blend_method = 'HASHED'",
             "            mat_slot.material.shadow_method = 'HASHED'",
-            "            # Set roughness for stylized anime aesthetics",
             "            if shader_mode == 'toon_shader' and mat_slot.material.node_tree:",
             "                for node in mat_slot.material.node_tree.nodes:",
             "                    if node.type == 'BSDF_PRINCIPLED':",
@@ -388,14 +371,13 @@ class Ai_Agent_56_RGB_Image_To_3D_Mesh_Converter:
                 layers = vision_data.get("layers", {})
                 char_image_path = layers.get("character_layer_png", "")
                 
-                if not char_image_path or not os.path.exists(char_image_path):
+                if not char_image_path or not os.path.exists(char_image_path) or not os.path.isfile(char_image_path):
                     self.log(f"Character sprite layer absent for '{base_scene_name}'. Bypassing 3D conversion.", "INFO")
                     continue
 
                 char_name = f"Char_{base_scene_name}"
                 self.log(f"--- Converting Visual Layer to 3D Geometry: '{char_name}' ---", "INFO")
 
-                # Smart Bypass & Memory Library Reuse
                 if char_name in self.model_library_registry:
                     self.log(f"Smart Bypass Active: Reusing cached 3D geometry for '{char_name}'.", "INFO")
                     master_blueprint[base_scene_name] = dict(self.model_library_registry[char_name])
