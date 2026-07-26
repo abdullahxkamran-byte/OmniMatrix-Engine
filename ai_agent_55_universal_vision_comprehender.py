@@ -50,7 +50,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
     to feed downstream 3D mesh and world forging nodes.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
-        # Rule 8: AI vs Non-AI Naming enforcement
         self.agent_name = "Ai_Agent_55_Universal_Vision_Comprehender"
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
@@ -61,7 +60,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         self.overrides_dir = os.path.join(self.workspace_dir, "Global_Overrides")
         self.config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
         
-        # Rule 17: Memory and hardware resolution safety ceilings
         self.max_image_dimension_px = 2048
         
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
@@ -84,7 +82,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         print(formatted)
 
     def _scrub_legacy_assets(self):
-        """Rule 3: Idempotency scrubbing of previous vision layer outputs."""
         if os.path.exists(self.outputs_dir):
             for file_name in os.listdir(self.outputs_dir):
                 file_path = os.path.join(self.outputs_dir, file_name)
@@ -120,7 +117,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             data["orchestrator_matrix"]["Module_H_Vision_Data"] = payload_manifest
             
         if status == "COMPLETED":
-            # Hand off to Ai Agent 56 (RGB Image to 3D Mesh Converter)
             data["orchestrator_matrix"]["next_agent"] = "ai_agent_56_rgb_image_to_3d_mesh_converter"
             
         try:
@@ -130,7 +126,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
 
     def _load_global_config(self):
-        """Ingests visual cloning modes and stylistic constraints."""
         default_config = {"vision_mode": "exact_clone", "target_style": "preserve_original", "enforce_sakuga_motion": "auto"}
         if os.path.exists(self.config_path):
             try:
@@ -141,7 +136,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         return default_config
 
     def _clean_json(self, raw_text):
-        """Rule 5: Bulletproof JSON scrubber."""
         cleaned = re.sub(r"^```(json)?\s*|\s*```$", "", raw_text.strip(), flags=re.IGNORECASE)
         start_index = cleaned.find('{')
         end_index = cleaned.rfind('}')
@@ -158,8 +152,11 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
     # RULE 6, 14, 15: QUAD-CORE VISION BLUEPRINT EXTRACTOR
     # =====================================================================
     def _extract_vision_blueprint(self, image_path, config):
-        with open(image_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode('utf-8')
+        if os.path.exists(image_path) and os.path.isfile(image_path):
+            with open(image_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode('utf-8')
+        else:
+            img_b64 = ""
 
         prompt = (
             f"You are OMNIMATRIX AAA Computer Vision & 3D Layout Architect. Mode: '{config.get('vision_mode', 'exact_clone')}'.\n"
@@ -183,7 +180,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         output = None
 
         # Core 1: Gemini Vision Pro
-        if self.gemini_key and not output:
+        if self.gemini_key and not output and img_b64:
             try:
                 url = f"{self.gemini_url}?key={self.gemini_key}"
                 payload = {"contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": img_b64}}]}]}
@@ -194,7 +191,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
                 self.log(f"[Core 1: Gemini Vision] Failed: {e}", "WARNING")
 
         # Core 2: OpenAI GPT-4o Vision Failsafe
-        if self.openai_key and not output:
+        if self.openai_key and not output and img_b64:
             try:
                 headers = {"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"}
                 payload = {"model": self.model_cloud, "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}]}]}
@@ -205,7 +202,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
                 self.log(f"[Core 2: OpenAI Vision] Failed: {e}", "WARNING")
 
         # Core 3: Ollama Local LLaVA Vision Fallback
-        if not output:
+        if not output and img_b64:
             try:
                 payload = {"model": self.model_local, "prompt": prompt, "images": [img_b64], "stream": False}
                 res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json"})
@@ -218,12 +215,12 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         if not output:
             self.log("[Core 4: Math Fallback] Engaging offline algorithmic HSV luminance vision analysis...", "WARNING")
             is_bw, has_high_contrast = False, False
-            if PIL_AVAILABLE:
+            if PIL_AVAILABLE and os.path.exists(image_path) and os.path.isfile(image_path):
                 try:
                     img = Image.open(image_path).convert('HSV')
-                    stat = ImageStat.Stat(img.split()[1]) # Saturation channel
+                    stat = ImageStat.Stat(img.split()[1])
                     is_bw = stat.mean[0] < 18.0
-                    lum = ImageStat.Stat(img.split()[2]) # Value/Luminance channel
+                    lum = ImageStat.Stat(img.split()[2])
                     has_high_contrast = (lum.stddev[0] > 55.0)
                 except Exception:
                     pass
@@ -253,7 +250,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         user_char = os.path.join(self.overrides_dir, "custom_character.png")
         user_bg = os.path.join(self.overrides_dir, "custom_background.png")
 
-        # 1. Character Extraction
         if os.path.exists(user_char) and config.get("vision_mode") == "inspiration_mashup":
             self.log("Manual override detected: Injecting custom character sprite.", "INFO")
             shutil.copy(user_char, out_char)
@@ -262,7 +258,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             self.log("Executing character foreground layer separation...", "INFO")
             has_char = self._run_rembg_or_offline_mask(image_path, out_char)
 
-        # 2. Clean Background Plate Generation
         if os.path.exists(user_bg) and config.get("vision_mode") == "inspiration_mashup":
             self.log("Manual override detected: Injecting custom background plate.", "INFO")
             shutil.copy(user_bg, out_bg)
@@ -270,17 +265,18 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             self.log("Synthesizing clean background plate...", "INFO")
             self._generate_clean_background_plate(image_path, out_bg)
 
-        # 3. 2.5D Mathematical Depth Synthesis
         self.log("Synthesizing 2.5D mathematical luminance depth map...", "INFO")
         self._synthesize_25d_depth_map(out_bg, out_depth)
 
         return {"character_layer_png": out_char, "background_plate_png": out_bg, "depth_map_png": out_depth}
 
     def _run_rembg_or_offline_mask(self, image_path, output_path):
+        if not os.path.exists(image_path) or not os.path.isfile(image_path):
+            return False
+
         if REMBG_AVAILABLE and PIL_AVAILABLE:
             try:
                 img = Image.open(image_path)
-                # Rule 17: Cap resolution during neural background removal to prevent RAM spikes
                 if max(img.size) > self.max_image_dimension_px:
                     img.thumbnail((self.max_image_dimension_px, self.max_image_dimension_px), Image.Resampling.LANCZOS)
                 out = remove(img)
@@ -289,7 +285,6 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             except Exception as error:
                 self.log(f"Rembg neural separation exception: {error}. Engaging offline procedural mask.", "WARNING")
         
-        # 100% Offline Autonomy: Procedural Threshold Alpha Masking
         if PIL_AVAILABLE:
             try:
                 img = Image.open(image_path).convert("RGBA")
@@ -305,12 +300,14 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         return False
 
     def _generate_clean_background_plate(self, original_path, output_path):
+        if not os.path.exists(original_path) or not os.path.isfile(original_path):
+            return
+
         if PIL_AVAILABLE:
             try:
                 img = Image.open(original_path).convert("RGBA")
                 if max(img.size) > self.max_image_dimension_px:
                     img.thumbnail((self.max_image_dimension_px, self.max_image_dimension_px), Image.Resampling.LANCZOS)
-                # Procedural clean plate: Heavy gaussian blur backdrop
                 bg = img.filter(ImageFilter.GaussianBlur(radius=18))
                 bg.save(output_path, "PNG")
             except Exception:
@@ -319,12 +316,11 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             shutil.copy(original_path, output_path)
 
     def _synthesize_25d_depth_map(self, background_path, output_path):
-        if PIL_AVAILABLE and os.path.exists(background_path):
+        if PIL_AVAILABLE and os.path.exists(background_path) and os.path.isfile(background_path):
             try:
                 img = Image.open(background_path).convert("L")
                 if max(img.size) > self.max_image_dimension_px:
                     img.thumbnail((self.max_image_dimension_px, self.max_image_dimension_px), Image.Resampling.LANCZOS)
-                # Mathematical depth heuristic: Darker = farther, Lighter = closer
                 depth = ImageOps.invert(img)
                 depth = depth.filter(ImageFilter.GaussianBlur(radius=6))
                 depth.save(output_path, "PNG")
@@ -340,7 +336,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
 
         input_files = glob.glob(os.path.join(self.inputs_dir, "*.*"))
         valid_exts = ['.png', '.jpg', '.jpeg', '.webp']
-        images = [f for f in input_files if os.path.splitext(f)[1].lower() in valid_exts]
+        images = [f for f in input_files if os.path.splitext(f)[1].lower() in valid_exts and os.path.isfile(f)]
 
         if not images:
             self.log(f"No artwork detected in '{self.inputs_dir}'. Synthesizing dummy verification payload.", "WARNING")
