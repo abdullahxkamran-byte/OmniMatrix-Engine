@@ -4,6 +4,7 @@ import json
 import shutil
 import time
 import subprocess
+import glob
 
 # =====================================================================
 # RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
@@ -21,16 +22,21 @@ load_env_file()
 
 class Agent_45_Bitrate_Optimizer_Compression_Engine:
     """
-    OMNIMATRIX V2.0 PURE UTILITY: BITRATE OPTIMIZER & COMPRESSION ENGINE
+    OMNIMATRIX V2.0 PURE UTILITY: BITRATE OPTIMIZER & COMPRESSION ENGINE (SUPERCHARGED)
     Eliminates rigid resolution step-ladders by implementing a continuous
     mathematical Bits-Per-Pixel (BPP) density solver. Allocates optimal stream
     bitrates dynamically across arbitrary aspect ratios and framerates.
+    Features autonomous upstream stream discovery and broadcast-standard scaling.
     """
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
         # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
         self.agent_name = "Agent_45_Bitrate_Optimizer_Compression_Engine"
-        self.workspace_dir = workspace_dir
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        
         self.gpu_manifest_path = os.path.join(self.workspace_dir, "44_gpu_acceleration_blueprint.json")
+        self.merger_manifest_path = os.path.join(self.workspace_dir, "43_merged_av_blueprint.json")
+        
         self.input_gpu_video = os.path.join(self.workspace_dir, "44_gpu_accelerated_output.mp4")
         self.input_fallback_video = os.path.join(self.workspace_dir, "43_intermediate_merged_output.mp4")
         self.output_master_video = os.path.join(self.workspace_dir, "45_final_master_compressed_output.mp4")
@@ -39,7 +45,8 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
         self._scrub_legacy_assets()
 
     def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
+        formatted = f"[{level}] [{self.agent_name}] {message}"
+        print(formatted)
 
     def _scrub_legacy_assets(self):
         """Rule 3: Idempotency scrubbing of legacy compression blueprints and master outputs."""
@@ -73,8 +80,8 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
         })
         
         if status == "COMPLETED":
-            # Advance atomic handshake to Module F: Local AI Smoothness Matrix (Agent 46)
-            data["orchestrator_matrix"]["next_agent"] = "Ai_Agent_46_Optical_Flow_Frame_Interpolator"
+            # Advance atomic handshake to Module F: Local AI Smoothness Matrix in strict lowercase standard
+            data["orchestrator_matrix"]["next_agent"] = "ai_agent_46_optical_flow_frame_interpolator"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
@@ -89,14 +96,51 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return {
-                        "style": data.get("global_style", "realistic").lower(),
+                        "style": data.get("global_style", "anime_cel_shaded").lower(),
                         "width": int(data.get("target_width", 1080)),
                         "height": int(data.get("target_height", 1920)),
                         "fps": float(data.get("render_fps", 24.0))
                     }
             except Exception:
                 pass
-        return {"style": "realistic", "width": 1080, "height": 1920, "fps": 24.0}
+        return {"style": "anime_cel_shaded", "width": 1080, "height": 1920, "fps": 24.0}
+
+    # =====================================================================
+    # SMART UPSTREAM VIDEO DISCOVERY (RULE 10)
+    # =====================================================================
+    def _find_upstream_video(self):
+        """Locates intermediate video stream from Agent 44, Agent 43, or autonomous scanning."""
+        if os.path.exists(self.input_gpu_video) and os.path.getsize(self.input_gpu_video) > 100:
+            self.log(f"Verified GPU accelerated video at default path: '{self.input_gpu_video}'", "SUCCESS")
+            return self.input_gpu_video
+
+        if os.path.exists(self.input_fallback_video) and os.path.getsize(self.input_fallback_video) > 100:
+            self.log(f"Verified intermediate merged video at default path: '{self.input_fallback_video}'", "SUCCESS")
+            return self.input_fallback_video
+
+        # Check manifests for recorded file paths
+        for manifest_file in [self.gpu_manifest_path, self.merger_manifest_path]:
+            if os.path.exists(manifest_file):
+                try:
+                    with open(manifest_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        recorded_path = data.get("output_video_path")
+                        if recorded_path and os.path.exists(recorded_path) and os.path.getsize(recorded_path) > 100:
+                            self.log(f"Discovered video via manifest ({os.path.basename(manifest_file)}): '{recorded_path}'", "SUCCESS")
+                            return recorded_path
+                except Exception:
+                    pass
+
+        # Fallback: recursively search for any recent mp4 file created in the workspace
+        self.log("Default upstream files missing. Searching workspace for multiplexed video assets...", "WARNING")
+        mp4_files = glob.glob(os.path.join(self.workspace_dir, "**", "*.mp4"), recursive=True)
+        for mp4 in sorted(mp4_files, key=os.path.getmtime, reverse=True):
+            if any(key in os.path.basename(mp4) for key in ["44_", "43_", "intermediate", "gpu", "output"]):
+                if os.path.getsize(mp4) > 100 and "45_" not in os.path.basename(mp4):
+                    self.log(f"Autonomous scanner located upstream stream: '{mp4}'", "SUCCESS")
+                    return mp4
+
+        return None
 
     # =====================================================================
     # CONTINUOUS MATHEMATICAL BITRATE SOLVER (ZERO RESOLUTION LADDERS)
@@ -110,7 +154,7 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
         total_pixels = width * height
         
         # Style-aware BPP density assignment
-        if style == "anime":
+        if "anime" in style or "cel" in style:
             # Cel-shaded edges require crisp macroblock prevention during rapid motion
             bpp_density = 0.135
         else:
@@ -132,12 +176,20 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
     # =====================================================================
     # RULE 9: ACTIONABLE COMPRESSION COMMAND COMPILER
     # =====================================================================
-    def _assemble_compression_command(self, input_path, width, height, fps, target_rate, max_rate, buf_size):
+    def _assemble_compression_command(self, input_path, width, height, fps, target_rate, max_rate, buf_size, is_synthetic=False):
         """Constructs an actionable two-pass equivalent constraint encoding command."""
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", input_path,
-            "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black",
+        cmd = ["ffmpeg", "-y"]
+
+        if is_synthetic or not input_path:
+            cmd.extend(["-f", "lavfi", "-i", f"testsrc2=size={width}x{height}:rate={int(fps)}:duration=5"])
+        else:
+            cmd.extend(["-i", input_path])
+
+        # Advanced spatial scaling with padding to prevent distortion across arbitrary aspect ratios
+        filter_chain = f"scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
+
+        cmd.extend([
+            "-vf", filter_chain,
             "-c:v", "libx264",
             "-preset", "medium",
             "-b:v", target_rate,
@@ -148,8 +200,9 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
             "-c:a", "aac",
             "-b:a", "320k",
             "-ar", "48000",
+            "-ac", "2",
             self.output_master_video
-        ]
+        ])
         return cmd
 
     def execute_compression(self, override_width=None, override_height=None, override_fps=None):
@@ -164,29 +217,17 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
 
         self.log(f"Target Profile Mapped: {width}x{height} @ {fps} FPS | Aesthetic: {style.upper()}")
 
-        # Ingestion routing: Prioritize GPU accelerated output, fallback to intermediate merger
-        input_video = self.input_gpu_video
-        if not os.path.exists(input_video) or os.path.getsize(input_video) < 100:
-            self.log("Upstream accelerated video missing. Routing to intermediate merged stream.", "WARNING")
-            input_video = self.input_fallback_video
-
-        # Rule 10 Autonomy: Fallback to synthetic input if no physical video files exist
+        input_video = self._find_upstream_video()
         is_synthetic = False
-        if not os.path.exists(input_video) or os.path.getsize(input_video) < 100:
+
+        if not input_video:
             self.log("Physical video assets undetected. Generating synthetic test stream for pipeline continuity.", "WARNING")
-            input_video = f"testsrc2=size={width}x{height}:rate={int(fps)}:duration=5"
             is_synthetic = True
 
         target_rate, max_rate, buf_size = self._calculate_continuous_bitrate(width, height, fps, style)
         self.log(f"Continuous BPP Solver Allocated -> Target: {target_rate} | Max Peak: {max_rate} | Buffer: {buf_size}", "SUCCESS")
 
-        cmd = self._assemble_compression_command(input_video, width, height, fps, target_rate, max_rate, buf_size)
-        if is_synthetic:
-            cmd[2] = "-f"
-            cmd.insert(3, "lavfi")
-            cmd.insert(4, "-i")
-            cmd.pop(5) # Clean formatting for lavfi syntax
-
+        cmd = self._assemble_compression_command(input_video, width, height, fps, target_rate, max_rate, buf_size, is_synthetic)
         command_string = " ".join(cmd)
         self.log(f"Compiled Actionable Master Compression Command:\n{command_string}")
 
@@ -231,7 +272,7 @@ class Agent_45_Bitrate_Optimizer_Compression_Engine:
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
             error_details = getattr(error, 'stderr', str(error))
-            self.log(f"CRITICAL: Compression subprocess failure or hardware timeout: {error_details}", "ERROR")
+            self.log(f"CRITICAL: Compression subprocess failure or hardware timeout!\nFFMPEG LOG:\n{error_details[-800:]}", "ERROR")
             failed_data = {
                 "agent_executed": self.agent_name,
                 "execution_timestamp": time.time(),
