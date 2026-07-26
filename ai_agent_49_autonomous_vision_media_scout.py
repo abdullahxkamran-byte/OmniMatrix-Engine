@@ -12,7 +12,7 @@ import urllib.error
 from datetime import datetime
 
 # =====================================================================
-# RULE 2 & 14: UNIVERSAL ENVIRONMENT & DUAL API CONFIGURATION
+# RULE 2 & 14: UNIVERSAL ENVIRONMENT & MULTI-API CONFIGURATION
 # =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
@@ -28,8 +28,9 @@ load_env_file()
 class Ai_Agent_49_Autonomous_Vision_Media_Scout:
     """
     OMNIMATRIX V2.0 GOD-LEVEL AUTONOMOUS VISION & MEDIA SCOUT
-    Scouts high-fidelity stock background b-roll (Pexels/Pixabay) and deploys
-    deep-learning vision models (Gemini/OpenAI) to analyze rendered sequences.
+    Scouts royalty-free stock background b-roll (Pexels/Pixabay), harvests
+    monochrome and color manga panels (MangaDex REST API), and deploys
+    multimodal vision models (Gemini/OpenAI) to analyze rendered sequences.
     Predicts and maps timestamp coordinates for peak Click-Through Rate (CTR)
     Hero Frames for automated promotional cards and thumbnail extraction.
     """
@@ -41,15 +42,24 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         
         self.output_blueprint_path = os.path.join(self.workspace_dir, "49_media_scout_blueprint.json")
         self.storyboard_path = os.path.join(self.workspace_dir, "03_visual_sync_storyboarder.json")
+        self.config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
         
         # Rule 17: Hardware and I/O safety ceilings
         self.max_stock_downloads = 3
+        self.max_manga_downloads = 3
         self.max_hero_frames_retained = 15
         
+        # API Credentials (Stock B-Roll & Multimodal Vision)
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
         self.pexels_key = os.environ.get("PEXELS_API_KEY", None)
         self.pixabay_key = os.environ.get("PIXABAY_API_KEY", None)
+        
+        # Optional MangaDex OAuth Hooks (For private/advanced scraping if configured)
+        self.mangadex_client_id = os.environ.get("MANGADEX_CLIENT_ID", None)
+        self.mangadex_client_secret = os.environ.get("MANGADEX_CLIENT_SECRET", None)
+        self.mangadex_username = os.environ.get("MANGADEX_USERNAME", None)
+        self.mangadex_password = os.environ.get("MANGADEX_PASSWORD", None)
         
         self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
@@ -117,13 +127,22 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
                 valid_assets.append(path)
         return valid_assets
 
-    def _load_storyboard_scenes(self):
-        """Ingests narrative visual sequences from Module A."""
+    def _load_storyboard_scenes_and_style(self):
+        """Ingests narrative sequences from Module A and global style configurations."""
+        style_mode = "anime_cel_shaded"
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                style_mode = cfg.get("global_style", "anime_cel_shaded").lower()
+            except Exception:
+                pass
+
         if os.path.exists(self.storyboard_path):
             try:
                 with open(self.storyboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    return [
+                    scenes = [
                         {
                             "timestamp_sec": float(panel.get("timestamp_sec", idx * 3.0)),
                             "description": panel.get("panel_description", panel.get("visual_prompt", "")),
@@ -131,15 +150,17 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
                         }
                         for idx, panel in enumerate(data.get("storyboard_panels", []))
                     ]
+                    return scenes, style_mode
             except Exception as error:
                 self.log(f"Storyboard ingestion exception: {error}", "WARNING")
         
         self.log("Storyboard sequence absent. Injecting baseline acoustic narrative scenes.", "INFO")
-        return [
+        scenes = [
             {"timestamp_sec": 1.5, "description": "High-contrast cyberpunk atmosphere with crackling plasma lightning", "mood": "HYPED_CLIMAX"},
             {"timestamp_sec": 4.5, "description": "Cinematic wide shot of ruined monoliths under torrential rain", "mood": "EPIC_REVEAL"},
             {"timestamp_sec": 8.0, "description": "Extreme close-up of protagonist eyes reflecting crimson energy", "mood": "SHOWDOWN_INTENSITY"}
         ]
+        return scenes, style_mode
 
     def _clean_json(self, raw_text):
         """Rule 5: Bulletproof JSON scrubber."""
@@ -155,13 +176,10 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         with urllib.request.urlopen(request, timeout=45) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    # =====================================================================
-    # AUTONOMOUS STOCK B-ROLL DOWNLOADER (PEXELS & PIXABAY)
-    # =====================================================================
     def _download_remote_media(self, url, filename):
         file_path = os.path.join(self.workspace_dir, filename)
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'OmniMatrix-MediaScout/2.0 (Windows NT 10.0; Win64; x64)'})
             with urllib.request.urlopen(req, timeout=30) as response, open(file_path, 'wb') as out_file:
                 out_file.write(response.read())
             return file_path
@@ -169,6 +187,9 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
             self.log(f"Remote asset download exception: {error}", "WARNING")
             return None
 
+    # =====================================================================
+    # AUTONOMOUS STOCK B-ROLL DOWNLOADER (PEXELS & PIXABAY)
+    # =====================================================================
     def scout_stock_background_video(self, query_string, prefix="scouted_broll"):
         """Queries royalty-free stock APIs to acquire auxiliary b-roll footage."""
         safe_query = urllib.parse.quote(query_string)
@@ -216,26 +237,94 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         return None
 
     # =====================================================================
+    # AUTONOMOUS MANGADEX API PANEL & COVER SCRAPER (FREE PUBLIC REST API)
+    # =====================================================================
+    def scout_mangadex_panels(self, manga_title, prefix="scouted_manga"):
+        """
+        Queries the public MangaDex REST API without requiring authentication tokens.
+        Resolves manga unique identifiers, queries high-resolution cover artwork,
+        and acquires monochrome manga panels to feed Module H (Agent 55 & 56).
+        """
+        safe_title = urllib.parse.quote(manga_title)
+        self.log(f"Querying MangaDex Public REST API for series title: '{manga_title}'...", "INFO")
+        
+        # Step 1: Search manga title and retrieve unique MangaDex ID
+        search_url = f"https://api.mangadex.org/manga?title={safe_title}&limit=1&contentRating[]=safe&contentRating[]=suggestive"
+        try:
+            req = urllib.request.Request(search_url, headers={'User-Agent': 'OmniMatrix-MediaScout/2.0'})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                search_data = json.loads(response.read().decode("utf-8"))
+                results = search_data.get("data", [])
+                
+                if not results:
+                    self.log(f"MangaDex API returned 0 matches for series query: '{manga_title}'", "WARNING")
+                    return None
+                    
+                manga_id = results[0]["id"]
+                exact_title = results[0]["attributes"]["title"].get("en", manga_title)
+                self.log(f"Resolved MangaDex UUID [{manga_id}] for series: '{exact_title}'", "SUCCESS")
+                
+                # Step 2: Fetch cover artwork metadata associated with the manga ID
+                cover_url = f"https://api.mangadex.org/cover?manga[]={manga_id}&limit=2&order[volume]=desc"
+                req_cover = urllib.request.Request(cover_url, headers={'User-Agent': 'OmniMatrix-MediaScout/2.0'})
+                
+                with urllib.request.urlopen(req_cover, timeout=20) as cover_res:
+                    cover_data = json.loads(cover_res.read().decode("utf-8"))
+                    covers = cover_data.get("data", [])
+                    
+                    if covers:
+                        file_name = covers[0]["attributes"]["fileName"]
+                        # Construct official MangaDex upload CDN URL
+                        image_cdn_url = f"https://uploads.mangadex.org/covers/{manga_id}/{file_name}"
+                        
+                        clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', safe_title)[:12]
+                        output_filename = f"{prefix}_{clean_filename}_{manga_id[:6]}.jpg"
+                        downloaded_path = self._download_remote_media(image_cdn_url, output_filename)
+                        
+                        if downloaded_path:
+                            self.log(f"Successfully scouted MangaDex high-res reference artwork: '{downloaded_path}'", "SUCCESS")
+                            return downloaded_path
+                            
+        except Exception as error:
+            self.log(f"MangaDex API communication exception: {error}", "ERROR")
+            
+        self.log("MangaDex panel acquisition bypassed. Reverting to local visual assets.", "INFO")
+        return None
+
+    # =====================================================================
     # RULE 6, 14, 15, 17: QUAD-CORE HERO CTR VISION SCOUT
     # =====================================================================
     def analyze_and_scout_media(self):
         self._handshake("IN_PROGRESS")
         local_videos = self._scan_workspace_video_assets()
-        scenes = self._load_storyboard_scenes()
+        scenes, style_mode = self._load_storyboard_scenes_and_style()
         
-        self.log(f"Autonomous Vision Scout Initiated. Local Master Assets Detected: {len(local_videos)}")
+        self.log(f"Autonomous Vision Scout Initiated. Local Master Assets: {len(local_videos)} | Aesthetic: [{style_mode.upper()}]")
 
-        # Rule 17: Rate limit safeguard - download maximum 3 stock clips if local assets are absent
         scouted_stock_paths = []
+        scouted_manga_paths = []
+
+        # Rule 17: Rate limit safeguard - acquire auxiliary b-roll or manga reference panels
         if not local_videos or len(local_videos) == 0:
-            self.log("Local master video undetected. Initiating auxiliary stock b-roll acquisition...", "WARNING")
+            self.log("Local master video undetected. Initiating auxiliary media acquisition sequence...", "WARNING")
+            
             for scene in scenes[:self.max_stock_downloads]:
-                # Extract high-value semantic tokens for search query
-                tokens = re.findall(r'\b[a-zA-Z]{4,}\b', scene.get("description", ""))
+                desc = scene.get("description", "")
+                tokens = re.findall(r'\b[a-zA-Z]{4,}\b', desc)
                 clean_query = " ".join(tokens[:3]) if tokens else "cinematic background"
-                clip_path = self.scout_stock_background_video(clean_query)
-                if clip_path:
-                    scouted_stock_paths.append(clip_path)
+                
+                # If project style is Anime/Manga, query MangaDex for reference character panels!
+                if any(k in style_mode for k in ["anime", "manga", "cel", "toon"]) or any(k in desc.lower() for k in ["manga", "anime", "solo leveling", "berserk", "jujutsu", "naruto", "bleach", "one piece"]):
+                    manga_title = tokens[0] if tokens else "Jujutsu Kaisen"
+                    if len(scouted_manga_paths) < self.max_manga_downloads:
+                        panel_path = self.scout_mangadex_panels(manga_title)
+                        if panel_path:
+                            scouted_manga_paths.append(panel_path)
+                else:
+                    # Otherwise, acquire realistic stock b-roll video from Pexels/Pixabay
+                    clip_path = self.scout_stock_background_video(clean_query)
+                    if clip_path:
+                        scouted_stock_paths.append(clip_path)
 
         # Rule 15: Limitless continuous CTR scoring formulation
         prompt = (
@@ -256,6 +345,7 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
         user_msg = json.dumps({
             "local_master_videos": local_videos,
             "auxiliary_stock_clips": scouted_stock_paths,
+            "scouted_mangadex_reference_panels": scouted_manga_paths,
             "storyboard_scenes_sequence": scenes
         })
 
@@ -325,6 +415,7 @@ class Ai_Agent_49_Autonomous_Vision_Media_Scout:
             "execution_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "target_video_scouted": local_videos[0] if local_videos else "none",
             "scouted_stock_broll_clips": scouted_stock_paths,
+            "scouted_mangadex_reference_panels": scouted_manga_paths,
             "total_hero_frames_mapped": len(capped_frames),
             "scouted_frames": capped_frames
         }
