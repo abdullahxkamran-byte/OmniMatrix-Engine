@@ -1,4 +1,13 @@
-import os, re, sys, json, math, time, random, subprocess, urllib.request, urllib.error
+import os
+import re
+import sys
+import json
+import math
+import time
+import random
+import subprocess
+import urllib.request
+import urllib.error
 
 # =====================================================================
 # RULE 2 & 14: UNIVERSAL ENVIRONMENT & API CONFIGURATION
@@ -11,17 +20,25 @@ def load_env_file(filepath=".env"):
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     os.environ[k.strip().upper()] = v.strip()
+
 load_env_file()
 
 class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
         self.agent_name = "Ai_Agent_35_Autonomous_VFX_Procedural_Forge"
-        self.workspace_dir = workspace_dir
-        self.env_dir = os.path.join(self.workspace_dir, "Local_3D_Environments")
-        self.blender_path = "blender"
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
+        self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
+        self.env_dir = os.path.join(self.workspace_dir, "Module_H_Generative", "3d_environments")
+        self.module_c_dir = os.path.join(self.workspace_dir, "Module_C_Heavy_Infantry")
+        self.module_d_dir = os.path.join(self.workspace_dir, "Module_D_VFX_Studio")
+        
+        self.blender_path = os.environ.get("BLENDER_EXECUTABLE", "blender")
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
-        for d in [self.workspace_dir, self.env_dir]: os.makedirs(d, exist_ok=True)
+        
+        for d in [self.workspace_dir, self.env_dir, self.module_c_dir, self.module_d_dir]: 
+            os.makedirs(d, exist_ok=True)
+            
         self._scrub_legacy_assets()
 
     def log(self, msg, level="INFO"):
@@ -29,22 +46,38 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
 
     def _scrub_legacy_assets(self):
         for f in ["35_procedural_vfx_blueprint.json", "temp_vfx_forge.py"]:
-            p = os.path.join(self.workspace_dir, f)
-            if os.path.exists(p): os.remove(p)
+            p = os.path.join(self.module_d_dir, f)
+            if os.path.exists(p): 
+                try: os.remove(p)
+                except Exception: pass
 
     # =====================================================================
     # RULE 7 & 4: ATOMIC HANDSHAKE & LIMITLESS CONFIG LOADERS
     # =====================================================================
     def _handshake(self, status="IN_PROGRESS"):
-        matrix_path = os.path.join(self.workspace_dir, "orchestrator_matrix.json")
+        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
         data = {}
         if os.path.exists(matrix_path):
             try:
-                with open(matrix_path, "r", encoding="utf-8") as f: data = json.load(f)
+                with open(matrix_path, "r", encoding="utf-8") as f: 
+                    data = json.load(f)
             except Exception: pass
-        data.update({"last_active_agent": self.agent_name, "last_update_timestamp": time.time(), "agent_status": {self.agent_name: status}})
-        if status == "COMPLETED": data["next_agent"] = "Ai_Agent_36_Volumetric_Speed_Lines_Architect"
-        with open(matrix_path, "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
+        if "orchestrator_matrix" not in data:
+            data["orchestrator_matrix"] = {}
+            
+        data["orchestrator_matrix"].update({
+            "last_active_agent": self.agent_name, 
+            "last_update_timestamp": time.time(), 
+            "agent_status": {self.agent_name: status}
+        })
+        if status == "COMPLETED": 
+            data["orchestrator_matrix"]["next_agent"] = "ai_agent_36_volumetric_speed_lines_architect"
+            
+        try:
+            with open(matrix_path, "w", encoding="utf-8") as f: 
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.log(f"Handshake error: {e}", "ERROR")
 
     def _load_config(self):
         p = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
@@ -54,14 +87,23 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
                     d = json.load(f)
                     return {"style": d.get("global_style", "realistic").lower(), "theme": d.get("theme", "cyberpunk")}
             except Exception: pass
-        return {"style": "realistic", "theme": "limitless_alien"}
+        return {"style": "anime_cel_shaded", "theme": "limitless_alien"}
 
     def _load_hotspots(self):
-        p = os.path.join(self.workspace_dir, "30_environment_fracture_blueprint.json")
+        p = os.path.join(self.module_c_dir, "30_destruction_blueprint.json")
         if os.path.exists(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
-                    return [{"timestamp_sec": float(ev.get("timestamp_sec", 0.0)), "vfx_origin_xyz": ev.get("fracture_center_xyz", [0.0,0.0,0.0]), "impact_scale": float(ev.get("fracture_radius_meters", 1.0)), "socket_hint": ev.get("socket_target_hint", "_Socket")} for ev in json.load(f).get("fracture_events", [])]
+                    data = json.load(f)
+                    hotspots = []
+                    for scene_name, ev in data.items():
+                        hotspots.append({
+                            "timestamp_sec": float(ev.get("impact_frame", 24)) / 24.0, 
+                            "vfx_origin_xyz": ev.get("fracture_center_xyz", [0.0,0.0,0.0]), 
+                            "impact_scale": float(ev.get("explosion_strength", 1000.0)) / 2000.0, 
+                            "socket_hint": "_Socket"
+                        })
+                    if hotspots: return hotspots
             except Exception: pass
         return [{"timestamp_sec": 1.2, "vfx_origin_xyz": [0.0, 1.5, 0.0], "impact_scale": 2.5, "socket_hint": "Chest_Socket"}, {"timestamp_sec": 3.8, "vfx_origin_xyz": [2.5, 0.5, -1.0], "impact_scale": 4.0, "socket_hint": "Hand_R_Socket"}]
 
@@ -71,7 +113,8 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
 
     def _api_call(self, url, payload, headers):
         req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-        with urllib.request.urlopen(req, timeout=35) as res: return json.loads(res.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=35) as res: 
+            return json.loads(res.read().decode("utf-8"))
 
     # =====================================================================
     # RULE 6, 14 & 15: QUAD-CORE LIMITLESS RECIPE SYNTHESIZER
@@ -81,7 +124,6 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
         hotspots, config = self._load_hotspots(), self._load_config()
         self.log(f"Quad-Core VFX Recipe Forge Initiated. Style: {config['style'].upper()} | Theme: {config['theme']}")
         
-        # Rule 15: Pure Mathematical Recipe Prompting (ZERO Hardcoded shapes!)
         prompt = (f"You are OMNIMATRIX God-Level VFX Technical Director. Global Style: '{config['style']}', Theme: '{config['theme']}'.\n"
                   "Invent completely unique, limitless, alien, or realistic 3D VFX procedural RECIPES for each impact hotspot. DO NOT touch camera movement.\n"
                   "DO NOT use preset names. Synthesize a raw geometry & shader recipe. Return JSON object with list 'vfx_procedural_profiles' containing:\n"
@@ -99,31 +141,34 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
         output = None
         user_msg = f"Hotspots Context:\n{json.dumps(hotspots)}"
         
-        # Core 1: Gemini (Primary - Rule 14 & 16)
+        # Core 1: Gemini
         if self.gemini_key and not output:
             try:
-                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.9, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
+                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.9, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
                 output = {"vfx_procedural_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("vfx_procedural_profiles", [])}
                 self.log("[Core 1: Gemini] Synthesized limitless VFX mathematical recipes!", "SUCCESS")
-            except Exception as e: self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
+            except Exception as e: 
+                self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
         
-        # Core 2: OpenAI (Failsafe - Rule 14 & 16)
+        # Core 2: OpenAI
         if self.openai_key and not output:
             try:
                 res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
                 output = {"vfx_procedural_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("vfx_procedural_profiles", [])}
                 self.log("[Core 2: OpenAI] Synthesized limitless VFX mathematical recipes!", "SUCCESS")
-            except Exception as e: self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
+            except Exception as e: 
+                self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
         
-        # Core 3: Ollama (Local Fallback - Rule 6)
+        # Core 3: Ollama
         if not output:
             try:
                 res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json"})
                 output = {"vfx_procedural_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("vfx_procedural_profiles", [])}
                 self.log("[Core 3: Ollama] Generated local VFX recipes!", "SUCCESS")
-            except Exception as e: self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
+            except Exception as e: 
+                self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")
         
-        # Core 4: 100% Offline Math Autonomy (Rule 10 - Alien Algorithmic Fallback)
+        # Core 4: Offline Math Autonomy
         if not output:
             self.log("[Core 4: Math Fallback] Engaging offline float recipe synthesis algorithm...", "WARNING")
             prims, patterns = ["ico_sphere", "torus", "cylinder", "cone", "grid", "uv_sphere"], ["voronoi", "noise", "wave", "magic"]
@@ -137,15 +182,17 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
                     "vfx_name": f"Alien_Singularity_Class_{random.randint(100,999)}",
                     "vfx_origin_xyz": hs["vfx_origin_xyz"], "socket_bind_target": hs["socket_hint"],
                     "primitive_mesh": random.choice(prims), "shader_math_pattern": random.choice(patterns),
-                    "color_ramp_interpolation": "CONSTANT" if config["style"] == "anime" else "EASE",
+                    "color_ramp_interpolation": "CONSTANT" if "anime" in config["style"] else "EASE",
                     "glow_intensity_emission": round(150.0 * sc, 1), "pattern_scale": round(random.uniform(2.0, 30.0), 2),
                     "mesh_deform_strength": round(random.uniform(1.0, 15.0), 2), "color_primary_rgb": [r1, g1, b1],
                     "color_secondary_rgb": [round(1.0-r1, 3), round(1.0-g1, 3), round(1.0-b1, 3)],
-                    "particle_spawn_rate": min(350, int(100 * sc)), "volumetric_density": 0.0 if config["style"] == "anime" else round(1.5*sc, 2),
+                    "particle_spawn_rate": min(350, int(100 * sc)), "volumetric_density": 0.0 if "anime" in config["style"] else round(1.5*sc, 2),
                     "mesh_stutter_strength": round(2.0 * sc, 2), "turbulence_force_strength": round(15.0 * sc, 1)
                 })
         
-        with open(os.path.join(self.workspace_dir, "35_procedural_vfx_blueprint.json"), "w", encoding="utf-8") as f: json.dump(output, f, indent=4)
+        with open(os.path.join(self.module_d_dir, "35_procedural_vfx_blueprint.json"), "w", encoding="utf-8") as f: 
+            json.dump(output, f, indent=4)
+            
         self._bake_vfx_in_blender(output)
         self._handshake("COMPLETED")
         return output
@@ -185,7 +232,7 @@ for idx, vfx in enumerate(vfx_profiles):
         turb_force, spawn_frame = float(vfx.get('turbulence_force_strength', 15)), int(vfx.get('timestamp_sec', 0) * fps)
         end_frame = min(spawn_frame + int(fps * 2.0), spawn_frame + 150) # Rule 17: Max 150 frames
 
-        # 1. DYNAMIC PRIMITIVE MESH EVALUATOR (Zero Hardcoded Shapes!)
+        # 1. DYNAMIC PRIMITIVE MESH EVALUATOR
         if 'torus' in prim or 'ring' in prim: bpy.ops.mesh.primitive_torus_add(major_radius=2.5, minor_radius=0.2, location=loc)
         elif 'cylin' in prim or 'tube' in prim: bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.15, depth=5.0, location=loc)
         elif 'cone' in prim: bpy.ops.mesh.primitive_cone_add(vertices=16, radius1=1.5, depth=3.0, location=loc)
@@ -205,14 +252,13 @@ for idx, vfx in enumerate(vfx_profiles):
                         const.inverse_matrix = (arm.matrix_world @ b.matrix_local).inverted()
                         break
 
-        # Rule 11 & 4: DYNAMIC PROCEDURAL SHADER RECIPE BUILDER (No External Textures)
+        # Rule 11 & 4: DYNAMIC PROCEDURAL SHADER RECIPE BUILDER
         mat = bpy.data.materials.new(name=f"MAT_{{obj.name}}")
         mat.use_nodes = True
         nt = mat.node_tree
         nt.nodes.clear()
         out, emit = nt.nodes.new('ShaderNodeOutputMaterial'), nt.nodes.new('ShaderNodeEmission')
         
-        # Dynamically Select Pattern Math Node
         if 'wave' in pattern: tex = nt.nodes.new('ShaderNodeTexWave')
         elif 'magic' in pattern: tex = nt.nodes.new('ShaderNodeTexMagic')
         elif 'noise' in pattern: tex = nt.nodes.new('ShaderNodeTexNoise')
@@ -247,7 +293,7 @@ for idx, vfx in enumerate(vfx_profiles):
             nt.links.new(emit.outputs['Emission'], out.inputs['Surface'])
         obj.data.materials.append(mat)
 
-        # Rule 12: Kinetic Mesh Physics (Zero Camera Touch - That's Agent 21!)
+        # Rule 12: Kinetic Mesh Physics
         disp = obj.modifiers.new(name="Kinetic_Displace", type='DISPLACE')
         d_tex = bpy.data.textures.new(f"Tex_{{obj.name}}", type='CLOUDS')
         d_tex.noise_scale = 0.5 if style == "realistic" else 1.8
@@ -280,14 +326,23 @@ for idx, vfx in enumerate(vfx_profiles):
 try: bpy.ops.wm.save_mainfile()
 except Exception: pass
 """
-        script_path = os.path.join(self.workspace_dir, "temp_vfx_forge.py")
-        with open(script_path, "w", encoding="utf-8") as f: f.write(script_content)
-        for file in os.listdir(self.env_dir):
-            if file.endswith(".blend"):
-                try: subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, file), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
-                except Exception: pass
-        if os.path.exists(script_path): os.remove(script_path)
+        script_path = os.path.join(self.module_d_dir, "temp_vfx_forge.py")
+        with open(script_path, "w", encoding="utf-8") as f: 
+            f.write(script_content)
+            
+        if os.path.exists(self.env_dir):
+            for file in os.listdir(self.env_dir):
+                if file.endswith(".blend"):
+                    try: 
+                        subprocess.run([self.blender_path, "-b", os.path.join(self.env_dir, file), "-P", script_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                    except Exception as e:
+                        self.log(f"Blender execution exception on {file}: {e}", "WARNING")
+                        
+        if os.path.exists(script_path): 
+            os.remove(script_path)
+            
         self.log("Blender Limitless Recipe compilation and kinetic injection complete!", "SUCCESS")
 
 if __name__ == "__main__":
-    Ai_Agent_35_Autonomous
+    forge = Ai_Agent_35_Autonomous_VFX_Procedural_Forge()
+    forge.forge_procedural_vfx()
