@@ -110,7 +110,7 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         
         if status == "COMPLETED":
             # Hand off to THE FINAL BOSS: Agent 00 (Universal Pipeline Orchestrator)
-            data["orchestrator_matrix"]["next_agent"] = "Agent_00_Universal_Pipeline_Orchestrator"
+            data["orchestrator_matrix"]["next_agent"] = "agent_00_universal_pipeline_orchestrator"
             
         try:
             with open(matrix_path, "w", encoding="utf-8") as f:
@@ -319,9 +319,14 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         if override_prompt:
             user_prompt = override_prompt
         else:
-            print("\n" + "=" * 75)
-            user_prompt = input("Enter custom action choreography or lore directives [Press Enter for Auto-Climax]: ").strip()
-            print("=" * 75)
+            try:
+                print("\n" + "=" * 75)
+                user_prompt = input("Enter custom action choreography or lore directives [Press Enter for Auto-Climax]: ").strip()
+                print("=" * 75)
+            except EOFError:
+                # Safeguard for automated/headless Google Colab execution
+                self.log("Headless execution environment detected. Using automated high-octane choreography prompt.", "INFO")
+                user_prompt = ""
             
         if not user_prompt:
             user_prompt = "Generate an ultra-cinematic, high-octane action showdown with extreme sakuga choreography."
@@ -346,7 +351,7 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
             
         self.log(f"Master Conductor timeline blueprint locked: '{self.output_directive_path}'", "SUCCESS")
 
-        # --- FULL TERMINAL UI PRESENTATION (FIXED TRUNCATION) ---
+        # --- FULL TERMINAL UI PRESENTATION (COMPLETED TAIL) ---
         print("\n" + "=" * 75)
         print("               OMNIMATRIX V2.0 — SUPREME CONDUCTOR DIRECTIVES")
         print("=" * 75)
@@ -358,26 +363,27 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         print(f"VFX ATMOSPHERE:  {global_params.get('vfx_atmosphere', 'Nominal Fog/Particles')}")
         print("-" * 75)
         
-  print("CHRONOLOGICAL CHOREOGRAPHY & AGENT ORCHESTRATION LEDGER:")
-        for slice_item in directives:
-            seg_id = slice_item.get("segment_id", 0)
-            dur = slice_item.get("duration_slice", 0.0)
-            action = slice_item.get("action_choreography", "Nominal Action")
-            cam = slice_item.get("camera_rig_behavior", "static_camera")
-            cmds = slice_item.get("orchestrated_agent_commands", {})
-            
-            print(f"\n  >> SEGMENT #{seg_id:02d} [{dur:.1f} sec] | Camera: {cam.upper()}")
-            print(f"     Action: {action}")
-            if cmds:
-                print("     Downstream Agent Directives:")
-                for agent_key, command_val in cmds.items():
-                    print(f"       -> {agent_key}: [{command_val}]")
-                    
+        print("CHARACTER ROSTER:")
+        for char in timeline_data.get("character_set", []):
+            print(f"  • {char.get('character_name', 'Unknown')}: {char.get('clothing_details', 'Default Rig')}")
+            print(f"    Initial Stance: {char.get('initial_pose', 'Idle')}")
+        print("-" * 75)
+        
+        print("CHRONOLOGICAL EXECUTION TIMELINE:")
+        for slice_data in directives:
+            seg_id = slice_data.get("segment_id", 0)
+            dur = slice_data.get("duration_slice", 0.0)
+            print(f"\n[SEGMENT {seg_id:02d} | Duration: {dur}s | Camera Rig: {slice_data.get('camera_rig_behavior', 'static')}]")
+            print(f"  ► Choreography: {slice_data.get('action_choreography', 'None')}")
+            print(f"  ► Environment:  {slice_data.get('environment_state', 'None')}")
+            print("  ► Sub-Agent Routing Directives:")
+            for ag_name, cmd in slice_data.get("orchestrated_agent_commands", {}).items():
+                print(f"      └─ {ag_name}: {cmd}")
+                
         print("\n" + "=" * 75)
-        print("  TIMELINE COMPILED. HANDING OFF TO MASTER TRAFFIC ORCHESTRATOR (AGENT 00)...")
-        print("=" * 75 + "\n")
-
+        
         self._handshake("COMPLETED", len(directives))
+        self.log("Supreme Creative Script Conductor execution completed successfully!", "SUCCESS")
         return timeline_data
 
 if __name__ == "__main__":
