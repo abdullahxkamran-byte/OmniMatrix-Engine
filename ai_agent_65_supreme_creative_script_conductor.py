@@ -3,22 +3,13 @@ import re
 import sys
 import json
 import time
-import shutil
-import platform
-import subprocess
+import psutil
 import urllib.request
 import urllib.error
 from datetime import datetime
 
-# Attempt importing Google Gemini SDK for supreme narrative architecture
-try:
-    import google.generativeai as genai
-    GEMINI_SDK_AVAILABLE = True
-except ImportError:
-    GEMINI_SDK_AVAILABLE = False
-
 # =====================================================================
-# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# RULE 2 & 14: UNIVERSAL PATH ISOLATION & DUAL-CASE ENV LOADING
 # =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
@@ -27,50 +18,45 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    os.environ[key.strip().upper()] = val.strip()
+                    key_str = key.strip()
+                    val_str = val.strip().strip('"').strip("'")
+                    os.environ[key_str.upper()] = val_str
+                    os.environ[key_str.lower()] = val_str
 
 load_env_file()
 
 class Ai_Agent_65_Supreme_Creative_Script_Conductor:
     """
-    OMNIMATRIX V2.0 GOD-LEVEL SUPREME CREATIVE SCRIPT CONDUCTOR
-    Acts as the commander-in-chief and master visual art director for the entire
-    67-agent network. Ingests raw story scripts and user direction prompts,
-    decomposing narrative arcs into chronological execution timelines. Synthesizes
-    actionable directives for 3D lighting, kinetic rigging, phonk audio beats,
-    and procedural mesh destruction across all downstream specialized engines.
+    OMNIMATRIX V2.0 GOD-LEVEL AGENT 65 — SUPREME CREATIVE SCRIPT CONDUCTOR
+    
+    Role:
+    1. Ingests raw narrative script (from Module A) and custom creative overrides.
+    2. Synthesizes high-level sakuga choreography, lighting themes, and camera directives.
+    3. Outputs both '65_creative_brief.json' and '65_master_conductor_timeline.json'.
+    4. Executes Atomic Handshake to pass directives to Agent 68 and Agent 00.
+    5. Employs Quad-Core LLM Engine (Gemini -> HuggingFace -> Ollama -> Core 4 Fallback).
     """
+
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
-        # Rule 8: AI vs Non-AI Naming enforcement
-        self.agent_name = "Ai_Agent_65_Supreme_Creative_Script_Conductor"
+        self.agent_name = "ai_agent_65_supreme_creative_script_conductor"
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
-        
-        # System IO paths
-        self.input_script_path = os.path.join(self.workspace_dir, "08_formatted_script.json")
-        self.output_directive_path = os.path.join(self.workspace_dir, "65_master_conductor_timeline.json")
-        self.log_file_path = os.path.join(self.workspace_dir, "65_conductor_telemetry.log")
-        
-        # Rule 17: Memory and timeline segment ceiling safeguard
-        self.max_timeline_slices = 40
-        
-        # API credentials & configurations
-        self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
-        self.openai_key = os.environ.get("OPENAI_API_KEY", None)
-        
-        if GEMINI_SDK_AVAILABLE and self.gemini_key:
-            genai.configure(api_key=self.gemini_key)
-            
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o"
-
         os.makedirs(self.workspace_dir, exist_ok=True)
+
+        # File IO Paths
+        self.input_script_path = os.path.join(self.workspace_dir, "08_formatted_script.json")
+        self.config_path = os.path.join(self.workspace_dir, "01_omnimatrix_project_config.json")
+        self.output_brief_path = os.path.join(self.workspace_dir, "65_creative_brief.json")
+        self.output_timeline_path = os.path.join(self.workspace_dir, "65_master_conductor_timeline.json")
+        self.log_file_path = os.path.join(self.workspace_dir, "65_conductor_telemetry.log")
+        self.matrix_state_path = os.path.join(self.workspace_dir, "matrix_state.json")
+
+        self.max_timeline_slices = 40
         self._scrub_legacy_assets()
 
     def log(self, message, level="INFO"):
-        formatted = f"[{level}] [{self.agent_name}] {message}"
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] [{level}] [{self.agent_name}] {message}"
         print(formatted)
         try:
             with open(self.log_file_path, "a", encoding="utf-8") as f:
@@ -78,64 +64,88 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         except Exception:
             pass
 
-    def _scrub_legacy_assets(self):
-        """Rule 3: Idempotency scrubbing of previous master conductor timelines."""
-        if os.path.exists(self.output_directive_path):
-            try:
-                os.remove(self.output_directive_path)
-            except Exception as error:
-                self.log(f"Failed to scrub legacy timeline {self.output_directive_path}: {error}", "WARNING")
+    def _get_hardware_telemetry(self):
+        try:
+            mem = psutil.virtual_memory()
+            return f"RAM: {mem.percent}% used | Avail: {mem.available / (1024**2):.1f} MB"
+        except Exception:
+            return "Hardware Telemetry Active"
 
     # =====================================================================
-    # RULE 7: ATOMIC HANDSHAKE & PIPELINE ROUTING
+    # RULE 3: IDEMPOTENCY SCRUBBING
+    # =====================================================================
+    def _scrub_legacy_assets(self):
+        for target in [self.output_brief_path, self.output_timeline_path]:
+            if os.path.exists(target):
+                try:
+                    os.remove(target)
+                    self.log(f"Scrubbed legacy output file: {target}")
+                except Exception as e:
+                    self.log(f"Failed to remove legacy target {target}: {e}", "WARNING")
+
+    # =====================================================================
+    # RULE 7: ATOMIC HANDSHAKE SYNCHRONIZATION
     # =====================================================================
     def _handshake(self, status="IN_PROGRESS", total_segments=0):
-        matrix_path = os.path.join(self.workspace_dir, "matrix_state.json")
         data = {}
-        if os.path.exists(matrix_path):
+        if os.path.exists(self.matrix_state_path):
             try:
-                with open(matrix_path, "r", encoding="utf-8") as f:
+                with open(self.matrix_state_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except Exception:
                 pass
+
         if "orchestrator_matrix" not in data:
             data["orchestrator_matrix"] = {}
-            
+
         data["orchestrator_matrix"].update({
             "last_active_agent": self.agent_name,
             "last_update_timestamp": time.time(),
             "master_timeline_segments_mapped": total_segments,
             "agent_status": {self.agent_name: status}
         })
-        
-        if status == "COMPLETED":
-            # Hand off to THE FINAL BOSS: Agent 00 (Universal Pipeline Orchestrator)
-            data["orchestrator_matrix"]["next_agent"] = "agent_00_universal_pipeline_orchestrator"
-            
-        try:
-            with open(matrix_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-        except Exception as error:
-            self.log(f"Atomic handshake synchronization failure: {error}", "ERROR")
 
-    def _load_raw_script(self):
-        """Ingests pre-compiled narrative scripts from Module A."""
+        if status == "COMPLETED":
+            data["orchestrator_matrix"]["next_agent"] = "ai_agent_68_dynamic_task_architect"
+
+        try:
+            with open(self.matrix_state_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.log(f"Atomic handshake write failure: {e}", "ERROR")
+
+    # =====================================================================
+    # SCRIPT & CONFIG INGESTION
+    # =====================================================================
+    def _load_upstream_context(self):
+        script_data = {
+            "title": "Domain Expansion Climax",
+            "voice_over_script": "Infinite space collapses as cursed power reaches critical mass.",
+            "duration_seconds": 10.0
+        }
         if os.path.exists(self.input_script_path):
             try:
                 with open(self.input_script_path, "r", encoding="utf-8") as f:
-                    self.log("Upstream narrative script ingested successfully from Module A.", "SUCCESS")
-                    return json.load(f)
-            except Exception as error:
-                self.log(f"Script ingestion exception: {error}. Synthesizing baseline combat structure.", "WARNING")
-        
-        return {
-            "title": "Dimensional Convergence Showdown",
-            "voice_over_script": "The celestial barrier shatters as supreme forces collide. There is no retreat, only absolute dominion.",
-            "duration_seconds": 16.0
-        }
+                    script_data = json.load(f)
+                    self.log("Upstream script successfully ingested from Module A.", "SUCCESS")
+            except Exception as e:
+                self.log(f"Script ingestion exception: {e}. Using baseline fallback script.", "WARNING")
 
+        global_style = "anime_cel_shaded"
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    global_style = cfg.get("global_style", global_style)
+            except Exception:
+                pass
+
+        return script_data, global_style
+
+    # =====================================================================
+    # RULE 5: BULLETPROOF JSON REGEX SCRUBBER
+    # =====================================================================
     def _clean_json(self, raw_text):
-        """Rule 5: Bulletproof JSON scrubber."""
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```(json)?\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
@@ -146,11 +156,10 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         return cleaned
 
     def _heal_broken_json(self, json_string):
-        """Executes structural repairs on malformed LLM responses to ensure compilation."""
         try:
             return json.loads(json_string)
-        except json.JSONDecodeError as error:
-            self.log(f"JSON structural integrity bug detected: {error}. Engaging bracket balancing repairs...", "WARNING")
+        except Exception as e:
+            self.log(f"JSON Decode Warning: {e}. Attempting structural balance...", "WARNING")
             repaired = json_string.strip()
             if not repaired.endswith("}"):
                 if repaired.count("[") > repaired.count("]"):
@@ -160,131 +169,100 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
             try:
                 return json.loads(repaired)
             except Exception:
-                self.log("Automatic JSON bracket balancing failed. Routing to procedural fallback engine.", "ERROR")
                 return None
 
-    def build_creative_prompt(self, raw_script, user_prompt):
-        """Formulates an exhaustive system instruction sequence for multi-model intelligence."""
-        system_instruction = (
-            "You are OMNIMATRIX Supreme Creative Script Conductor, Cinematographer, and Combat Choreographer.\n"
-            "Your objective is to decompose a narrative script and user visual instructions into a chronological master execution timeline.\n"
-            "CRITICAL DIRECTIVES:\n"
-            "1. Allocate precise action choreography, lighting themes, and camera F-curve behaviors for every scene slice.\n"
-            "2. Dictate explicit commands for downstream specialized agents (e.g., Agent 14 phonk beat drops, Agent 22 lighting shaders, Agent 30 mesh fractures).\n"
-            "3. Ensure the sum of all 'duration_slice' fields matches the target video duration.\n"
-            "Output STRICTLY a JSON object matching this exact structural template:\n"
-            "{\n"
-            "  \"scenario_title\": \"The Ultimate Climax - Battle of the Heavens\",\n"
-            "  \"global_parameters\": {\n"
-            "    \"primary_lighting_theme\": \"Dark gothic midnight blue with vivid cyan and violet rim lighting\",\n"
-            "    \"environment_geometry\": \"Shattered urban megalopolis with suspended concrete fragments in anti-gravity\",\n"
-            "    \"vfx_atmosphere\": \"Volumetric plasma dust, spatial optical distortion, high-frequency kinetic sparks\"\n"
-            "  },\n"
-            "  \"character_set\": [\n"
-            "    {\"character_name\": \"Gojo Satoru\", \"clothing_details\": \"Black high-collar Jujutsu uniform\", \"initial_pose\": \"Floating calmly three feet off the ground, fingers crossed in the Unlimited Void sign\"},\n"
-            "    {\"character_name\": \"Ryomen Sukuna\", \"clothing_details\": \"Ripped kimono with cursed markings\", \"initial_pose\": \"Standing on ruined concrete, four arms active, expressions of pure shock\"}\n"
-            "  ],\n"
-            "  \"master_directives\": [\n"
-            "    {\n"
-            "      \"segment_id\": 1,\n"
-            "      \"duration_slice\": 8.0,\n"
-            "      \"action_choreography\": \"Gojo triggers Red and Blue simultaneously. Swirling gravitational vortex erupts between his hands. Sukuna attempts supersonic slash but is pulled off balance by spatial curvature.\",\n"
-            "      \"environment_state\": \"Floating concrete chunks accelerate into orbital velocity around Gojo. Ground collapses inward into an abyssal crater.\",\n"
-            "      \"camera_rig_behavior\": \"dramatic_orbital_zoom\",\n"
-            "      \"orchestrated_agent_commands\": {\n"
-            "        \"agent_14_phonk_beat_sync\": \"slow_mo_rise\",\n"
-            "        \"agent_22_lighting_shader\": \"ambient_dark_purple\",\n"
-            "        \"agent_30_fracture_engine\": \"ground_cracking_frame_24\"\n"
-            "      }\n"
-            "    },\n"
-            "    {\n"
-            "      \"segment_id\": 2,\n"
-            "      \"duration_slice\": 8.0,\n"
-            "      \"action_choreography\": \"Gojo unleashes Hollow Purple, obliterating the central spatial plane. Sukuna is engulfed in a blinding violet singularity blast. Gojo touches down effortlessly.\",\n"
-            "      \"environment_state\": \"Intense purple plasma reflecting across all debris. Background structures vaporize into glowing sub-atomic ash particles.\",\n"
-            "      \"camera_rig_behavior\": \"shaky_handheld_track\",\n"
-            "      \"orchestrated_agent_commands\": {\n"
-            "        \"agent_14_phonk_beat_sync\": \"bass_drop_shake\",\n"
-            "        \"agent_22_lighting_shader\": \"high_contrast_rim_light\",\n"
-            "        \"agent_30_fracture_engine\": \"absolute_destruction\"\n"
-            "      }\n"
-            "    }\n"
-            "  ]\n"
-            "}\n"
-            "Zero conversational text or markdown code wraps allowed."
-        )
-        user_context = f"Target Narrative Script:\n{json.dumps(raw_script, indent=2)}\n\nUser Choreography Override:\n{user_prompt}"
-        return system_instruction, user_context
-
     # =====================================================================
-    # RULE 6, 14, 16: QUAD-CORE CREATIVE INTELLIGENCE NODE
+    # RULE 6 & 16: QUAD-CORE CREATIVE INTELLIGENCE NODE
     # =====================================================================
     def query_creative_intelligence(self, system_prompt, user_prompt):
-        # Core 1: Gemini SDK Pro
-        if GEMINI_SDK_AVAILABLE and self.gemini_key:
-            self.log("Querying Primary Cloud Intelligence Node (Gemini 1.5 Pro)...", "INFO")
-            try:
-                model = genai.GenerativeModel("gemini-1.5-pro")
-                res = model.generate_content(f"{system_prompt}\n\n{user_prompt}")
-                self.log("[Core 1: Gemini] Synthesized master conductor timeline!", "SUCCESS")
-                return self._clean_json(res.text)
-            except Exception as error:
-                self.log(f"[Core 1: Gemini] Exception: {error}. Routing to OpenAI...", "WARNING")
+        gemini_key = os.environ.get("GEMINI_API_KEY", os.environ.get("gemini_api_key", ""))
+        hf_token = os.environ.get("HF_TOKEN", os.environ.get("hf_token", ""))
 
-        # Core 2: OpenAI Failsafe
-        if self.openai_key:
-            self.log("Querying Secondary Cloud Intelligence Node (OpenAI GPT-4o)...", "INFO")
-            try:
-                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"}
-                payload = {"model": self.model_cloud, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "response_format": {"type": "json_object"}}
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    res_body = json.loads(response.read().decode("utf-8"))
-                    self.log("[Core 2: OpenAI] Synthesized master conductor timeline!", "SUCCESS")
-                    return self._clean_json(res_body["choices"][0]["message"]["content"])
-            except Exception as error:
-                self.log(f"[Core 2: OpenAI] Exception: {error}. Routing to Ollama...", "WARNING")
+        payload = {
+            "contents": [{"parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}],
+            "generationConfig": {"responseMimeType": "application/json"}
+        }
 
-        # Core 3: Ollama Local Fallback
-        self.log("Querying Local Hardware Intelligence Node (Ollama Llama3)...", "INFO")
+        # CORE 1: GOOGLE GEMINI API (HTTP REST)
+        if gemini_key and gemini_key.startswith("AIzaSy"):
+            self.log("Querying Core 1: Google Gemini AI Engine...", "INFO")
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    self.log("Core 1 (Gemini) generated creative directives successfully.", "SUCCESS")
+                    return self._clean_json(raw_text)
+            except Exception as e:
+                self.log(f"Core 1 (Gemini) failed: {e}. Falling back to Core 2...", "WARNING")
+
+        # CORE 2: HUGGING FACE INFERENCE ENGINE
+        if hf_token:
+            self.log("Querying Core 2: HuggingFace Inference LLM Engine...", "INFO")
+            try:
+                hf_url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+                headers = {"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json"}
+                hf_payload = {"inputs": f"<s>[INST] {system_prompt}\n{user_prompt} Respond strictly in JSON format. [/INST]"}
+                req = urllib.request.Request(hf_url, data=json.dumps(hf_payload).encode("utf-8"), headers=headers)
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    gen_text = data[0].get("generated_text", "")
+                    self.log("Core 2 (HuggingFace) generated creative directives successfully.", "SUCCESS")
+                    return self._clean_json(gen_text)
+            except Exception as e:
+                self.log(f"Core 2 (HuggingFace) failed: {e}. Falling back to Core 3...", "WARNING")
+
+        # CORE 3: LOCAL OLLAMA ENGINE
+        self.log("Querying Core 3: Local Hardware Intelligence (Ollama)...", "INFO")
         try:
-            headers = {"Content-Type": "application/json"}
-            payload = {"model": self.model_local, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "stream": False, "format": "json"}
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=50) as response:
-                res_body = json.loads(response.read().decode("utf-8"))
-                self.log("[Core 3: Ollama] Generated local conductor timeline!", "SUCCESS")
-                return self._clean_json(res_body["message"]["content"])
-        except Exception as error:
-            self.log(f"[Core 3: Ollama] Offline: {error}. Reverting to offline procedural Alchemist backup.", "ERROR")
-            return None
+            ollama_url = "http://localhost:11434/api/generate"
+            ollama_payload = {"model": "mistral", "prompt": f"{system_prompt}\n{user_prompt}", "stream": False, "format": "json"}
+            req = urllib.request.Request(ollama_url, data=json.dumps(ollama_payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                self.log("Core 3 (Ollama) generated local directives.", "SUCCESS")
+                return self._clean_json(data.get("response", ""))
+        except Exception as e:
+            self.log(f"Core 3 (Ollama) offline: {e}. Engaging Core 4 Procedural Engine.", "INFO")
+
+        # CORE 4: PROCEDURAL FALLBACK
+        return None
 
     # =====================================================================
-    # RULE 10: OFFLINE PROCEDURAL BATTLE ALCHEMIST FALLBACK
+    # RULE 10: PROCEDURAL CREATIVE FALLBACK SYNTHESIZER
     # =====================================================================
-    def execute_procedural_fallback(self, raw_script, user_prompt):
-        """Synthesizes a high-octane battle timeline when all cloud and local AI endpoints are offline."""
-        self.log("Engaging offline procedural Battle Alchemist timeline generator...", "WARNING")
-        total_duration = float(raw_script.get("duration_seconds", 16.0))
+    def execute_procedural_fallback(self, script_data, global_style, user_prompt):
+        self.log("Engaging Core 4: Procedural Creative Synthesis Engine...", "WARNING")
+        total_duration = float(script_data.get("duration_seconds", 10.0))
         half_dur = round(total_duration / 2.0, 2)
-        
+
         return {
-            "scenario_title": f"Procedural Showdown — {raw_script.get('title', 'Apex Override')}",
+            "scenario_title": script_data.get("title", "Procedural Domain Climax"),
             "global_parameters": {
-                "primary_lighting_theme": "High-contrast neon crimson and plasma orange flares",
-                "environment_geometry": "Shattering basalt monoliths with reflective aqueous surfaces",
-                "vfx_atmosphere": "Volumetric smoke columns, directional tempest currents, glowing embers"
+                "global_style": global_style,
+                "primary_lighting_theme": "High contrast cyan and violet volumetric plasma illumination",
+                "environment_geometry": "Levitating basalt slabs with kinetic gravitational distortions",
+                "vfx_atmosphere": "Volumetric energy particles, directional speed lines, shockwave pulses"
             },
             "character_set": [
-                {"character_name": "Apex Vanguard", "clothing_details": "Armored cybernetic battlesuit", "initial_pose": "Crouched in low kinetic launch stance"},
-                {"character_name": "Abyssal Sovereign", "clothing_details": "Dark obsidian plate armor", "initial_pose": "Levitating with gravitational aura emanating"}
+                {
+                    "character_name": "Gojo Satoru",
+                    "clothing_details": "High-collar dark uniform",
+                    "initial_pose": "Unlimited Void finger cross stance"
+                },
+                {
+                    "character_name": "Sukuna",
+                    "clothing_details": "Ripped kimono with cursed tattoo markings",
+                    "initial_pose": "Four-armed stance with malevolent aura"
+                }
             ],
             "master_directives": [
                 {
                     "segment_id": 1,
                     "duration_slice": half_dur,
-                    "action_choreography": f"Vanguard initiates supersonic linear dash. Sovereign channels sphere of destruction. Context: '{user_prompt}'",
-                    "environment_state": "Monoliths begin fracturing from acoustic pressure; water rippling violently.",
+                    "action_choreography": f"Gojo unleashes domain expansion. Sukuna initiates supersonic counter slash. Prompt: {user_prompt}",
+                    "environment_state": "Ground fractures violently under kinetic pressure.",
                     "camera_rig_behavior": "dramatic_orbital_zoom",
                     "orchestrated_agent_commands": {
                         "agent_14_phonk_beat_sync": "slow_mo_rise",
@@ -295,8 +273,8 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
                 {
                     "segment_id": 2,
                     "duration_slice": half_dur,
-                    "action_choreography": "Kinetic collision erupts into hemispherical shockwave. Vanguard pierces defensive singularity to secure victory.",
-                    "environment_state": "Pillars completely disintegrate into orbital rubble; sky illuminates with plasma beams.",
+                    "action_choreography": "Hollow Purple singularity engulfs central combat plane into annihilation.",
+                    "environment_state": "Structural elements vaporize into glowing sub-atomic dust.",
                     "camera_rig_behavior": "shaky_handheld_track",
                     "orchestrated_agent_commands": {
                         "agent_14_phonk_beat_sync": "bass_drop_shake",
@@ -308,83 +286,72 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         }
 
     # =====================================================================
-    # ACTIONABLE TIMELINE COMPILER & TERMINAL PRESENTATION
+    # MAIN EXECUTION
     # =====================================================================
     def run_choreography_pipeline(self, override_prompt=None):
         self._handshake("IN_PROGRESS")
-        self.log("System Operational. Initiating Supreme Creative Script Conductor...")
-        
-        raw_script = self._load_raw_script()
-        
+        self.log("=====================================================================")
+        self.log("ACTIVATING AGENT 65: SUPREME CREATIVE SCRIPT CONDUCTOR")
+        self.log("=====================================================================")
+        self.log(f"Telemetry Check: {self._get_hardware_telemetry()}")
+
+        script_data, global_style = self._load_upstream_context()
+
         if override_prompt:
             user_prompt = override_prompt
         else:
-            try:
-                print("\n" + "=" * 75)
-                user_prompt = input("Enter custom action choreography or lore directives [Press Enter for Auto-Climax]: ").strip()
-                print("=" * 75)
-            except EOFError:
-                # Safeguard for automated/headless Google Colab execution
-                self.log("Headless execution environment detected. Using automated high-octane choreography prompt.", "INFO")
-                user_prompt = ""
-            
-        if not user_prompt:
-            user_prompt = "Generate an ultra-cinematic, high-octane action showdown with extreme sakuga choreography."
-            
-        sys_prompt, user_context = self.build_creative_prompt(raw_script, user_prompt)
-        raw_response = self.query_creative_intelligence(sys_prompt, user_context)
-        
+            user_prompt = "Generate an ultra-cinematic, high-octane anime sakuga fight climax with intense camera movement."
+
+        system_instruction = (
+            "You are OmniMatrix Supreme Creative Script Conductor.\n"
+            "Decompose the input script into a master execution timeline.\n"
+            "Output strictly valid JSON with keys: 'scenario_title', 'global_parameters', 'character_set', 'master_directives'."
+        )
+        user_context = f"Target Script:\n{json.dumps(script_data, indent=2)}\n\nStyle: {global_style}\nDirectives: {user_prompt}"
+
+        raw_response = self.query_creative_intelligence(system_instruction, user_context)
+
         timeline_data = None
         if raw_response:
             timeline_data = self._heal_broken_json(raw_response)
-            
-        if not timeline_data:
-            timeline_data = self.execute_procedural_fallback(raw_script, user_prompt)
 
-        # Rule 17 Safeguard: Cap timeline slices to prevent downstream memory overflow
+        if not timeline_data or not isinstance(timeline_data, dict):
+            timeline_data = self.execute_procedural_fallback(script_data, global_style, user_prompt)
+
         directives = timeline_data.get("master_directives", [])[:self.max_timeline_slices]
         timeline_data["master_directives"] = directives
 
-        # Save Master Timeline Blueprint
-        with open(self.output_directive_path, "w", encoding="utf-8") as f:
+        # 1. Output Master Timeline
+        with open(self.output_timeline_path, "w", encoding="utf-8") as f:
             json.dump(timeline_data, f, indent=4)
-            
-        self.log(f"Master Conductor timeline blueprint locked: '{self.output_directive_path}'", "SUCCESS")
+        self.log(f"Master Conductor timeline written to: '{self.output_timeline_path}'", "SUCCESS")
 
-        # --- FULL TERMINAL UI PRESENTATION (COMPLETED TAIL) ---
-        print("\n" + "=" * 75)
-        print("               OMNIMATRIX V2.0 — SUPREME CONDUCTOR DIRECTIVES")
-        print("=" * 75)
-        print(f"SCENARIO TITLE:  {timeline_data.get('scenario_title', 'Untitled Climax')}")
-        
-        global_params = timeline_data.get("global_parameters", {})
-        print(f"LIGHTING THEME:  {global_params.get('primary_lighting_theme', 'Standard PBR')}")
-        print(f"SCENE GEOMETRY:  {global_params.get('environment_geometry', 'Standard Spatial Plane')}")
-        print(f"VFX ATMOSPHERE:  {global_params.get('vfx_atmosphere', 'Nominal Fog/Particles')}")
-        print("-" * 75)
-        
-        print("CHARACTER ROSTER:")
-        for char in timeline_data.get("character_set", []):
-            print(f"  • {char.get('character_name', 'Unknown')}: {char.get('clothing_details', 'Default Rig')}")
-            print(f"    Initial Stance: {char.get('initial_pose', 'Idle')}")
-        print("-" * 75)
-        
-        print("CHRONOLOGICAL EXECUTION TIMELINE:")
-        for slice_data in directives:
-            seg_id = slice_data.get("segment_id", 0)
-            dur = slice_data.get("duration_slice", 0.0)
-            print(f"\n[SEGMENT {seg_id:02d} | Duration: {dur}s | Camera Rig: {slice_data.get('camera_rig_behavior', 'static')}]")
-            print(f"  ► Choreography: {slice_data.get('action_choreography', 'None')}")
-            print(f"  ► Environment:  {slice_data.get('environment_state', 'None')}")
-            print("  ► Sub-Agent Routing Directives:")
-            for ag_name, cmd in slice_data.get("orchestrated_agent_commands", {}).items():
-                print(f"      └─ {ag_name}: {cmd}")
-                
-        print("\n" + "=" * 75)
-        
+        # 2. Output Creative Brief for Agent 68
+        creative_brief = {
+            "agent_id": "65",
+            "agent_name": self.agent_name,
+            "timestamp": time.time(),
+            "scenario_title": timeline_data.get("scenario_title", "Untitled Climax"),
+            "global_style": global_style,
+            "global_parameters": timeline_data.get("global_parameters", {}),
+            "character_set": timeline_data.get("character_set", []),
+            "total_directives": len(directives)
+        }
+        with open(self.output_brief_path, "w", encoding="utf-8") as f:
+            json.dump(creative_brief, f, indent=4)
+        self.log(f"Creative brief written to: '{self.output_brief_path}'", "SUCCESS")
+
+        # Atomic Handshake Completion
         self._handshake("COMPLETED", len(directives))
-        self.log("Supreme Creative Script Conductor execution completed successfully!", "SUCCESS")
-        return timeline_data
+
+        # Terminal Summary Report
+        print("\n=====================================================================")
+        print("         OMNIMATRIX V2.0 — SUPREME CONDUCTOR DIRECTIVES LOCKED       ")
+        print("=====================================================================")
+        print(f"SCENARIO TITLE : {timeline_data.get('scenario_title', 'Untitled')}")
+        print(f"GLOBAL STYLE   : {global_style}")
+        print(f"TOTAL SLICES   : {len(directives)}")
+        print("=====================================================================\n")
 
 if __name__ == "__main__":
     conductor = Ai_Agent_65_Supreme_Creative_Script_Conductor()
