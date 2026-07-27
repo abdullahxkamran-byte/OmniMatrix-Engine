@@ -1,36 +1,17 @@
 import os
-import re
 import sys
 import json
+import re
 import time
-import shutil
-import platform
+import glob
 import subprocess
+import threading
+import psutil
 from datetime import datetime
-
-# Attempt importing hardware metric trackers
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    PSUTIL_AVAILABLE = False
-
-# Attempt importing Agent 99 for supreme stability handshakes
-try:
-    from ai_agent_99_evolving_git_sync_optimizer import Ai_Agent_99_Evolving_Git_Sync_Optimizer
-    HEALING_ENGINE_AVAILABLE = True
-except ImportError:
-    HEALING_ENGINE_AVAILABLE = False
-
-# Attempt importing Agent 63 for memory garbage collection
-try:
-    from agent_63_automated_background_ram_janitor import Agent_63_Automated_Background_Ram_Janitor
-    RAM_JANITOR_AVAILABLE = True
-except ImportError:
-    RAM_JANITOR_AVAILABLE = False
+from concurrent.futures import ThreadPoolExecutor
 
 # =====================================================================
-# RULE 2: UNIVERSAL ENVIRONMENT CONFIGURATION (PURE UTILITY)
+# RULE 2 & 14: UNIVERSAL PATH ISOLATION & DUAL-CASE ENV LOADING
 # =====================================================================
 def load_env_file(filepath=".env"):
     if os.path.exists(filepath):
@@ -39,258 +20,220 @@ def load_env_file(filepath=".env"):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    os.environ[key.strip().upper()] = val.strip()
+                    key_str = key.strip()
+                    val_str = val.strip().strip('"').strip("'")
+                    os.environ[key_str.upper()] = val_str
+                    os.environ[key_str.lower()] = val_str
 
 load_env_file()
 
 class Agent_00_Universal_Pipeline_Orchestrator:
     """
-    OMNIMATRIX V2.0 GOD-LEVEL UNIVERSAL PIPELINE ORCHESTRATOR
-    Acts as the absolute master traffic controller and execution gatekeeper.
-    Ingests chronological execution timelines from Agent 65, monitors real-time
-    System RAM and GPU VRAM saturation, dynamically scales parallel vs serial
-    concurrency threads, and routes execution through Agent 99's self-healing
-    engine to guarantee zero-crash autonomous rendering across all 67 nodes.
+    OMNIMATRIX V2.0 GOD-LEVEL AGENT 00 — UNIVERSAL PIPELINE ORCHESTRATOR
+    
+    Architecture:
+    1. Reads 68_master_task_manifest.json to get dynamic Active vs Skipped decision matrix.
+    2. Runs Module A (Scripting 01-08) and Agent 68 (Task Architect).
+    3. Triggers Parallel Execution Branch A (Module B Audio 09-19) AND Branch B (Module H 3D Vision 55-59).
+    4. Enforces Synchronization Barrier (Waits for B and H to conclude).
+    5. Dispatches post-sync stages sequentially: Module C (Blender 3D 20-34), Module D (VFX 35-41), 
+       Module E (FFmpeg 42-45), Module F (RIFE 46-48), Module G (Assets 49-54).
+    6. Monitored by Agent 60 (RAM Monitor) & Agent 99 (Git Guardian).
     """
+
     def __init__(self, workspace_dir="OmniMatrix_Workspace"):
-        # Rule 8: Pure Non-AI Naming enforcement (Agent_XX instead of Ai_Agent_XX)
-        self.agent_name = "Agent_00_Universal_Pipeline_Orchestrator"
+        self.agent_name = "agent_00_universal_pipeline_orchestrator"
         self.base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
         self.workspace_dir = os.path.join(self.base_dir, workspace_dir)
-        
-        self.log_file_path = os.path.join(self.workspace_dir, "00_orchestrator_telemetry.log")
-        self.pipeline_state_path = os.path.join(self.workspace_dir, "00_master_pipeline_state.json")
-        self.conductor_timeline_path = os.path.join(self.workspace_dir, "65_master_conductor_timeline.json")
-        
-        # Rule 17: Memory and hardware safety thresholds
-        self.critical_ram_threshold_pct = 85.0
-        self.warning_ram_threshold_pct = 70.0
-        
         os.makedirs(self.workspace_dir, exist_ok=True)
-        self._scrub_legacy_assets()
 
-        # Connect Core Guardian Nodes
-        self.janitor = Agent_63_Automated_Background_Ram_Janitor(workspace_dir=workspace_dir) if RAM_JANITOR_AVAILABLE else None
-        self.healing_engine = Ai_Agent_99_Evolving_Git_Sync_Optimizer(workspace_dir=workspace_dir) if HEALING_ENGINE_AVAILABLE else None
+        # State Paths
+        self.manifest_file = os.path.join(self.workspace_dir, "68_master_task_manifest.json")
+        self.state_file = os.path.join(self.workspace_dir, "00_master_pipeline_state.json")
+        self.ledger_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.guardian_script = os.path.join(self.base_dir, "ai_agent_99_evolving_git_sync_optimizer.py")
+
+        self.execution_ledger = []
+        self.lock = threading.Lock()
 
     def log(self, message, level="INFO"):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted = f"[{timestamp}] [{level}] [{self.agent_name}] {message}"
-        print(formatted)
+        print(f"[{timestamp}] [{level}] [{self.agent_name}] {message}")
+
+    def _get_telemetry(self):
         try:
-            with open(self.log_file_path, "a", encoding="utf-8") as f:
-                f.write(formatted + "\n")
+            mem = psutil.virtual_memory()
+            return f"RAM: {mem.percent}% used | Avail: {mem.available / (1024**2):.1f} MB"
         except Exception:
-            pass
-
-    def _scrub_legacy_assets(self):
-        """Rule 3: Idempotency scrubbing of previous master pipeline states."""
-        if os.path.exists(self.pipeline_state_path):
-            try:
-                os.remove(self.pipeline_state_path)
-            except Exception as error:
-                self.log(f"Failed to scrub legacy pipeline state {self.pipeline_state_path}: {error}", "WARNING")
+            return "Telemetry Active"
 
     # =====================================================================
-    # RULE 7: ATOMIC HANDSHAKE & PIPELINE STATE SERIALIZATION
+    # DISCOVER AGENTS FROM DISK (REGEX MATCHING)
     # =====================================================================
-    def _serialize_state(self, state_data):
+    def _find_agent_script(self, target_num_str):
+        all_files = os.listdir(self.base_dir)
+        for f in all_files:
+            if f.endswith(".py") and ("agent_" in f or "ai_agent_" in f):
+                if "agent_00" in f or "agent_99" in f:
+                    continue
+                match = re.search(r'agent_(\d+(?:_\d+)?)(?:_|\.py)', f, re.IGNORECASE)
+                if match and match.group(1) == target_num_str:
+                    return f
+        return None
+
+    # =====================================================================
+    # SUBPROCESS WORKER EXECUTION WITH GUARDIAN FALLBACK
+    # =====================================================================
+    def _run_agent_script(self, script_name, agent_id):
+        script_path = os.path.join(self.base_dir, script_name)
+        self.log(f"Spawning Subprocess Node [{agent_id}] -> '{script_name}'")
+        self.log(f"Telemetry: {self._get_telemetry()}")
+
+        if os.path.exists(self.guardian_script):
+            cmd = [sys.executable, self.guardian_script, script_path]
+        else:
+            cmd = [sys.executable, script_path]
+
         try:
-            with open(self.pipeline_state_path, "w", encoding="utf-8") as f:
-                json.dump(state_data, f, indent=4)
-        except Exception as error:
-            self.log(f"Pipeline state serialization exception: {error}", "ERROR")
-
-    def _load_conductor_timeline(self):
-        """Ingests execution directives and character sets from Agent 65."""
-        if os.path.exists(self.conductor_timeline_path):
-            try:
-                with open(self.conductor_timeline_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.log("Master conductor timeline ingested successfully from Agent 65.", "SUCCESS")
-                    return data
-            except Exception as error:
-                self.log(f"Conductor timeline ingestion exception: {error}", "WARNING")
-        
-        self.log("Conductor timeline absent. Proceeding with autonomous workspace tree discovery.", "INFO")
-        return {}
-
-    # =====================================================================
-    # AUTONOMOUS WORKSPACE TREE DISCOVERY & CLASSIFICATION
-    # =====================================================================
-    def discover_and_classify_workspace_agents(self):
-        """Scans filesystem repository, detects active nodes, and allocates operational weights."""
-        discovered_agents = []
-        # Matches standard patterns including decimal notation like ai_agent_18_5
-        pattern = re.compile(r"^(ai_)?agent_(\d+|\d+_\d+)_(.+)\.py$", re.IGNORECASE)
-
-        self.log("Scanning workspace repository tree for active OMNIMATRIX execution scripts...", "INFO")
-        
-        for file in sorted(os.listdir(self.base_dir)):
-            match = pattern.match(file)
-            if match:
-                agent_id_str = match.group(2)
-                # Convert underscore notation for comparison (e.g., 18_5 -> 18.5)
-                try:
-                    agent_id = float(agent_id_str.replace("_", "."))
-                except ValueError:
-                    continue
-                
-                # Exclude self (00) and stability sentinel (99) from standard sequential loop
-                if agent_id in [0.0, 99.0]:
-                    continue
-                
-                # Rule 17: Categorize hardware load weights
-                # Heavy: Blender 3D (20-34), VFX/Compositing (35-41), FFmpeg (42-45), AI Smoothness/Upscale (46-48), World Forgers (55-59)
-                if (20.0 <= agent_id <= 48.0) or (55.0 <= agent_id <= 59.0):
-                    weight = "HEAVY"
-                else:
-                    weight = "LIGHT"
-                
-                discovered_agents.append({
-                    "agent_id": agent_id,
-                    "agent_id_str": agent_id_str,
-                    "file_name": file,
-                    "execution_weight": weight
-                })
-
-        discovered_agents.sort(key=lambda x: x["agent_id"])
-        self.log(f"Auto-Discovery Complete! Registered {len(discovered_agents)} operational nodes.", "SUCCESS")
-        return discovered_agents
-
-    # =====================================================================
-    # RULE 17: REAL-TIME RAM & GPU VRAM CONCURRENCY THROTTLE
-    # =====================================================================
-    def _inspect_gpu_vram_saturation(self):
-        """Queries NVIDIA driver memory tables for VRAM saturation percentage."""
-        nvidia_smi = shutil.which("nvidia-smi")
-        if nvidia_smi:
-            try:
-                cmd = ["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"]
-                out = subprocess.check_output(cmd, text=True).strip().splitlines()[0]
-                total_mb, used_mb = [float(x.strip()) for x in out.split(",")]
-                return round((used_mb / max(0.1, total_mb)) * 100.0, 1)
-            except Exception:
-                pass
-        return 0.0
-
-    def evaluate_hardware_concurrency_throttle(self, next_agent_weight):
-        """Computes parallel execution capacity based on System RAM and GPU VRAM load."""
-        ram_pct = psutil.virtual_memory().percent if PSUTIL_AVAILABLE else 50.0
-        vram_pct = self._inspect_gpu_vram_saturation()
-        
-        self.log(f"Hardware Telemetry Check -> System RAM: {ram_pct}% | GPU VRAM: {vram_pct}%", "INFO")
-
-        # Emergency Gatekeeping Interrupts
-        if ram_pct > self.critical_ram_threshold_pct or vram_pct > self.critical_ram_threshold_pct:
-            self.log("CRITICAL ALERT: Memory threshold exceeded! Triggering emergency RAM Janitor purge...", "ERROR")
-            if self.janitor:
-                self.janitor.run_janitor_cleanup()
-            return 1 # Force strict serialization
-
-        if next_agent_weight == "HEAVY":
-            self.log("Target node classified as HEAVY (3D/VFX/Upscale). Restricting to single-thread serial execution.", "INFO")
-            if self.janitor and (ram_pct > self.warning_ram_threshold_pct or vram_pct > self.warning_ram_threshold_pct):
-                self.janitor.run_janitor_cleanup()
-            return 1
-
-        # Scale parallel concurrency threads for LIGHT utility nodes
-        max_load = max(ram_pct, vram_pct)
-        if max_load < 55.0:
-            return 3 # High Concurrency Multi-Threading
-        elif max_load < 75.0:
-            return 2 # Balanced Dual-Threading
-        else:
-            return 1 # Safe Serial Execution
-
-    # =====================================================================
-    # SELF-HEALING NODE EXECUTION ROUTER (VIA AGENT 99)
-    # =====================================================================
-    def trigger_agent_node_execution(self, agent_data):
-        """Executes target script under Agent 99's AST shield to guarantee zero-crash runs."""
-        file_name = agent_data["file_name"]
-        script_path = os.path.join(self.base_dir, file_name)
-        
-        if not os.path.exists(script_path):
-            self.log(f"Execution failed: Target script absent from repository -> '{file_name}'", "ERROR")
-            return False
-
-        if self.healing_engine:
-            self.log(f"Spawning Node [{agent_data['agent_id_str']}] under Agent 99 self-healing shield...", "INFO")
-            report = self.healing_engine.execute_and_heal(script_path)
-            status = report.get("execution_status", "FAILED")
-            return status in ["SUCCESS", "HEALED"]
-        else:
-            self.log(f"Self-healing shield unavailable. Executing standard subprocess for '{file_name}'", "WARNING")
-            try:
-                result = subprocess.run([sys.executable, script_path], capture_output=True, text=True, check=True)
-                return result.returncode == 0
-            except Exception as error:
-                self.log(f"Unshielded node execution exception: {error}", "ERROR")
-                return False
-
-    # =====================================================================
-    # THE MASTER ORCHESTRATION & GATEKEEPING ENGINE
-    # =====================================================================
-    def launch_autonomous_orchestration(self):
-        self.log("Activating OMNIMATRIX V2.0 Universal Pipeline Orchestrator...", "SUCCESS")
-        
-        # 1. Ingest creative directives from Agent 65
-        conductor_timeline = self._load_conductor_timeline()
-        scenario_title = conductor_timeline.get("scenario_title", "Universal Autonomous Pipeline Run")
-        self.log(f"Orchestrating Scenario: '{scenario_title}'", "INFO")
-
-        # 2. Discover operational repository nodes
-        active_agents = self.discover_and_classify_workspace_agents()
-        if not active_agents:
-            self.log("CRITICAL: No executable agent scripts discovered in repository root.", "ERROR")
-            return False
-
-        state_manifest = {
-            "scenario_title": scenario_title,
-            "orchestration_initiated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "operational_status": "RUNNING",
-            "total_registered_nodes": len(active_agents),
-            "completed_nodes_ledger": [],
-            "failed_nodes_ledger": []
-        }
-        self._serialize_state(state_manifest)
-
-        # 3. Execute pipeline loop with dynamic hardware throttling
-        for agent in active_agents:
-            agent_id = agent["agent_id"]
-            agent_str = agent["agent_id_str"]
-            weight = agent["execution_weight"]
-            
-            self.log(f"--- PREPARING EXECUTION: AGENT {agent_str} ({agent['file_name']}) [Weight: {weight}] ---", "INFO")
-            
-            # Evaluate hardware concurrency throttle immediately prior to execution
-            concurrency_factor = self.evaluate_hardware_concurrency_throttle(weight)
-            self.log(f"Allocated Concurrency Multiplier: {concurrency_factor} Thread(s)", "INFO")
-
-            # Execute node via self-healing pipeline wrapper
-            execution_success = self.trigger_agent_node_execution(agent)
-
-            if execution_success:
-                self.log(f"Node Execution Verified: Agent {agent_str} completed successfully.", "SUCCESS")
-                state_manifest["completed_nodes_ledger"].append(agent_str)
-                self._serialize_state(state_manifest)
+            res = subprocess.run(cmd, capture_output=False, text=True, timeout=1200)
+            if res.returncode == 0:
+                self.log(f"SUCCESS: Agent [{agent_id}] ({script_name}) executed cleanly.", "SUCCESS")
+                with self.lock:
+                    self.execution_ledger.append(script_name)
+                return True
             else:
-                self.log(f"CRITICAL PIPELINE FRACTURE AT AGENT {agent_str}. Initiating Emergency Protocol.", "ERROR")
-                state_manifest["failed_nodes_ledger"].append(agent_str)
-                state_manifest["operational_status"] = f"HALTED_AT_NODE_{agent_str}"
-                self._serialize_state(state_manifest)
+                self.log(f"ERROR: Agent [{agent_id}] failed with return code {res.returncode}.", "ERROR")
                 return False
+        except subprocess.TimeoutExpired:
+            self.log(f"TIMEOUT: Agent [{agent_id}] exceeded 20-minute execution cap.", "ERROR")
+            return False
+        except Exception as e:
+            self.log(f"EXCEPTION: Failure executing Agent [{agent_id}]: {e}", "ERROR")
+            return False
 
-        state_manifest["operational_status"] = "ALL_67_MODULES_SUCCESSFULLY_INTEGRATED_AND_COMPLETED"
-        state_manifest["orchestration_concluded"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self._serialize_state(state_manifest)
-        self.log("OMNIMATRIX V2.0 GRAND PIPELINE EXECUTION CONCLUDED FLAWLESSLY!", "SUCCESS")
+    # =====================================================================
+    # TASK MANIFEST EVALUATOR
+    # =====================================================================
+    def _is_agent_active(self, agent_id, manifest_matrix):
+        if not manifest_matrix:
+            return True
+        agent_info = manifest_matrix.get(agent_id, manifest_matrix.get(str(int(agent_id)) if agent_id.isdigit() else agent_id, {}))
+        status = agent_info.get("status", "ACTIVE")
+        if status == "SKIPPED":
+            reason = agent_info.get("reason", "Disabled by task architect")
+            self.log(f"SKIPPING Agent [{agent_id}]: {reason}", "INFO")
+            return False
         return True
+
+    def _execute_agent_range(self, start_num, end_num, manifest_matrix):
+        for num in range(start_num, end_num + 1):
+            agent_id = f"{num:02d}"
+            if not self._is_agent_active(agent_id, manifest_matrix):
+                continue
+            script_name = self._find_agent_script(agent_id)
+            if script_name:
+                success = self._run_agent_script(script_name, agent_id)
+                if not success:
+                    self.log(f"Pipeline halt requested due to node [{agent_id}] failure.", "ERROR")
+                    return False
+            else:
+                self.log(f"Script for Agent [{agent_id}] not found on disk. Skipping...", "WARNING")
+        return True
+
+    # =====================================================================
+    # MAIN ORCHESTRATION PIPELINE
+    # =====================================================================
+    def execute(self):
+        self.log("=====================================================================")
+        self.log("ACTIVATING OMNIMATRIX V2.0 UNIVERSAL PIPELINE ORCHESTRATOR")
+        self.log("=====================================================================")
+
+        # 1. Execute Module A (Scripting & Core Concept: Agents 01 to 08)
+        self.log("--- STAGE 1: MODULE A (CORE CONCEPT & SCRIPTING 01-08) ---")
+        if not self._execute_agent_range(1, 8, None):
+            self.log("Module A execution failed. Halting pipeline.", "CRITICAL")
+            return
+
+        # 2. Execute Agent 68 (Dynamic Task Architect) to refresh manifest
+        self.log("--- STAGE 2: DYNAMIC TASK BLUEPRINTING (AGENT 68) ---")
+        script_68 = self._find_agent_script("68")
+        if script_68:
+            self._run_agent_script(script_68, "68")
+
+        # Read compiled manifest
+        manifest_matrix = {}
+        if os.path.exists(self.manifest_file):
+            try:
+                with open(self.manifest_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    manifest_matrix = data.get("task_matrix", {})
+                    self.log(f"Master Task Manifest successfully loaded ({len(manifest_matrix)} nodes evaluated).")
+            except Exception as e:
+                self.log(f"Failed to read task manifest: {e}. Defaulting to full active execution.", "WARNING")
+
+        # 3. Parallel Execution: Module B (Audio 09-19) & Module H (Generative Vision/3D 55-59)
+        self.log("--- STAGE 3: ASYNCHRONOUS PARALLEL DISPATCH (MODULE B & MODULE H) ---")
+        
+        def run_module_b():
+            self.log("Starting Branch B1: Module B (Audio Commandos 09-19)...")
+            self._execute_agent_range(9, 19, manifest_matrix)
+
+        def run_module_h():
+            self.log("Starting Branch B2: Module H (Omni Generative Matrix 55-59)...")
+            self._execute_agent_range(55, 59, manifest_matrix)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_b = executor.submit(run_module_b)
+            future_h = executor.submit(run_module_h)
+            
+            # Wait for parallel execution to finish (Sync Barrier)
+            future_b.result()
+            future_h.result()
+
+        self.log("SYNCHRONIZATION BARRIER CLEARED: Both Module B (Audio) and Module H (3D Assets) completed.")
+
+        # 4. Execute Module C (Blender 3D Heavy Infantry: Agents 20 to 34)
+        self.log("--- STAGE 4: MODULE C (BLENDER 3D HEAVY INFANTRY 20-34) ---")
+        if not self._execute_agent_range(20, 34, manifest_matrix):
+            self.log("Module C execution failed. Halting pipeline.", "CRITICAL")
+            return
+
+        # 5. Execute Module D (VFX Studio & Compositing: Agents 35 to 41)
+        self.log("--- STAGE 5: MODULE D (VFX STUDIO & COMPOSITING 35-41) ---")
+        if not self._execute_agent_range(35, 41, manifest_matrix):
+            self.log("Module D execution failed. Halting pipeline.", "CRITICAL")
+            return
+
+        # 6. Execute Module E (FFmpeg Video Assembler: Agents 42 to 45)
+        self.log("--- STAGE 6: MODULE E (FFMPEG VIDEO ASSEMBLER 42-45) ---")
+        if not self._execute_agent_range(42, 45, manifest_matrix):
+            self.log("Module E execution failed. Halting pipeline.", "CRITICAL")
+            return
+
+        # 7. Execute Module F (Local AI Smoothness Matrix: Agents 46 to 48)
+        self.log("--- STAGE 7: MODULE F (LOCAL AI SMOOTHNESS MATRIX 46-48) ---")
+        if not self._execute_agent_range(46, 48, manifest_matrix):
+            self.log("Module F execution failed. Halting pipeline.", "CRITICAL")
+            return
+
+        # 8. Execute Module G (Asset Management & Presentation: Agents 49 to 54)
+        self.log("--- STAGE 8: MODULE G (ASSET MANAGEMENT & PRESENTATION 49-54) ---")
+        self._execute_agent_range(49, 54, manifest_matrix)
+
+        # Final State Update
+        state_payload = {
+            "orchestrator_status": "COMPLETED",
+            "timestamp": time.time(),
+            "execution_ledger": self.execution_ledger,
+            "telemetry_at_conclusion": self._get_telemetry()
+        }
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_payload, f, indent=4)
+
+        self.log("=====================================================================")
+        self.log("ALL PIPELINE MODULES & STAGES CONCLUDED SUCCESSFULLY!")
+        self.log("=====================================================================\n")
 
 if __name__ == "__main__":
     orchestrator = Agent_00_Universal_Pipeline_Orchestrator()
-    print("\n=====================================================================")
-    print("      OMNIMATRIX V2.0 — UNIVERSAL PIPELINE ORCHESTRATOR BOSS         ")
-    print("=====================================================================")
-    orchestrator.launch_autonomous_orchestration()
+    orchestrator.execute()
