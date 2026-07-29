@@ -66,7 +66,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
         self.hf_key = os.environ.get("HF_API_KEY", None)
         
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.ollama_url = "http://localhost:11434/api/generate"
         self.model_local = "llava"
@@ -184,7 +184,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
             try:
                 url = f"{self.gemini_url}?key={self.gemini_key}"
                 payload = {"contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": img_b64}}]}]}
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"]))
                 self.log("[Core 1: Gemini Vision] Formulated 3D visual translation blueprint!", "SUCCESS")
             except Exception as e:
@@ -193,7 +193,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         # Core 2: OpenAI GPT-4o Vision Failsafe
         if self.openai_key and not output and img_b64:
             try:
-                headers = {"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
                 payload = {"model": self.model_cloud, "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}]}]}
                 res = self._api_call(self.openai_url, payload, headers)
                 output = json.loads(self._clean_json(res["choices"][0]["message"]["content"]))
@@ -205,7 +205,7 @@ class Ai_Agent_55_Universal_Vision_Comprehender:
         if not output and img_b64:
             try:
                 payload = {"model": self.model_local, "prompt": prompt, "images": [img_b64], "stream": False}
-                res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res.get("response", "{}")))
                 self.log("[Core 3: Ollama LLaVA] Generated local visual blueprint!", "SUCCESS")
             except Exception as e:

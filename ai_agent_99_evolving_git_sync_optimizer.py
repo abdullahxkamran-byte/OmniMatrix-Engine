@@ -257,7 +257,7 @@ class Ai_Agent_99_Evolving_Git_Sync_Optimizer:
         # Core 1: Gemini SDK
         if GEMINI_SDK_AVAILABLE and self.gemini_key and not fixed_code:
             try:
-                model = genai.GenerativeModel("gemini-1.5-pro")
+                model = genai.GenerativeModel("gemini-flash-latest")
                 res = model.generate_content(f"{system_prompt}\n\n{user_prompt}")
                 fixed_code = self._clean_code(res.text)
                 engine_name = "Google Gemini SDK Pro"
@@ -267,7 +267,7 @@ class Ai_Agent_99_Evolving_Git_Sync_Optimizer:
         # Core 2: OpenAI Failsafe
         if self.openai_key and not fixed_code:
             try:
-                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"}
+                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"}
                 payload = {"model": self.model_cloud, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]}
                 req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=45) as response:
@@ -279,7 +279,7 @@ class Ai_Agent_99_Evolving_Git_Sync_Optimizer:
         # Core 3: Ollama Local Fallback
         if not fixed_code:
             try:
-                headers = {"Content-Type": "application/json"}
+                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
                 payload = {"model": self.model_local, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "stream": False}
                 req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=50) as response:

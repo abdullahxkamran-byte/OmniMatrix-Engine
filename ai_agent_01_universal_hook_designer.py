@@ -30,7 +30,7 @@ class UniversalHookDesigner:
         # Native JSON Forced Config
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name='gemini-flash-latest',
             generation_config={"response_mime_type": "application/json"}
         )
         

@@ -31,7 +31,7 @@ class VisualSyncStoryboarder:
         if self.gemini_api_key:
             genai.configure(api_key=self.gemini_api_key)
             self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
+                model_name='gemini-flash-latest',
                 generation_config={"response_mime_type": "application/json"}
             )
             
@@ -158,7 +158,7 @@ class VisualSyncStoryboarder:
             self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
             try:
                 headers = {
-                    "Content-Type": "application/json",
+                    "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""),
                     "Authorization": f"Bearer {self.openai_api_key}"
                 }
                 payload = {
@@ -179,7 +179,7 @@ class VisualSyncStoryboarder:
         # PRIORITY 3: OLLAMA (LOCAL)
         self._log_info("Routing to Priority 3: Local Engine (Ollama)")
         try:
-            headers = {"Content-Type": "application/json"}
+            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
             payload = {
                 "model": self.model_local,
                 "messages": [

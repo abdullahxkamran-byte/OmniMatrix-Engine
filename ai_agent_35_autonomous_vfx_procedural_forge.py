@@ -144,7 +144,7 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
         # Core 1: Gemini
         if self.gemini_key and not output:
             try:
-                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.9, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
+                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.9, "responseMimeType": "application/json"}}, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = {"vfx_procedural_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("vfx_procedural_profiles", [])}
                 self.log("[Core 1: Gemini] Synthesized limitless VFX mathematical recipes!", "SUCCESS")
             except Exception as e: 
@@ -153,7 +153,7 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
         # Core 2: OpenAI
         if self.openai_key and not output:
             try:
-                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"})
                 output = {"vfx_procedural_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("vfx_procedural_profiles", [])}
                 self.log("[Core 2: OpenAI] Synthesized limitless VFX mathematical recipes!", "SUCCESS")
             except Exception as e: 
@@ -162,7 +162,7 @@ class Ai_Agent_35_Autonomous_VFX_Procedural_Forge:
         # Core 3: Ollama
         if not output:
             try:
-                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json"})
+                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = {"vfx_procedural_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("vfx_procedural_profiles", [])}
                 self.log("[Core 3: Ollama] Generated local VFX recipes!", "SUCCESS")
             except Exception as e: 

@@ -31,7 +31,7 @@ class UniversalWordCountGuard:
         # Setup Gemini
         if self.gemini_api_key:
             genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+            self.gemini_model = genai.GenerativeModel(model_name='gemini-flash-latest')
             
         # OpenAI/Ollama Setup
         self.openai_url = "https://api.openai.com/v1/chat/completions"
@@ -105,7 +105,7 @@ class UniversalWordCountGuard:
         # Priority 2: OpenAI
         if self.openai_api_key:
             try:
-                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
                 payload = {"model": self.model_openai, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": original_text}]}
                 req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=10) as response:
@@ -115,7 +115,7 @@ class UniversalWordCountGuard:
 
         # Priority 3: Ollama
         try:
-            headers = {"Content-Type": "application/json"}
+            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
             payload = {"model": self.model_local, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": original_text}], "stream": False}
             req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
             with urllib.request.urlopen(req, timeout=15) as response:

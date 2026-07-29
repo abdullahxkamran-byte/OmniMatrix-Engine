@@ -42,7 +42,7 @@ class Ai_Agent_47_Super_Resolution_4k_Upscaler:
         
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.ollama_url = "http://localhost:11434/api/chat"
         
@@ -193,7 +193,7 @@ class Ai_Agent_47_Super_Resolution_4k_Upscaler:
                     "contents": [{"parts": [{"text": f"{prompt}\n\nUser Context:\n{user_msg}"}]}],
                     "generationConfig": {"temperature": 0.80, "responseMimeType": "application/json"}
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"]))
                 self.log("[Core 1: Gemini] Synthesized neural super-resolution matrix!", "SUCCESS")
             except Exception as e:
@@ -207,7 +207,7 @@ class Ai_Agent_47_Super_Resolution_4k_Upscaler:
                     "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
                     "response_format": {"type": "json_object"}
                 }
-                res = self._api_call(self.openai_url, payload, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                res = self._api_call(self.openai_url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"})
                 output = json.loads(self._clean_json(res["choices"][0]["message"]["content"]))
                 self.log("[Core 2: OpenAI] Synthesized neural super-resolution matrix!", "SUCCESS")
             except Exception as e:
@@ -222,7 +222,7 @@ class Ai_Agent_47_Super_Resolution_4k_Upscaler:
                     "format": "json",
                     "stream": False
                 }
-                res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res.get("message", {}).get("content", "{}")))
                 self.log("[Core 3: Ollama] Generated local super-resolution matrix!", "SUCCESS")
             except Exception as e:

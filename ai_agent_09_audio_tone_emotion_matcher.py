@@ -101,7 +101,7 @@ class AiAgent09AudioToneEmotionMatcher:
         if GEMINI_AVAILABLE and self.gemini_api_key:
             self.log("Querying Core 1 (Gemini) for emotion extraction...")
             try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-flash-latest")
                 response = model.generate_content(
                     system_prompt + "\n\n" + user_prompt,
                     generation_config={"response_mime_type": "application/json"}
@@ -114,7 +114,7 @@ class AiAgent09AudioToneEmotionMatcher:
         if self.openai_api_key:
             self.log(f"Querying Core 2 (OpenAI - {self.model_cloud})...")
             try:
-                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
                 payload = {
                     "model": self.model_cloud,
                     "messages": [
@@ -140,7 +140,7 @@ class AiAgent09AudioToneEmotionMatcher:
                 "stream": False,
                 "format": "json"
             }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=120) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
                 raw_text = res_data.get("response", "{}")

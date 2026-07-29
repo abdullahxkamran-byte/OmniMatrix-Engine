@@ -36,7 +36,7 @@ class UniversalScriptCompiler:
         if self.gemini_api_key:
             genai.configure(api_key=self.gemini_api_key)
             self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
+                model_name='gemini-flash-latest',
                 generation_config={"response_mime_type": "application/json"}
             )
             
@@ -118,7 +118,7 @@ class UniversalScriptCompiler:
         if self.openai_api_key:
             self._log_info("Routing to Priority 2: OpenAI (Deep Alignment)")
             try:
-                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
                 payload = {
                     "model": self.model_openai, 
                     "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
@@ -132,7 +132,7 @@ class UniversalScriptCompiler:
 
         self._log_info("Routing to Priority 3: Local Engine (Ollama)")
         try:
-            headers = {"Content-Type": "application/json"}
+            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
             payload = {
                 "model": self.model_local, 
                 "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 

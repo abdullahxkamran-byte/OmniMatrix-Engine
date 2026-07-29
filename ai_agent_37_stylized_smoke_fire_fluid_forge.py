@@ -102,7 +102,7 @@ class Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge:
         # Core 1: Gemini (Primary - Rule 14 & 16)
         if self.gemini_key and not output:
             try:
-                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.88, "responseMimeType": "application/json"}}, {"Content-Type": "application/json"})
+                res = self._api_call(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={self.gemini_key}", {"contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}], "generationConfig": {"temperature": 0.88, "responseMimeType": "application/json"}}, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = {"fluid_fire_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("fluid_fire_profiles", [])}
                 self.log("[Core 1: Gemini] Synthesized limitless elemental recipes!", "SUCCESS")
             except Exception as e: self.log(f"[Core 1: Gemini] Failed: {e}", "WARNING")
@@ -110,7 +110,7 @@ class Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge:
         # Core 2: OpenAI (Failsafe - Rule 14 & 16)
         if self.openai_key and not output:
             try:
-                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                res = self._api_call("https://api.openai.com/v1/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "response_format": {"type": "json_object"}}, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"})
                 output = {"fluid_fire_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("fluid_fire_profiles", [])}
                 self.log("[Core 2: OpenAI] Synthesized limitless elemental recipes!", "SUCCESS")
             except Exception as e: self.log(f"[Core 2: OpenAI] Failed: {e}", "WARNING")
@@ -118,7 +118,7 @@ class Ai_Agent_37_Stylized_Smoke_Fire_Fluid_Forge:
         # Core 3: Ollama (Local Fallback - Rule 6)
         if not output:
             try:
-                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json"})
+                res = self._api_call("http://localhost:11434/api/chat", {"model": "llama3", "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}], "format": "json", "stream": False}, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = {"fluid_fire_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("fluid_fire_profiles", [])}
                 self.log("[Core 3: Ollama] Generated local elemental recipes!", "SUCCESS")
             except Exception as e: self.log(f"[Core 3: Ollama] Offline: {e}", "WARNING")

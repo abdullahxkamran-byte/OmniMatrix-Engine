@@ -115,7 +115,7 @@ class AiAgent14PhonkBeatDropAnalyzer:
         if GEMINI_AVAILABLE and self.gemini_api_key:
             self.log("Routing to Core 1: Gemini AI for beat sync mapping...")
             try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-flash-latest")
                 response = model.generate_content(
                     system_prompt + "\n\n" + user_prompt,
                     generation_config={"response_mime_type": "application/json"}
@@ -128,7 +128,7 @@ class AiAgent14PhonkBeatDropAnalyzer:
         if self.openai_api_key:
             self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
             url = self.openai_url
-            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_api_key}"}
+            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
             payload = {
                 "model": self.model_cloud,
                 "messages": [
@@ -155,7 +155,7 @@ class AiAgent14PhonkBeatDropAnalyzer:
                 "stream": False,
                 "format": "json"
             }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=60) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
                 raw_text = res_data.get("response", "")

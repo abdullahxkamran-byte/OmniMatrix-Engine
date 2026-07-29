@@ -187,8 +187,8 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         if gemini_key and gemini_key.startswith("AIzaSy"):
             self.log("Querying Core 1: Google Gemini AI Engine...", "INFO")
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={gemini_key}"
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 with urllib.request.urlopen(req, timeout=12) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -202,7 +202,7 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
             self.log("Querying Core 2: HuggingFace Inference LLM Engine...", "INFO")
             try:
                 hf_url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
-                headers = {"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
                 hf_payload = {"inputs": f"<s>[INST] {system_prompt}\n{user_prompt} Respond strictly in JSON format. [/INST]"}
                 req = urllib.request.Request(hf_url, data=json.dumps(hf_payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=15) as resp:
@@ -218,7 +218,7 @@ class Ai_Agent_65_Supreme_Creative_Script_Conductor:
         try:
             ollama_url = "http://localhost:11434/api/generate"
             ollama_payload = {"model": "mistral", "prompt": f"{system_prompt}\n{user_prompt}", "stream": False, "format": "json"}
-            req = urllib.request.Request(ollama_url, data=json.dumps(ollama_payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(ollama_url, data=json.dumps(ollama_payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 self.log("Core 3 (Ollama) generated local directives.", "SUCCESS")

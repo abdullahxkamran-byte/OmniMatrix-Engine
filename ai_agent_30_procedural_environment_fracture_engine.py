@@ -52,7 +52,7 @@ class Ai_Agent_30_Procedural_Environment_Fracture_Engine:
         
         self.gemini_key = os.environ.get("GEMINI_API_KEY", None)
         self.openai_key = os.environ.get("OPENAI_API_KEY", None)
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         self.openai_url = "https://api.openai.com/v1/chat/completions"
         self.ollama_url = "http://localhost:11434/api/chat"
         self.model_local = "llama3"
@@ -196,7 +196,7 @@ class Ai_Agent_30_Procedural_Environment_Fracture_Engine:
             try:
                 url = f"{self.gemini_url}?key={self.gemini_key}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}}
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"]))
                 self.log("[Core 1: Gemini] Formulated procedural destruction matrix!", "SUCCESS")
             except Exception as e:
@@ -206,7 +206,7 @@ class Ai_Agent_30_Procedural_Environment_Fracture_Engine:
         if self.openai_key and not output:
             try:
                 payload = {"model": self.model_cloud, "messages": [{"role": "system", "content": prompt}], "response_format": {"type": "json_object"}}
-                res = self._api_call(self.openai_url, payload, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                res = self._api_call(self.openai_url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"})
                 output = json.loads(self._clean_json(res["choices"][0]["message"]["content"]))
                 self.log("[Core 2: OpenAI] Formulated procedural destruction matrix!", "SUCCESS")
             except Exception as e:
@@ -216,7 +216,7 @@ class Ai_Agent_30_Procedural_Environment_Fracture_Engine:
         if not output:
             try:
                 payload = {"model": self.model_local, "messages": [{"role": "system", "content": prompt}], "format": "json", "stream": False}
-                res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(self.ollama_url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res.get("message", {}).get("content", "{}")))
                 self.log("[Core 3: Ollama] Generated local destruction matrix!", "SUCCESS")
             except Exception as e:

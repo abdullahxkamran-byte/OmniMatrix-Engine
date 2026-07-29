@@ -189,12 +189,12 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
         # Core 1: Gemini
         if self.gemini_key and not output:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={self.gemini_key}"
                 payload = {
                     "contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}],
                     "generationConfig": {"temperature": 0.85, "responseMimeType": "application/json"}
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = {"beat_sync_profiles": json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("beat_sync_profiles", [])}
                 self.log("[Core 1: Gemini] Synthesized limitless beat synchronization profiles!", "SUCCESS")
             except Exception as e:
@@ -209,7 +209,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
                     "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
                     "response_format": {"type": "json_object"}
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"})
                 output = {"beat_sync_profiles": json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("beat_sync_profiles", [])}
                 self.log("[Core 2: OpenAI] Synthesized limitless beat synchronization profiles!", "SUCCESS")
             except Exception as e:
@@ -225,7 +225,7 @@ class Ai_Agent_41_Beat_To_Frame_Effects_Sync_Engine:
                     "format": "json",
                     "stream": False
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = {"beat_sync_profiles": json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("beat_sync_profiles", [])}
                 self.log("[Core 3: Ollama] Generated local beat synchronization profiles!", "SUCCESS")
             except Exception as e:

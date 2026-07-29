@@ -167,9 +167,9 @@ class AiAgent59OmniMotionPuppeteerDirector:
         if self.gemini_api_key:
             try:
                 self.log("Executing Core 1 (Gemini) for AAA Motion...", "INFO")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={self.gemini_api_key}"
                 payload = {"contents": [{"parts": [{"text": ai_prompt}]}]}
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 with urllib.request.urlopen(req, timeout=15) as response:
                     res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
                     parsed = self.clean_json_response(res_text)
@@ -182,7 +182,7 @@ class AiAgent59OmniMotionPuppeteerDirector:
             try:
                 self.log("Executing Core 2 (OpenAI) for AAA Motion...", "INFO")
                 url = "https://api.openai.com/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {self.openai_api_key}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {self.openai_api_key}", "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
                 payload = {"model": "gpt-4o", "messages": [{"role": "user", "content": ai_prompt}]}
                 req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=15) as response:
@@ -197,7 +197,7 @@ class AiAgent59OmniMotionPuppeteerDirector:
             self.log("Executing Core 3 (Ollama Local) for AAA Motion...", "INFO")
             url = "http://127.0.0.1:11434/api/generate"
             payload = {"model": "llama3", "prompt": ai_prompt, "stream": False}
-            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=20) as response:
                 res_text = json.loads(response.read().decode("utf-8"))["response"]
                 parsed = self.clean_json_response(res_text)

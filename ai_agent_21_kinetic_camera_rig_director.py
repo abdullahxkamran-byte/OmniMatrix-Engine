@@ -171,9 +171,9 @@ class AiAgent21KineticCameraRigDirector:
 
         if self.gemini_api_key:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={self.gemini_api_key}"
                 payload = {"contents": [{"parts": [{"text": system_prompt}]}]}
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 with urllib.request.urlopen(req, timeout=30) as response:
                     res_text = json.loads(response.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
                     parsed = self._clean_json_response(res_text)
@@ -183,7 +183,7 @@ class AiAgent21KineticCameraRigDirector:
         if self.openai_api_key:
             try:
                 url = "https://api.openai.com/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {self.openai_api_key}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {self.openai_api_key}", "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
                 payload = {"model": "gpt-4o", "messages": [{"role": "user", "content": system_prompt}]}
                 req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
                 with urllib.request.urlopen(req, timeout=30) as response:

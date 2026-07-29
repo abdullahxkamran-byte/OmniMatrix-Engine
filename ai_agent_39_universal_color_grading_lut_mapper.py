@@ -223,12 +223,12 @@ class Ai_Agent_39_Universal_Color_Grading_LUT_Mapper:
         # Core 1: Gemini (Rule 14 & 16)
         if self.gemini_key and not output:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={self.gemini_key}"
                 payload = {
                     "contents": [{"parts": [{"text": f"{prompt}\n\n{user_msg}"}]}],
                     "generationConfig": {"temperature": 0.88, "responseMimeType": "application/json"}
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res["candidates"][0]["content"]["parts"][0]["text"])).get("color_grading_profiles", [])
                 self.log("[Core 1: Gemini] Synthesized generative color palettes!", "SUCCESS")
             except Exception as e:
@@ -243,7 +243,7 @@ class Ai_Agent_39_Universal_Color_Grading_LUT_Mapper:
                     "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
                     "response_format": {"type": "json_object"}
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json", "Authorization": f"Bearer {self.openai_key}"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_key}"})
                 output = json.loads(self._clean_json(res["choices"][0]["message"]["content"])).get("color_grading_profiles", [])
                 self.log("[Core 2: OpenAI] Synthesized generative color palettes!", "SUCCESS")
             except Exception as e:
@@ -259,7 +259,7 @@ class Ai_Agent_39_Universal_Color_Grading_LUT_Mapper:
                     "format": "json",
                     "stream": False
                 }
-                res = self._api_call(url, payload, {"Content-Type": "application/json"})
+                res = self._api_call(url, payload, {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
                 output = json.loads(self._clean_json(res.get("message", {}).get("content", "{}"))).get("color_grading_profiles", [])
                 self.log("[Core 3: Ollama] Generated local color palettes!", "SUCCESS")
             except Exception as e:
