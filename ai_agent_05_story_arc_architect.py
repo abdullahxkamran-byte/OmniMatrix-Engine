@@ -1,256 +1,246 @@
 import os
-import re
 import sys
 import json
 import time
 import urllib.request
 import urllib.error
-import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
-
-class UniversalStoryArcArchitect:
+class Ai_Agent_05_Story_Arc_Architect:
     def __init__(self):
-        self.agent_name = "Ai Agent 05: story_arc_structural_architect"
-        
-        # GOD-LEVEL UPGRADE 1: Universal Path Isolation
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        os.makedirs(self.workspace_dir, exist_ok=True)
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        # Network Resilience
+        self.agent_name = "Ai_Agent_05_Story_Arc_Architect"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.max_retries = 3
-        self.retry_delay = 3
+        self.retry_delay = 2
+
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
+
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         
-        # API Keys Initialization
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
         
-        # Setup Gemini
-        if self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-flash-latest',
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-        # OpenAI/Ollama Setup
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_openai = "gpt-4o-mini"
-        self.model_local = "llama3"
-
-    def _log_info(self, message):
-        print(f"[{self.agent_name}] [INFO] {message}")
-
-    def _log_error(self, message):
-        print(f"[{self.agent_name}] [ERROR] {message}", file=sys.stderr)
-
-    def _read_state(self):
-        if not os.path.exists(self.state_file):
-            self._log_error("Critical Error: matrix_state.json not found. Run previous agents first.")
-            sys.exit(1)
-        try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self._log_error(f"Failed to read state file: {str(e)}")
-            sys.exit(1)
-
-    def _write_state(self, state_data):
-        try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
-                json.dump(state_data, f, indent=4)
-        except Exception as e:
-            self._log_error(f"Failed to persist state: {str(e)}")
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _build_universal_prompt(self, topic, dna_profile, vibe_profile, content_format, tension_data):
-        """GOD-LEVEL UPGRADE 3: Dynamically architects arc phases based on universal inputs."""
-        
-        system_prompt = (
-            "You are the OmniMatrix Supreme Narrative Arc Architect.\n"
-            "Analyze the provided tension timeline and subject matter to structure a high-density, "
-            "multi-stage story arc mapped out chronologically.\n"
-            "Analyze the dynamically injected parameters and shape the arc phases strictly to their structural intent.\n\n"
-            f"Visual DNA Architecture: {dna_profile}\n"
-            f"Audio/Acoustic Signature: {vibe_profile}\n"
-            f"Content Format/Style/Pacing: {content_format}\n\n"
-            "Instructions:\n"
-            "1. Internalize the 'Content Format'. Dynamically generate the appropriate number of phases (e.g., 3 phases for fast viral retention, 4-5 phases for cinematic/documentary pacing). Do not restrict yourself to hardcoded templates.\n"
-            "2. Output must STRICTLY be a raw JSON object containing a list named 'arc_phases'.\n"
-            "3. Each phase object must contain these exact keys:\n"
-            "   - 'phase_index': integer representing execution order (1, 2, 3...)\n"
-            "   - 'phase_name': string designating the arc level (e.g., 'The Hook', 'The Deep Dive', 'Terminal Output')\n"
-            "   - 'target_duration_ratio': float representing percentage of total runtime (must sum to exactly 1.0 overall. e.g., 0.20 for 20%)\n"
-            "   - 'pacing_frequency': string description of edit speed based on the audio signature.\n"
-            "   - 'audience_psychology_goal': string representing target viewer mental state.\n"
-            "Do not wrap the JSON in markdown code blocks."
-        )
-
-        user_context = (
-            f"Target Subject: '{topic}'\n"
-            f"Tension Map (from Agent 04):\n{json.dumps(tension_data, indent=2)}\n\n"
-            f"Generate the universal chronological arc phases."
-        )
-
-        return system_prompt, user_context
-
-    def _call_ai_engine(self, system_prompt, user_prompt):
-        """Tri-Core Routing Logic: Gemini -> OpenAI -> Ollama"""
-        
-        if self.gemini_api_key:
-            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
-            try:
-                full_prompt = f"{system_prompt}\n\n{user_prompt}"
-                response = self.gemini_model.generate_content(full_prompt)
-                return json.loads(self._clean_json_response(response.text))
-            except Exception as e:
-                self._log_error(f"Gemini API failed: {str(e)}. Fallback to Priority 2...")
-
-        if self.openai_api_key:
-            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
-            try:
-                headers = {
-                    "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""),
-                    "Authorization": f"Bearer {self.openai_api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
                 }
-                payload = {
-                    "model": self.model_openai,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    result = json.loads(response.read().decode("utf-8"))
-                    return json.loads(self._clean_json_response(result["choices"][0]["message"]["content"]))
-            except Exception as e:
-                self._log_error(f"OpenAI API failed: {str(e)}. Fallback to Priority 3...")
+            ],
+            "generationConfig": {
+                "response_mime_type": "application/json"
+            }
+        }
 
-        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
         try:
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "stream": False,
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return json.loads(self._clean_json_response(result["message"]["content"]))
-        except Exception as e:
-            self._log_error(f"Local Ollama failed: {str(e)}.")
-            return None
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
 
-    def _execute_procedural_fallback(self, content_format, vibe_profile):
-        """Universal mathematical structural breakdown replacing hardcoded cinematic/viral limits."""
-        self._log_info(f"Triggering Universal Procedural Arc Architect Logic for structure: {content_format}.")
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+
+                if text_content.startswith("```"):
+                    lines = text_content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text_content = "\n".join(lines).strip()
+
+                return json.loads(text_content)
+
+        except urllib.error.HTTPError as http_err:
+            err_msg = http_err.read().decode("utf-8")
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {err_msg}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
+
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe execution.")
+
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a master narrative arc architect. Generate strict raw JSON matching the requested schema."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
         
-        phases = [
-            {
-                "phase_index": 1, 
-                "phase_name": "System Initialization (Act I)", 
-                "target_duration_ratio": 0.25, 
-                "pacing_frequency": f"procedural-hook-{vibe_profile.split('_')[0].lower()}", 
-                "audience_psychology_goal": "cognitive-engagement"
-            },
-            {
-                "phase_index": 2, 
-                "phase_name": "Core Processing (Act II)", 
-                "target_duration_ratio": 0.50, 
-                "pacing_frequency": "rhythmic-escalation", 
-                "audience_psychology_goal": "sustained-retention"
-            },
-            {
-                "phase_index": 3, 
-                "phase_name": "Terminal Output (Act III)", 
-                "target_duration_ratio": 0.25, 
-                "pacing_frequency": "climactic-resolution", 
-                "audience_psychology_goal": "absolute-resonance"
-            }
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"].strip()
+                
+                if content.startswith("```"):
+                    lines = content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    content = "\n".join(lines).strip()
+
+                return json.loads(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"OpenAI Failsafe Error: {str(e)}")
+
+    def _validate_arc_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "arc_phases" not in data:
+            return False
+        phases = data["arc_phases"]
+        if not isinstance(phases, list) or len(phases) == 0:
+            return False
+
+        required_keys = [
+            "phase_index",
+            "phase_name",
+            "target_duration_ratio",
+            "pacing_frequency",
+            "audience_psychology_goal"
         ]
 
-        return {"arc_phases": phases}
+        total_ratio = 0.0
+        for phase in phases:
+            if not isinstance(phase, dict):
+                return False
+            for key in required_keys:
+                if key not in phase:
+                    return False
+            
+            try:
+                total_ratio += float(phase["target_duration_ratio"])
+            except ValueError:
+                return False
 
-    def execute(self):
-        state = self._read_state()
-        
-        # Pipeline Gate Check
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
+        # Allow slight floating point tolerance around 1.0 (e.g. 0.99 to 1.01)
+        if total_ratio < 0.95 or total_ratio > 1.05:
+            print(f"[{self.agent_name}] Warning: target_duration_ratio sum is {total_ratio}, expected 1.0", flush=True)
+
+        return True
+
+    def execute(self, state: dict) -> dict:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_05")
         if target_agent != "Ai_Agent_05":
-            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
-            return False
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}")
+            return state
 
-        # GOD-LEVEL UPGRADE 2: Idempotency Sweep
-        if "agent_05_story_arc" in state.get("runtime_data", {}).get("module_a_scripting", {}):
-            del state["runtime_data"]["module_a_scripting"]["agent_05_story_arc"]
-            self._log_info("Idempotency Sweep: Cleared legacy story arc data from previous session.")
+        runtime_data = state.setdefault("runtime_data", {})
+        module_scripting = runtime_data.setdefault("module_a_scripting", {})
 
-        topic = state.get("runtime_data", {}).get("core_topic", "")
-        content_format = state.get("global_config", {}).get("content_format", "Fluid_Narrative")
-        dna_profile = state.get("global_config", {}).get("animation_dna", "Omni_Procedural")
-        vibe_profile = state.get("global_config", {}).get("vibe_tempo", "Adaptive_Resonance")
+        if "agent_05_story_arc" in module_scripting:
+            del module_scripting["agent_05_story_arc"]
+            print(f"[{self.agent_name}] Idempotency Sweep: Cleared legacy arc phase data.")
+
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", ""))
+        global_config = state.get("global_config", {})
+        content_format = global_config.get("content_format", runtime_data.get("content_format", "Dynamic Short Narrative"))
+        vibe_tempo = global_config.get("vibe_tempo", runtime_data.get("vibe_tempo", "Adaptive Dynamic Rhythm"))
+        animation_dna = global_config.get("animation_dna", runtime_data.get("animation_dna", "Procedural Graphics Engine"))
         
-        # Pull Tension Data from Agent 04
-        agent_04_data = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_04_tension_peaks", {})
-        tension_data = agent_04_data.get("tension_timeline", [])
+        agent_04_data = module_scripting.get("agent_04_tension_peaks", [])
+        if not agent_04_data:
+            raise ValueError(f"[{self.agent_name}] ERROR: No tension timeline found from Agent 04. Pipeline broken.")
 
-        if not tension_data:
-            self._log_error("Critical Error: Tension data missing from Agent 04.")
-            return False
+        print(f"[{self.agent_name}] Architecting Story Arc Phases...", flush=True)
 
-        self._log_info(f"Architecting Story Arc for universal format: {content_format.upper()}")
+        prompt = (
+            f"You are the OmniMatrix Supreme Narrative Arc Architect.\n"
+            f"Your objective is to analyze the provided tension timeline and structure a multi-stage story arc mapped out chronologically.\n\n"
+            f"Context Parameters:\n"
+            f"- Topic: '{core_topic}'\n"
+            f"- Format/Style: '{content_format}'\n"
+            f"- Visual DNA: '{animation_dna}'\n"
+            f"- Acoustic Signature: '{vibe_tempo}'\n\n"
+            f"Input Tension Timeline:\n{json.dumps(agent_04_data)}\n\n"
+            f"Instructions:\n"
+            f"1. Dynamically generate the appropriate number of chronological phases/acts (e.g., 3 acts for standard, 5 for cinematic). Do not restrict yourself to hardcoded templates.\n"
+            f"2. Define the 'target_duration_ratio' as a decimal float for each phase. THE SUM OF ALL RATIOS MUST EXACTLY EQUAL 1.0 (e.g., 0.2, 0.5, 0.3).\n"
+            f"3. Return ONLY valid JSON with this exact schema:\n"
+            f"{{\n"
+            f"  \"arc_phases\": [\n"
+            f"    {{\n"
+            f"      \"phase_index\": 1,\n"
+            f"      \"phase_name\": \"The Hook / Initialization\",\n"
+            f"      \"target_duration_ratio\": 0.15,\n"
+            f"      \"pacing_frequency\": \"Fast edit speed, high frequency cuts\",\n"
+            f"      \"audience_psychology_goal\": \"Curiosity and pattern interrupt\"\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
 
-        system_prompt, user_prompt = self._build_universal_prompt(topic, dna_profile, vibe_profile, content_format, tension_data)
-        
         generated_data = None
+        last_error = ""
+
         for attempt in range(1, self.max_retries + 1):
-            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
-            if parsed_json and "arc_phases" in parsed_json:
-                generated_data = parsed_json
-                self._log_info(f"Success! Built {len(generated_data['arc_phases'])} Universal Arc Phases.")
-                break
-            else:
-                self._log_error("Invalid response format. Retrying...")
+            try:
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_arc_schema(parsed_json):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully.")
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed (missing keys or invalid ratio sums).")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{self.agent_name}] Primary Gemini REST API attempt {attempt} failed: {last_error}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
 
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI gpt-4o-mini)...")
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_arc_schema(parsed_json):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.")
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}")
+
         if not generated_data:
-            self._log_error("All models failed. Applying Procedural Arc Fallback.")
-            generated_data = self._execute_procedural_fallback(content_format, vibe_profile)
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_05_Fallback"
-        else:
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_05"
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
-        # Save Output to Module A Scripting Memory
-        state["runtime_data"]["module_a_scripting"]["agent_05_story_arc"] = generated_data
-        
-        # STRICT HANDSHAKE PROTOCOL: Hand over to Ai_Agent_06 (Fixed Naming Consistency)
-        state["pipeline_status"]["next_agent"] = "Ai_Agent_06"
-        self._write_state(state)
-        
-        self._log_info("Arc Structure Locked! Pipeline handed over to Ai_Agent_06: word_count_guard_utility.")
-        return True
+        module_scripting["agent_05_story_arc"] = generated_data["arc_phases"]
 
-if __name__ == "__main__":
-    architect = UniversalStoryArcArchitect()
-    architect.execute()
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_05"
+        pipeline_status["Ai_Agent_05"] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed successfully. Arc Phases Locked!")
+        return state
