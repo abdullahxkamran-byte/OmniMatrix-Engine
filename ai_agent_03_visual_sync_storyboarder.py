@@ -1,265 +1,252 @@
 import os
-import re
 import sys
 import json
 import time
+import requests
 import urllib.request
 import urllib.error
-import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
-
-class VisualSyncStoryboarder:
+class Ai_Agent_03_Visual_Sync_Storyboarder:
     def __init__(self):
-        self.agent_name = "Ai Agent 03: visual_sync_storyboarder"
-        
-        # GOD-LEVEL UPGRADE 1: Universal Path Isolation
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        os.makedirs(self.workspace_dir, exist_ok=True)
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        # Network Resilience Settings
+        self.agent_name = "Ai_Agent_03_Visual_Sync_Storyboarder"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.max_retries = 3
-        self.retry_delay = 3
+        self.retry_delay = 2
+
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
+
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         
-        # Initialize API Keys from .env
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
         
-        # Configure Gemini if key exists
-        if self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-flash-latest',
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-        # Cloud/Local AI Routing Details for OpenAI/Ollama
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_openai = "gpt-4o-mini"
-        self.model_local = "llama3"
-
-    def _log_info(self, message):
-        print(f"[{self.agent_name}] [INFO] {message}")
-
-    def _log_error(self, message):
-        print(f"[{self.agent_name}] [ERROR] {message}", file=sys.stderr)
-
-    def _read_state(self):
-        if not os.path.exists(self.state_file):
-            self._log_error("Critical Error: matrix_state.json not found. Run previous agents first.")
-            sys.exit(1)
-        try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self._log_error(f"Failed to read state file: {str(e)}")
-            sys.exit(1)
-
-    def _write_state(self, state_data):
-        try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
-                json.dump(state_data, f, indent=4)
-        except Exception as e:
-            self._log_error(f"Failed to persist state: {str(e)}")
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _build_universal_prompt(self, topic, hook_script, core_script, dna_profile, vibe_profile, content_format):
-        """GOD-LEVEL UPGRADE 3: Limitless dynamic pacing and framing based purely on injected variables."""
-        
-        system_prompt = (
-            "You are the OmniMatrix Supreme Cinematic Director and Visual Architect.\n"
-            "Your task is to take the provided script and break it down organically into a dynamic "
-            "sequence of storyboard frames.\n"
-            "Analyze the dynamically injected parameters and shape the pacing, shot selection, and visual direction "
-            "strictly to their structural and aesthetic intent.\n\n"
-            f"Visual DNA Architecture: {dna_profile}\n"
-            f"Audio/Acoustic Signature: {vibe_profile}\n"
-            f"Content Format/Style/Pacing: {content_format}\n\n"
-            "Instructions:\n"
-            "1. Internalize the 'Content Format'. Adapt frame durations, cuts, and transitions dynamically to match this exact format. If it is high-energy, make cuts fast (1-2s). If cinematic, allow frames to breathe.\n"
-            "2. DO NOT limit yourself to a specific number of frames. Generate as many frames as required to fully and cinematically cover the script pacing.\n"
-            "3. Output must STRICTLY be a raw JSON object containing a list named 'storyboard_frames'.\n"
-            "4. Each frame object must contain these exact keys:\n"
-            "   - 'frame_index': integer (starting from 1)\n"
-            "   - 'timestamp_start': float (start time in seconds)\n"
-            "   - 'timestamp_end': float (end time in seconds)\n"
-            "   - 'spoken_audio': The exact dialogue or voiceover spoken during this frame.\n"
-            "   - 'scenic_art_prompt': Ultra-detailed visual description (subject, lighting, background, composition).\n"
-            "   - 'camera_movement_mode': Kinetic direction (e.g., fast pan, tracking shot, static wide).\n"
-            "   - 'audio_sync_trigger': Audio environment/SFX.\n"
-            "Do not wrap the JSON in markdown code blocks."
-        )
-
-        user_context = (
-            f"Target Subject: '{topic}'\n"
-            f"Opening Hook (Act 1): '{hook_script}'\n"
-            f"Core Script/Continuation (Act 2): '{core_script}'\n\n"
-            f"Generate the full storyboard sequence."
-        )
-
-        return system_prompt, user_context
-
-    def _execute_procedural_fallback(self, hook_script, core_script, content_format, dna_profile):
-        """Dynamic fallback utilizing abstract variables rather than hardcoded format strings."""
-        self._log_info(f"Triggering Limitless Procedural Fallback for structure: {content_format}")
-        
-        full_text = f"{hook_script} {core_script}"
-        # Split text into sentences dynamically
-        sentences = [s.strip() for s in re.split(r'[.!?]', full_text) if s.strip()]
-        if not sentences:
-            sentences = ["System fallback generated.", "Offline structural mode active."]
-
-        frames = []
-        current_time = 0.0
-        
-        # Procedural base timing adapting universally
-        time_per_frame = 3.0 
-
-        for i, sentence in enumerate(sentences):
-            frames.append({
-                "frame_index": i + 1,
-                "timestamp_start": round(current_time, 1),
-                "timestamp_end": round(current_time + time_per_frame, 1),
-                "spoken_audio": sentence,
-                "scenic_art_prompt": f"Dynamic visual covering structural node: '{sentence}'. Architecture: {dna_profile}.",
-                "camera_movement_mode": "Procedural spatial shift." if i % 2 == 0 else "Stabilized lock-on.",
-                "audio_sync_trigger": "Structural resonance." if i > 0 else "Initial impulse."
-            })
-            current_time += time_per_frame
-
-        return {"storyboard_frames": frames}
-
-    def _call_ai_engine(self, system_prompt, user_prompt):
-        # PRIORITY 1: GEMINI
-        if self.gemini_api_key:
-            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
-            try:
-                full_prompt = f"{system_prompt}\n\n{user_prompt}"
-                response = self.gemini_model.generate_content(full_prompt)
-                return json.loads(self._clean_json_response(response.text))
-            except Exception as e:
-                self._log_error(f"Gemini API failed: {str(e)}. Fallback to Priority 2...")
-
-        # PRIORITY 2: OPENAI
-        if self.openai_api_key:
-            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
-            try:
-                headers = {
-                    "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""),
-                    "Authorization": f"Bearer {self.openai_api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
                 }
-                payload = {
-                    "model": self.model_openai,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    result = json.loads(response.read().decode("utf-8"))
-                    return json.loads(self._clean_json_response(result["choices"][0]["message"]["content"]))
-            except Exception as e:
-                self._log_error(f"OpenAI API failed: {str(e)}. Fallback to Priority 3...")
-
-        # PRIORITY 3: OLLAMA (LOCAL)
-        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
-        try:
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "stream": False,
-                "format": "json"
+            ],
+            "generationConfig": {
+                "response_mime_type": "application/json"
             }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return json.loads(self._clean_json_response(result["message"]["content"]))
-        except Exception as e:
-            self._log_error(f"Local Ollama failed: {str(e)}.")
-            return None
+        }
 
-    def execute(self):
-        state = self._read_state()
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+
+                if text_content.startswith("```"):
+                    lines = text_content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text_content = "\n".join(lines).strip()
+
+                return json.loads(text_content)
+
+        except urllib.error.HTTPError as http_err:
+            err_msg = http_err.read().decode("utf-8")
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {err_msg}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
+
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe execution.")
+
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert cinematic storyboarder. Generate strict raw JSON matching the requested schema."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        if response.status_code != 200:
+            raise RuntimeError(f"OpenAI API Error [{response.status_code}]: {response.text}")
+
+        res_json = response.json()
+        content = res_json["choices"][0]["message"]["content"].strip()
         
-        # Pipeline Gatekeeper Check
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
-        if target_agent != "Ai_Agent_03":
-            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        return json.loads(content)
+
+    def _validate_storyboard_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "storyboard_frames" not in data:
+            return False
+        frames = data["storyboard_frames"]
+        if not isinstance(frames, list) or len(frames) == 0:
             return False
 
-        # GOD-LEVEL UPGRADE 2: Idempotency Sweep (Scrub Previous Run Data)
-        if "agent_03_storyboard" in state.get("runtime_data", {}).get("module_a_scripting", {}):
-            del state["runtime_data"]["module_a_scripting"]["agent_03_storyboard"]
-            self._log_info("Idempotency Sweep: Cleared legacy storyboard data from previous session.")
+        required_keys = [
+            "frame_index",
+            "timestamp_start",
+            "timestamp_end",
+            "spoken_audio",
+            "scenic_art_prompt",
+            "camera_movement_mode",
+            "audio_sync_trigger"
+        ]
+
+        for frame in frames:
+            if not isinstance(frame, dict):
+                return False
+            for key in required_keys:
+                if key not in frame:
+                    return False
+        return True
+
+    def execute(self, state: dict) -> dict:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_03")
+        if target_agent != "Ai_Agent_03":
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}")
+            return state
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_scripting = runtime_data.setdefault("module_a_scripting", {})
+
+        if "agent_03_storyboard" in module_scripting:
+            del module_scripting["agent_03_storyboard"]
+            print(f"[{self.agent_name}] Idempotency Sweep: Cleared legacy storyboard data.")
 
         # Extract Universal Variables
-        topic = state.get("runtime_data", {}).get("core_topic", "")
-        content_format = state.get("global_config", {}).get("content_format", "Fluid_Narrative")
-        dna_profile = state.get("global_config", {}).get("animation_dna", "Omni_Procedural")
-        vibe_profile = state.get("global_config", {}).get("vibe_tempo", "Adaptive_Resonance")
-        
-        # Extract payloads from previous agents
-        agent_01_hooks = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_01_hooks", [])
-        hook_script = agent_01_hooks[0].get("hook_script", "") if agent_01_hooks else f"Subject initialization: {topic}"
-        
-        agent_02_script = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_02_core_script", {})
-        core_paths = agent_02_script.get("core_paths", [])
-        core_script_line = core_paths[0].get("core_script_line", "") if core_paths else f"System progression for {topic} active."
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", ""))
+        if not core_topic:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: Core topic missing in state.")
 
-        self._log_info(f"Generating Dynamic Storyboard for universal architecture: {content_format.upper()}")
+        global_config = state.get("global_config", {})
+        content_format = global_config.get("content_format", runtime_data.get("content_format", "Dynamic Short Narrative"))
+        vibe_tempo = global_config.get("vibe_tempo", runtime_data.get("vibe_tempo", "Adaptive Dynamic Rhythm"))
+        animation_dna = global_config.get("animation_dna", runtime_data.get("animation_dna", "Procedural Graphics Engine"))
+        genre_style = global_config.get("genre_style", runtime_data.get("genre_style", "Universal Genre"))
+        master_theme = runtime_data.get("master_theme_blueprint", f"{genre_style} - {content_format}")
 
-        # Build dynamic prompt
-        system_prompt, user_prompt = self._build_universal_prompt(topic, hook_script, core_script_line, dna_profile, vibe_profile, content_format)
+        # Extract Hook & Core Script
+        agent_01_hooks = module_scripting.get("agent_01_hooks", [])
+        if not agent_01_hooks:
+            raise ValueError(f"[{self.agent_name}] ERROR: Agent 01 hooks not found. Pipeline broken.")
         
+        selected_index = module_scripting.get("selected_hook_index", 0)
+        selected_hook = agent_01_hooks[selected_index]
+
+        agent_02_script = module_scripting.get("agent_02_core_script", [])
+        if not agent_02_script:
+            raise ValueError(f"[{self.agent_name}] ERROR: Agent 02 core script not found. Pipeline broken.")
+
+        print(f"[{self.agent_name}] Processing universal storyboard for format: {content_format.upper()}")
+
+        prompt = (
+            f"You are the OmniMatrix Supreme Cinematic Director and Visual Architect.\n"
+            f"Your task is to take the opening hook and the core script sequence, and break them down organically into a dynamic, second-by-second storyboard sequence.\n\n"
+            f"Context Parameters:\n"
+            f"- Topic: '{core_topic}'\n"
+            f"- Master Theme / Aesthetic: '{master_theme}'\n"
+            f"- Content Format/Style: '{content_format}'\n"
+            f"- Vibe & Tempo: '{vibe_tempo}'\n"
+            f"- Visual DNA: '{animation_dna}'\n\n"
+            f"Input Narrative:\n"
+            f"1. Opening Hook: {json.dumps(selected_hook)}\n"
+            f"2. Core Script Sequence: {json.dumps(agent_02_script)}\n\n"
+            f"Instructions:\n"
+            f"1. Adapt frame durations and cuts dynamically to match '{content_format}'.\n"
+            f"2. DO NOT limit yourself to a specific number of frames. Generate as many frames as required to fully and cinematically cover the hook AND the core script.\n"
+            f"3. Ensure the 'timestamp_start' and 'timestamp_end' flow sequentially from 0.0 seconds.\n\n"
+            f"Return ONLY valid JSON with this exact schema:\n"
+            f"{{\n"
+            f"  \"storyboard_frames\": [\n"
+            f"    {{\n"
+            f"      \"frame_index\": 1,\n"
+            f"      \"timestamp_start\": 0.0,\n"
+            f"      \"timestamp_end\": 2.5,\n"
+            f"      \"spoken_audio\": \"Exact dialogue or None\",\n"
+            f"      \"scenic_art_prompt\": \"Ultra-detailed visual description for 3D/VFX generation\",\n"
+            f"      \"camera_movement_mode\": \"Kinetic direction (e.g., fast pan, tracking shot)\",\n"
+            f"      \"audio_sync_trigger\": \"Specific audio environment or SFX\"\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
+
         generated_data = None
+        last_error = ""
+
         for attempt in range(1, self.max_retries + 1):
-            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
-            if parsed_json and "storyboard_frames" in parsed_json:
-                generated_data = parsed_json
-                self._log_info(f"Success! Generated {len(generated_data['storyboard_frames'])} dynamic universal frames.")
-                break
-            else:
-                self._log_error("Invalid response format. Retrying...")
+            try:
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...")
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_storyboard_schema(parsed_json):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully. Generated {len(generated_data['storyboard_frames'])} frames.")
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed (missing keys or empty array).")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{self.agent_name}] Primary Gemini REST API attempt {attempt} failed: {last_error}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
 
-        # Handle Fallback
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Primary API failed. Activating Rule 14 Dual API Failsafe (OpenAI gpt-4o-mini)...")
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_storyboard_schema(parsed_json):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.")
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}")
+
         if not generated_data:
-            self._log_error("All models failed. Applying Universal Procedural Fallback.")
-            generated_data = self._execute_procedural_fallback(hook_script, core_script_line, content_format, dna_profile)
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_03_Fallback"
-        else:
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_03"
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
-        # Update persistent ledger structures
-        state["runtime_data"]["module_a_scripting"]["agent_03_storyboard"] = generated_data
-        
-        # PERFECT HANDSHAKE ACCORDING TO YOUR LIST:
-        state["pipeline_status"]["next_agent"] = "Ai_Agent_04"
-        self._write_state(state)
-        
-        self._log_info("Storyboard Blueprint Locked! Handing pipeline over to Ai Agent 04: narrative_tension_peaks_analyzer.")
-        return True
+        module_scripting["agent_03_storyboard"] = generated_data["storyboard_frames"]
 
-if __name__ == "__main__":
-    director = VisualSyncStoryboarder()
-    director.execute()
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_03"
+        pipeline_status["Ai_Agent_03"] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed successfully. Storyboard Sequence Locked!")
+        return state
