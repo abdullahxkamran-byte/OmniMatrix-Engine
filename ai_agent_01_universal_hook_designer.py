@@ -3,7 +3,8 @@ import sys
 import json
 import time
 import requests
-import google.generativeai as genai
+import urllib.request
+import urllib.error
 
 class Ai_Agent_01_Universal_Hook_Designer:
     def __init__(self):
@@ -13,36 +14,65 @@ class Ai_Agent_01_Universal_Hook_Designer:
         self.max_retries = 3
         self.retry_delay = 2
 
-        if self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-flash-latest',
-                generation_config={"response_mime_type": "application/json"}
-            )
-        else:
-            self.gemini_model = None
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-    def _call_gemini_api(self, prompt: str) -> dict:
-        if not self.gemini_model:
-            raise ValueError("GEMINI_API_KEY missing or Gemini model initialization failed.")
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         
-        response = self.gemini_model.generate_content(prompt)
-        text_content = response.text.strip()
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
         
-        if text_content.startswith("```"):
-            lines = text_content.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text_content = "\n".join(lines).strip()
-            
-        return json.loads(text_content)
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "response_mime_type": "application/json"
+            }
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+
+                if text_content.startswith("```"):
+                    lines = text_content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text_content = "\n".join(lines).strip()
+
+                return json.loads(text_content)
+
+        except urllib.error.HTTPError as http_err:
+            err_msg = http_err.read().decode("utf-8")
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {err_msg}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
     def _call_openai_failsafe(self, prompt: str) -> dict:
         if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY missing for Dual API Failsafe execution.")
-            
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe execution.")
+
         url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
@@ -52,7 +82,7 @@ class Ai_Agent_01_Universal_Hook_Designer:
             "model": "gpt-4o-mini",
             "messages": [
                 {
-                    "role": "system", 
+                    "role": "system",
                     "content": "You are a universal hook design engine. Generate strict raw JSON matching the requested schema."
                 },
                 {"role": "user", "content": prompt}
@@ -60,13 +90,22 @@ class Ai_Agent_01_Universal_Hook_Designer:
             "response_format": {"type": "json_object"},
             "temperature": 0.7
         }
-        
+
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         if response.status_code != 200:
             raise RuntimeError(f"OpenAI API Error [{response.status_code}]: {response.text}")
-            
+
         res_json = response.json()
-        content = res_json["choices"][0]["message"]["content"]
+        content = res_json["choices"][0]["message"]["content"].strip()
+        
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
         return json.loads(content)
 
     def _validate_hook_schema(self, data: dict) -> bool:
@@ -75,7 +114,7 @@ class Ai_Agent_01_Universal_Hook_Designer:
         hooks = data["agent_01_hooks"]
         if not isinstance(hooks, list) or len(hooks) != 3:
             return False
-            
+
         required_keys = [
             "hook_id",
             "hook_approach",
@@ -85,7 +124,7 @@ class Ai_Agent_01_Universal_Hook_Designer:
             "retention_psychology_trigger",
             "pacing_tempo"
         ]
-        
+
         for hook in hooks:
             if not isinstance(hook, dict):
                 return False
@@ -97,7 +136,7 @@ class Ai_Agent_01_Universal_Hook_Designer:
     def execute(self, state: dict) -> dict:
         target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_01")
         if target_agent != "Ai_Agent_01":
-            print(f"[{self.agent_name}] Execution skipped. System pipeline queue is targeted to: {target_agent}")
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}")
             return state
 
         runtime_data = state.setdefault("runtime_data", {})
@@ -105,7 +144,7 @@ class Ai_Agent_01_Universal_Hook_Designer:
 
         if "agent_01_hooks" in module_scripting:
             del module_scripting["agent_01_hooks"]
-            print(f"[{self.agent_name}] Idempotency Sweep: Cleared legacy session hook data.")
+            print(f"[{self.agent_name}] Idempotency Sweep: Cleared legacy hook data.")
 
         core_topic = runtime_data.get("core_topic", "")
         if not core_topic:
@@ -155,17 +194,17 @@ class Ai_Agent_01_Universal_Hook_Designer:
 
         for attempt in range(1, self.max_retries + 1):
             try:
-                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini API...")
-                parsed_json = self._call_gemini_api(prompt)
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...")
+                parsed_json = self._call_gemini_rest(prompt)
                 if self._validate_hook_schema(parsed_json):
                     generated_data = parsed_json
-                    print(f"[{self.agent_name}] Primary Gemini API payload structural mapping validated successfully.")
+                    print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully.")
                     break
                 else:
                     raise ValueError("JSON payload schema validation failed (incorrect keys or count).")
             except Exception as e:
                 last_error = str(e)
-                print(f"[{self.agent_name}] Primary Gemini API attempt {attempt} failed: {last_error}")
+                print(f"[{self.agent_name}] Primary Gemini REST API attempt {attempt} failed: {last_error}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
 
@@ -184,6 +223,8 @@ class Ai_Agent_01_Universal_Hook_Designer:
             raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
         module_scripting["agent_01_hooks"] = generated_data["agent_01_hooks"]
+        if "selected_hook_index" not in module_scripting:
+            module_scripting["selected_hook_index"] = 0
 
         pipeline_status = state.setdefault("pipeline_status", {})
         pipeline_status["last_active_agent"] = "Ai_Agent_01"
@@ -194,5 +235,5 @@ class Ai_Agent_01_Universal_Hook_Designer:
             with open(state_file_path, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=4)
 
-        print(f"[{self.agent_name}] Execution completed successfully. 3 universal hooks written for format [{content_format}].")
+        print(f"[{self.agent_name}] Execution completed successfully. 3 universal hooks written for format [{content_format}]. Default selected_hook_index set to 0.")
         return state
