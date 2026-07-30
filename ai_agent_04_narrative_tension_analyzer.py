@@ -1,264 +1,241 @@
 import os
-import re
 import sys
 import json
 import time
 import urllib.request
 import urllib.error
-import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
-
-class NarrativeTensionPeaksAnalyzer:
+class Ai_Agent_04_Narrative_Tension_Analyzer:
     def __init__(self):
-        self.agent_name = "Ai Agent 04: narrative_tension_peaks_analyzer"
-        
-        # GOD-LEVEL UPGRADE 1: Universal Path Isolation
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        os.makedirs(self.workspace_dir, exist_ok=True)
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        # Network Resilience
+        self.agent_name = "Ai_Agent_04_Narrative_Tension_Analyzer"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.max_retries = 3
-        self.retry_delay = 3
+        self.retry_delay = 2
+
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
+
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         
-        # API Keys Initialization
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
         
-        # Setup Gemini
-        if self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-flash-latest',
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-        # OpenAI/Ollama Setup
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_openai = "gpt-4o-mini"
-        self.model_local = "llama3"
-
-    def _log_info(self, message):
-        print(f"[{self.agent_name}] [INFO] {message}")
-
-    def _log_error(self, message):
-        print(f"[{self.agent_name}] [ERROR] {message}", file=sys.stderr)
-
-    def _read_state(self):
-        if not os.path.exists(self.state_file):
-            self._log_error("Critical Error: matrix_state.json not found. Run previous agents first.")
-            sys.exit(1)
-        try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self._log_error(f"Failed to read state file: {str(e)}")
-            sys.exit(1)
-
-    def _write_state(self, state_data):
-        try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
-                json.dump(state_data, f, indent=4)
-        except Exception as e:
-            self._log_error(f"Failed to persist state: {str(e)}")
-
-    def _clean_json_response(self, raw_text):
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        start_idx = cleaned.find('{')
-        end_idx = cleaned.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
-
-    def _build_universal_prompt(self, topic, dna_profile, vibe_profile, content_format, frames):
-        """GOD-LEVEL UPGRADE 3: Limitless dynamic tension calculation based on injected variables."""
-        
-        system_prompt = (
-            "You are the OmniMatrix Supreme Narrative Tension Architect and Audio-Visual Pacing Analyst.\n"
-            "Your objective is to map precise tension curves and audio-visual cues for the provided storyboard frames.\n"
-            "Analyze the dynamically injected parameters and shape the tension escalation strictly to their aesthetic intent.\n\n"
-            f"Visual DNA Architecture: {dna_profile}\n"
-            f"Audio/Acoustic Signature: {vibe_profile}\n"
-            f"Content Format/Style/Pacing: {content_format}\n\n"
-            "Instructions:\n"
-            "1. Internalize the 'Content Format' and 'Acoustic Signature'. If the format requires extreme retention (e.g., fast-paced viral), keep tension high and escalating. If it is cinematic, allow valleys and intense climax peaks. Adapt universally.\n"
-            "2. Analyze EACH frame provided and map the corresponding tension variables.\n"
-            "3. Output STRICTLY as a raw JSON object with the key 'tension_timeline' containing a list of objects.\n"
-            "4. Each object in the list MUST contain these exact keys:\n"
-            "   - 'frame_index': matching integer representing the frame order.\n"
-            "   - 'tension_score': integer from 1 (calm/whisper) to 10 (intense climax/explosive screen shake).\n"
-            "   - 'pacing_instruction': string detailing editing cut rate.\n"
-            "   - 'highlight_keywords': list of exactly 1-3 critical words in the voiceover to style with kinetic scaling.\n"
-            "   - 'vfx_color_shift': color styling recommendation matching the DNA.\n"
-            "   - 'audio_attenuation_db': integer for dynamic volume adjustments (e.g., -3 for voice clarity, +4 for bass blast).\n"
-            "Do not wrap the JSON in markdown code blocks."
-        )
-
-        user_context = (
-            f"Target Subject: '{topic}'\n"
-            f"Number of Frames to Process: {len(frames)}\n\n"
-            f"Storyboard Data:\n{json.dumps(frames, indent=2)}"
-        )
-
-        return system_prompt, user_context
-
-    def _call_ai_engine(self, system_prompt, user_prompt):
-        """Tri-Core Routing Logic: Gemini -> OpenAI -> Ollama"""
-        
-        if self.gemini_api_key:
-            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
-            try:
-                full_prompt = f"{system_prompt}\n\n{user_prompt}"
-                response = self.gemini_model.generate_content(full_prompt)
-                return json.loads(self._clean_json_response(response.text))
-            except Exception as e:
-                self._log_error(f"Gemini API failed: {str(e)}. Fallback to Priority 2...")
-
-        if self.openai_api_key:
-            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
-            try:
-                headers = {
-                    "Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""),
-                    "Authorization": f"Bearer {self.openai_api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
                 }
-                payload = {
-                    "model": self.model_openai,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    result = json.loads(response.read().decode("utf-8"))
-                    return json.loads(self._clean_json_response(result["choices"][0]["message"]["content"]))
-            except Exception as e:
-                self._log_error(f"OpenAI API failed: {str(e)}. Fallback to Priority 3...")
-
-        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
-        try:
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
-            payload = {
-                "model": self.model_local,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "stream": False,
-                "format": "json"
+            ],
+            "generationConfig": {
+                "response_mime_type": "application/json"
             }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=50) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return json.loads(self._clean_json_response(result["message"]["content"]))
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+
+                if text_content.startswith("```"):
+                    lines = text_content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text_content = "\n".join(lines).strip()
+
+                return json.loads(text_content)
+
+        except urllib.error.HTTPError as http_err:
+            err_msg = http_err.read().decode("utf-8")
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {err_msg}")
         except Exception as e:
-            self._log_error(f"Local Ollama failed: {str(e)}.")
-            return None
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-    def _execute_procedural_fallback(self, dna_profile, vibe_profile, frames):
-        """Mathematical formula to calculate tension purely based on progression, replacing hardcoded formats."""
-        self._log_info(f"Triggering Universal Procedural Tension Math Logic for profile: {vibe_profile}.")
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe execution.")
+
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a master narrative tension and pacing analyzer. Generate strict raw JSON matching the requested schema."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
         
-        timeline = []
-        total_frames = len(frames) if frames else 1
-        
-        for idx, frame in enumerate(frames):
-            frame_idx = frame.get("frame_index", idx + 1)
-            
-            # Universal progression curve (ramps up dynamically)
-            progression = (idx + 1) / total_frames
-            tension_calc = int(3 + (progression * 7))
-            
-            voiceover = frame.get("spoken_audio", "System Node Sequence")
-            words = [w.strip(".,!?\"'") for w in voiceover.split() if len(w) > 3]
-            highlights = words[:2] if words else ["Node", "Sequence"]
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"].strip()
+                
+                if content.startswith("```"):
+                    lines = content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    content = "\n".join(lines).strip()
 
-            if tension_calc < 5:
-                pacing, color, db = "procedural-hold", "base-tone", -2
-            elif tension_calc < 8:
-                pacing, color, db = "dynamic-shift", "accent-contrast", 1
-            else:
-                pacing, color, db = "climax-burst", "peak-saturation", 4
+                return json.loads(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"OpenAI Failsafe Error: {str(e)}")
 
-            timeline.append({
-                "frame_index": frame_idx,
-                "tension_score": min(tension_calc, 10),
-                "pacing_instruction": pacing,
-                "highlight_keywords": highlights,
-                "vfx_color_shift": f"{color}-{dna_profile.split('_')[0].lower()}",
-                "audio_attenuation_db": db
-            })
-
-        return {"tension_timeline": timeline}
-
-    def execute(self):
-        state = self._read_state()
-        
-        # Pipeline Gate Check
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
-        if target_agent != "Ai_Agent_04":
-            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+    def _validate_tension_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "tension_timeline" not in data:
+            return False
+        timeline = data["tension_timeline"]
+        if not isinstance(timeline, list) or len(timeline) == 0:
             return False
 
-        # GOD-LEVEL UPGRADE 2: Idempotency Sweep
-        if "agent_04_tension_peaks" in state.get("runtime_data", {}).get("module_a_scripting", {}):
-            del state["runtime_data"]["module_a_scripting"]["agent_04_tension_peaks"]
-            self._log_info("Idempotency Sweep: Cleared legacy tension data from previous session.")
+        required_keys = [
+            "frame_index",
+            "tension_score",
+            "pacing_instruction",
+            "highlight_keywords",
+            "vfx_color_shift",
+            "audio_attenuation_db"
+        ]
+
+        for point in timeline:
+            if not isinstance(point, dict):
+                return False
+            for key in required_keys:
+                if key not in point:
+                    return False
+        return True
+
+    def execute(self, state: dict) -> dict:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_04")
+        if target_agent != "Ai_Agent_04":
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}")
+            return state
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_scripting = runtime_data.setdefault("module_a_scripting", {})
+
+        if "agent_04_tension_peaks" in module_scripting:
+            del module_scripting["agent_04_tension_peaks"]
+            print(f"[{self.agent_name}] Idempotency Sweep: Cleared legacy tension data.")
 
         # Extract Universal Variables
-        topic = state.get("runtime_data", {}).get("core_topic", "")
-        content_format = state.get("global_config", {}).get("content_format", "Fluid_Narrative")
-        dna_profile = state.get("global_config", {}).get("animation_dna", "Omni_Procedural")
-        vibe_profile = state.get("global_config", {}).get("vibe_tempo", "Adaptive_Resonance")
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", ""))
+        global_config = state.get("global_config", {})
+        content_format = global_config.get("content_format", runtime_data.get("content_format", "Dynamic Short Narrative"))
+        vibe_tempo = global_config.get("vibe_tempo", runtime_data.get("vibe_tempo", "Adaptive Dynamic Rhythm"))
+        animation_dna = global_config.get("animation_dna", runtime_data.get("animation_dna", "Procedural Graphics Engine"))
         
-        # Pull unlimited frames from Agent 03
-        agent_03_data = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_03_storyboard", {})
-        frames = agent_03_data.get("storyboard_frames", [])
+        # Pull frames from Agent 03
+        agent_03_data = module_scripting.get("agent_03_storyboard", [])
+        if not agent_03_data:
+            raise ValueError(f"[{self.agent_name}] ERROR: No storyboard frames found from Agent 03. Pipeline broken.")
 
-        if not frames:
-            self._log_error("Critical Error: No storyboard frames received from Agent 03.")
-            return False
+        print(f"[{self.agent_name}] Analyzing Narrative Tension for {len(agent_03_data)} frames...")
 
-        self._log_info(f"Processing Dynamic Tension Curves for {len(frames)} frames. Universal Architecture: {content_format.upper()}")
+        prompt = (
+            f"You are the OmniMatrix Supreme Narrative Tension Architect and Audio-Visual Pacing Analyst.\n"
+            f"Your objective is to map precise tension curves and audio-visual cues for the provided storyboard frames.\n\n"
+            f"Context Parameters:\n"
+            f"- Topic: '{core_topic}'\n"
+            f"- Format/Style: '{content_format}'\n"
+            f"- Visual DNA: '{animation_dna}'\n"
+            f"- Acoustic Signature: '{vibe_tempo}'\n"
+            f"- Number of Frames: {len(agent_03_data)}\n\n"
+            f"Input Storyboard Data:\n{json.dumps(agent_03_data)}\n\n"
+            f"Instructions:\n"
+            f"1. Analyze EACH frame provided and assign an emotional/kinetic tension score from 1 (calm/whisper) to 10 (intense climax/explosive shock).\n"
+            f"2. Define dynamic editing pacing, kinetic typography keywords, VFX color shifts, and audio DB attenuation for each frame to create a cinematic emotional curve.\n"
+            f"3. Return EXACTLY the same number of objects in the timeline as there are input frames.\n\n"
+            f"Return ONLY valid JSON with this exact schema:\n"
+            f"{{\n"
+            f"  \"tension_timeline\": [\n"
+            f"    {{\n"
+            f"      \"frame_index\": 1,\n"
+            f"      \"tension_score\": 8,\n"
+            f"      \"pacing_instruction\": \"Hyper-Kinetic Snap Cut\",\n"
+            f"      \"highlight_keywords\": [\"Critical\", \"Words\"],\n"
+            f"      \"vfx_color_shift\": \"Peak-Saturation Red\",\n"
+            f"      \"audio_attenuation_db\": 4\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
 
-        system_prompt, user_prompt = self._build_universal_prompt(topic, dna_profile, vibe_profile, content_format, frames)
-        
         generated_data = None
+        last_error = ""
+
         for attempt in range(1, self.max_retries + 1):
-            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
-            if parsed_json and "tension_timeline" in parsed_json:
-                generated_data = parsed_json
-                self._log_info(f"Success! Tension mapped for {len(generated_data['tension_timeline'])} frames.")
-                break
-            else:
-                self._log_error("Invalid response format. Retrying...")
+            try:
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_tension_schema(parsed_json) and len(parsed_json["tension_timeline"]) == len(agent_03_data):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully.")
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed (missing keys or frame count mismatch).")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{self.agent_name}] Primary Gemini REST API attempt {attempt} failed: {last_error}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
 
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Primary API failed. Activating Rule 14 Dual API Failsafe (OpenAI gpt-4o-mini)...")
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_tension_schema(parsed_json):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.")
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}")
+
         if not generated_data:
-            self._log_error("All models failed. Applying Universal Procedural Math Fallback.")
-            generated_data = self._execute_procedural_fallback(dna_profile, vibe_profile, frames)
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_04_Fallback"
-        else:
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_04"
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
-        # Save Output
-        state["runtime_data"]["module_a_scripting"]["agent_04_tension_peaks"] = generated_data
-        
-        # STRICT HANDSHAKE AS PER YOUR MASTER LIST:
-        state["pipeline_status"]["next_agent"] = "Ai_Agent_05"
-        self._write_state(state)
-        
-        self._log_info("Tension Peaks Locked! Handing pipeline over to Ai_Agent_05: story_arc_structural_architect.")
-        return True
+        module_scripting["agent_04_tension_peaks"] = generated_data["tension_timeline"]
 
-if __name__ == "__main__":
-    analyzer = NarrativeTensionPeaksAnalyzer()
-    analyzer.execute()
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_04"
+        pipeline_status["Ai_Agent_04"] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed successfully. Tension Timeline Locked!")
+        return state
