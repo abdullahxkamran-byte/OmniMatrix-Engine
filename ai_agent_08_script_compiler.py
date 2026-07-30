@@ -5,72 +5,16 @@ import json
 import time
 import urllib.request
 import urllib.error
-import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
-
-class UniversalScriptCompiler:
+class Ai_Agent_08_Script_Compiler:
     def __init__(self):
-        # GOD-LEVEL UPGRADE: Fixed Naming Consistency
-        self.agent_name = "Ai Agent 08: script_file_formatter"
-        
-        # GOD-LEVEL UPGRADE 1: Universal Path Isolation
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        os.makedirs(self.workspace_dir, exist_ok=True)
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        # Universal Export Directory
-        self.export_dir = os.path.join(self.workspace_dir, "exports")
-        os.makedirs(self.export_dir, exist_ok=True)
-        
-        # Network Resilience
+        self.agent_name = "Ai_Agent_08_Script_Compiler"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.max_retries = 3
-        self.retry_delay = 3
-        
-        # API Keys Initialization
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        
-        # Setup Gemini
-        if self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-flash-latest',
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-        # OpenAI/Ollama Setup
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_openai = "gpt-4o-mini"
-        self.model_local = "llama3"
+        self.retry_delay = 2
 
-    def _log_info(self, message):
-        print(f"[{self.agent_name}] [INFO] {message}")
-
-    def _log_error(self, message):
-        print(f"[{self.agent_name}] [ERROR] {message}", file=sys.stderr)
-
-    def _read_state(self):
-        if not os.path.exists(self.state_file):
-            self._log_error("Critical Error: matrix_state.json not found. Run previous agents first.")
-            sys.exit(1)
-        try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self._log_error(f"Failed to read state file: {str(e)}")
-            sys.exit(1)
-
-    def _write_state(self, state_data):
-        try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
-                json.dump(state_data, f, indent=4)
-        except Exception as e:
-            self._log_error(f"Failed to persist state: {str(e)}")
-
-    def _clean_json_response(self, raw_text):
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
@@ -79,140 +23,149 @@ class UniversalScriptCompiler:
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
+        return json.loads(cleaned)
 
-    def _build_compiler_prompt(self, raw_merged_data, content_format, vibe_tempo, dna_profile):
-        """GOD-LEVEL UPGRADE 3: Context-aware script compilation."""
-        system_prompt = (
-            "You are the OmniMatrix Final Video Continuity Director.\n"
-            "Your objective is to compile, review, and align raw timeline data into a Master Playbook.\n"
-            f"Universal Architecture: {dna_profile}\n"
-            f"Acoustic Signature: {vibe_tempo}\n"
-            f"Content Format: {content_format}\n\n"
-            "Instructions:\n"
-            "1. Analyze the voiceover and aesthetic data for each frame.\n"
-            "2. Intelligently assign a 'character_voice' (e.g., 'Cyber-Narrator', 'Casual Host', 'Protagonist') based on the context of the universal architecture.\n"
-            "3. Format your output EXACTLY as a raw JSON object with the key 'master_timeline' containing a list of frames.\n"
-            "4. Each frame must contain these exact keys:\n"
-            "   - 'frame_index': integer\n"
-            "   - 'character_voice': string (The detected speaker style)\n"
-            "   - 'spoken_audio': string (The final confirmed voiceover text)\n"
-            "   - 'vfx_style_prompt': string (The visual description)\n"
-            "   - 'camera_shake_intensity': float\n"
-            "   - 'bass_drop_sync': boolean\n"
-            "   - 'color_palette': list of exactly 3 hex codes\n"
-            "Do not wrap the JSON in markdown code blocks."
-        )
-        user_prompt = f"Raw Unaligned Timeline Data:\n{json.dumps(raw_merged_data, indent=2)}"
-        return system_prompt, user_prompt
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-    def _call_ai_engine(self, system_prompt, user_prompt):
-        if self.gemini_api_key:
-            self._log_info("Routing to Priority 1: Google Gemini (Fast Compilation)")
-            try:
-                response = self.gemini_model.generate_content(f"{system_prompt}\n\n{user_prompt}")
-                return json.loads(self._clean_json_response(response.text))
-            except Exception as e:
-                self._log_error(f"Gemini failed: {str(e)}. Switching to OpenAI...")
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        if self.openai_api_key:
-            self._log_info("Routing to Priority 2: OpenAI (Deep Alignment)")
-            try:
-                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-                payload = {
-                    "model": self.model_openai, 
-                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"]))
-            except Exception as e:
-                self._log_error(f"OpenAI failed: {str(e)}. Switching to Ollama...")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
         try:
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
-            payload = {
-                "model": self.model_local, 
-                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
-                "stream": False, 
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=50) as response:
-                return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["message"]["content"]))
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self._log_error(f"Ollama failed: {str(e)}.")
-            return None
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-    def _procedural_compile(self, raw_data, content_format):
-        self._log_info("Executing Universal Procedural Offline Compilation.")
-        master_timeline = []
-        default_voice = "Dynamic Host" if "commentary" in content_format.lower() else "Omniscient Narrator"
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
+
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a master script compiler. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
         
-        for frame in raw_data:
-            master_timeline.append({
-                "frame_index": frame.get("frame_index", 1),
-                "character_voice": default_voice,
-                "spoken_audio": frame.get("spoken_audio", ""),
-                "vfx_style_prompt": frame.get("vfx_style_prompt", "Universal Procedural Scene"),
-                "camera_shake_intensity": frame.get("camera_shake_intensity", 0.0),
-                "bass_drop_sync": frame.get("bass_drop_sync", False),
-                "color_palette": frame.get("color_palette", ["#000000", "#FFFFFF", "#888888"])
-            })
-        return {"master_timeline": master_timeline}
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
 
-    def _generate_human_readable_txt(self, topic, timeline, content_format):
-        txt_path = os.path.join(self.export_dir, "08_master_playbook_preview.txt")
+    def _validate_playbook_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "master_timeline" not in data:
+            return False
+        frames = data["master_timeline"]
+        if not isinstance(frames, list) or len(frames) == 0:
+            return False
+
+        required_keys = [
+            "frame_index",
+            "character_voice",
+            "spoken_audio",
+            "visual_style_prompt",
+            "kinetic_shake_intensity",
+            "audio_impact_sync",
+            "color_palette_hex"
+        ]
+
+        for frame in frames:
+            if not isinstance(frame, dict):
+                return False
+            for key in required_keys:
+                if key not in frame:
+                    return False
+        return True
+
+    def _generate_human_readable_txt(self, export_dir: str, topic: str, timeline: list, medium: str, render: str):
+        txt_path = os.path.join(export_dir, "08_master_playbook_preview.txt")
         try:
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write("=== OMNIMATRIX MASTER VIDEO PLAYBOOK ===\n")
+                f.write("OMNIMATRIX MASTER VIDEO PLAYBOOK\n")
                 f.write(f"Topic: {topic}\n")
-                f.write(f"Format Architecture: {content_format}\n")
-                f.write(f"Total Frames: {len(timeline)}\n")
-                f.write("==========================================\n\n")
+                f.write(f"Profile: {medium} | {render}\n")
+                f.write(f"Total Frames: {len(timeline)}\n\n")
                 
                 for frame in timeline:
                     f.write(f"FRAME {frame['frame_index']} | CHARACTER: {frame['character_voice']}\n")
                     f.write(f"AUDIO: \"{frame['spoken_audio']}\"\n")
-                    f.write(f"VISUALS: {frame['vfx_style_prompt']}\n")
-                    f.write(f"VFX SETTINGS -> Shake: {frame['camera_shake_intensity']} | Bass Drop: {frame['bass_drop_sync']} | Palette: {', '.join(frame['color_palette'])}\n")
-                    f.write("-" * 70 + "\n")
-            self._log_info(f"Human-readable playbook saved to: {txt_path}")
+                    f.write(f"VISUALS: {frame['visual_style_prompt']}\n")
+                    f.write(f"VFX SETTINGS: Shake {frame['kinetic_shake_intensity']} | Impact Sync {frame['audio_impact_sync']} | Palette {', '.join(frame['color_palette_hex'])}\n\n")
+            print(f"[{self.agent_name}] Master Playbook generated at {txt_path}", flush=True)
         except Exception as e:
-            self._log_error(f"Failed to generate text playbook: {str(e)}")
+            print(f"[{self.agent_name}] Warning: Failed to write txt playbook: {str(e)}", flush=True)
 
-    def execute(self):
-        state = self._read_state()
+    def execute(self, state: dict) -> dict:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_08")
+        if target_agent != "Ai_Agent_08":
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
+            return state
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_scripting = runtime_data.setdefault("module_a_scripting", {})
+
+        if "FINAL_MASTER_PLAYBOOK" in module_scripting:
+            del module_scripting["FINAL_MASTER_PLAYBOOK"]
+            print(f"[{self.agent_name}] Idempotency sweep executed.", flush=True)
+
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
+        global_config = state.get("global_config", {})
         
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
-        if target_agent not in ["Ai_Agent_08", "Agent_08"]:
-            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
-            return False
-
-        # GOD-LEVEL UPGRADE 2: Idempotency Sweep
-        if "FINAL_MASTER_PLAYBOOK" in state.get("runtime_data", {}).get("module_a_scripting", {}):
-            del state["runtime_data"]["module_a_scripting"]["FINAL_MASTER_PLAYBOOK"]
-            self._log_info("Idempotency Sweep: Cleared legacy master playbook from previous session.")
-
-        topic = state.get("runtime_data", {}).get("core_topic", "Unknown Target")
-        content_format = state.get("global_config", {}).get("content_format", "Fluid_Narrative")
-        vibe_tempo = state.get("global_config", {}).get("vibe_tempo", "Adaptive_Resonance")
-        dna_profile = state.get("global_config", {}).get("animation_dna", "Omni_Procedural")
+        medium = global_config.get("medium", "Dynamic/Unbound")
+        rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
+        color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
+        kinetic_framing = global_config.get("kinetic_framing", "Dynamic/Unbound")
         
-        scripting_module = state.get("runtime_data", {}).get("module_a_scripting", {})
-        storyboard_frames = scripting_module.get("agent_03_storyboard", {}).get("storyboard_frames", [])
-        vibe_data = scripting_module.get("agent_07_vibe_enhancer", {}).get("phonk_frames", [])
+        storyboard_frames = module_scripting.get("agent_03_storyboard", [])
+        if isinstance(storyboard_frames, dict):
+             storyboard_frames = storyboard_frames.get("storyboard_frames", [])
 
-        if not storyboard_frames:
-            self._log_error("Critical Error: Storyboard data missing. Cannot compile Master Playbook.")
-            return False
+        vibe_data = module_scripting.get("agent_07_vibe_enhancer", [])
+        
+        if not storyboard_frames or not vibe_data:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: Incomplete pipeline data (Storyboard or Vibe missing).")
 
-        self._log_info(f"Compiling Final Master Playbook for: {topic}")
+        print(f"[{self.agent_name}] Compiling Master Playbook for {len(storyboard_frames)} frames...", flush=True)
 
         raw_merged = []
-        vibe_map = {item["frame_index"]: item for item in vibe_data}
+        vibe_map = {item.get("frame_index"): item for item in vibe_data}
         
         for frame in storyboard_frames:
             f_idx = frame.get("frame_index", 1)
@@ -220,46 +173,90 @@ class UniversalScriptCompiler:
             raw_merged.append({
                 "frame_index": f_idx,
                 "spoken_audio": frame.get("spoken_audio", ""),
-                "vfx_style_prompt": v_meta.get("visual_style_prompt", ""),
-                "camera_shake_intensity": v_meta.get("camera_shake_intensity", 0.0),
-                "bass_drop_sync": v_meta.get("bass_drop_sync", False),
-                "color_palette": v_meta.get("color_palette_hex", [])
+                "visual_style_prompt": v_meta.get("visual_style_prompt", ""),
+                "kinetic_shake_intensity": v_meta.get("kinetic_shake_intensity", 0.0),
+                "audio_impact_sync": v_meta.get("audio_impact_sync", False),
+                "color_palette_hex": v_meta.get("color_palette_hex", [])
             })
 
-        system_prompt, user_prompt = self._build_compiler_prompt(raw_merged, content_format, vibe_tempo, dna_profile)
-        
-        compiled_data = None
+        prompt = (
+            f"You are the OmniMatrix Final Video Continuity Director.\n"
+            f"Your objective is to compile and perfectly align the raw timeline data into a finalized Master Playbook matching the 4-Axis Profile.\n\n"
+            f"4-Axis Visual DNA Context:\n"
+            f"- Medium: '{medium}'\n"
+            f"- Rendering Engine: '{rendering_engine}'\n"
+            f"- Color & Lighting: '{color_lighting}'\n"
+            f"- Kinetic Framing: '{kinetic_framing}'\n\n"
+            f"Raw Unaligned Timeline Data:\n{json.dumps(raw_merged)}\n\n"
+            f"Instructions:\n"
+            f"1. Analyze the voiceover and aesthetic data for EVERY frame.\n"
+            f"2. Assign a specific 'character_voice' profile (e.g., 'Omniscient Narrator', 'Casual Host') matching the 4-Axis vibe.\n"
+            f"3. Return the array precisely matching the input frame count.\n"
+            f"Return ONLY valid JSON with this exact schema:\n"
+            f"{{\n"
+            f"  \"master_timeline\": [\n"
+            f"    {{\n"
+            f"      \"frame_index\": 1,\n"
+            f"      \"character_voice\": \"Determined Profile\",\n"
+            f"      \"spoken_audio\": \"Confirmed voiceover\",\n"
+            f"      \"visual_style_prompt\": \"Visual description\",\n"
+            f"      \"kinetic_shake_intensity\": 0.5,\n"
+            f"      \"audio_impact_sync\": true,\n"
+            f"      \"color_palette_hex\": [\"#FFFFFF\", \"#000000\", \"#FF0000\"]\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
+
+        generated_data = None
+        last_error = ""
+
         for attempt in range(1, self.max_retries + 1):
-            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
-            if parsed_json and "master_timeline" in parsed_json:
-                compiled_data = parsed_json
-                self._log_info(f"Success! Master Timeline aligned with {len(compiled_data['master_timeline'])} universal frames.")
-                break
-            else:
-                self._log_error("Alignment schema error. Retrying...")
-                time.sleep(self.retry_delay)
+            try:
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_playbook_schema(parsed_json) and len(parsed_json["master_timeline"]) == len(storyboard_frames):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully.", flush=True)
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed.")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{self.agent_name}] Primary Gemini API attempt {attempt} failed: {last_error}", flush=True)
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay)
 
-        if not compiled_data:
-            self._log_error("AI Alignment failed. Triggering Universal Procedural Compile.")
-            compiled_data = self._procedural_compile(raw_merged, content_format)
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_08_Fallback"
-        else:
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_08"
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI gpt-4o-mini)...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_playbook_schema(parsed_json) and len(parsed_json["master_timeline"]) == len(storyboard_frames):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.", flush=True)
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}", flush=True)
 
-        # Export human-readable TXT file for the user
-        self._generate_human_readable_txt(topic, compiled_data["master_timeline"], content_format)
+        if not generated_data:
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
-        state["runtime_data"]["module_a_scripting"]["FINAL_MASTER_PLAYBOOK"] = compiled_data
-        
-        # CRITICAL PIPELINE JUMP: MODULE A TO MODULE B
-        state["pipeline_status"]["current_module"] = "Module_B_Audio"
-        state["pipeline_status"]["next_agent"] = "Ai_Agent_09"
-        
-        self._write_state(state)
-        
-        self._log_info("MODULE A COMPLETED! Scripting sealed globally. Handoff to Module B (Ai_Agent_09).")
-        return True
+        module_scripting["FINAL_MASTER_PLAYBOOK"] = generated_data["master_timeline"]
 
-if __name__ == "__main__":
-    compiler = UniversalScriptCompiler()
-    compiler.execute()
+        workspace_dir = state.get("workspace_dir", os.path.dirname(state.get("state_file_path", "")))
+        export_dir = os.path.join(workspace_dir, "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        self._generate_human_readable_txt(export_dir, core_topic, generated_data["master_timeline"], medium, rendering_engine)
+
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_08"
+        pipeline_status["current_module"] = "Module_B_Audio"
+        pipeline_status["Ai_Agent_08"] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] MODULE A COMPLETED! Scripting sealed globally. Handing off to Module B.", flush=True)
+        return state
