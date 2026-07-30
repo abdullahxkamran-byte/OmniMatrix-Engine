@@ -5,68 +5,16 @@ import json
 import time
 import urllib.request
 import urllib.error
-import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
-
-class UniversalVibeEnhancer:
+class Ai_Agent_07_Vibe_Enhancer:
     def __init__(self):
-        # Master List Compliance
-        self.agent_name = "Ai Agent 07: dark_phonk_vibe_enhancer"
-        
-        # GOD-LEVEL UPGRADE 1: Universal Path Isolation
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        os.makedirs(self.workspace_dir, exist_ok=True)
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        # Network Resilience Settings
+        self.agent_name = "Ai_Agent_07_Vibe_Enhancer"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.max_retries = 3
-        self.retry_delay = 3
-        
-        # API Keys Initialization
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        
-        # Setup Gemini
-        if self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel(
-                model_name='gemini-flash-latest',
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-        # OpenAI/Ollama Setup
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.ollama_url = "http://localhost:11434/api/chat"
-        self.model_openai = "gpt-4o-mini"
-        self.model_local = "llama3"
+        self.retry_delay = 2
 
-    def _log_info(self, message):
-        print(f"[{self.agent_name}] [INFO] {message}")
-
-    def _log_error(self, message):
-        print(f"[{self.agent_name}] [ERROR] {message}", file=sys.stderr)
-
-    def _read_state(self):
-        if not os.path.exists(self.state_file):
-            self._log_error("Critical Error: matrix_state.json not found. Run previous agents first.")
-            sys.exit(1)
-        try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self._log_error(f"Failed to read state file: {str(e)}")
-            sys.exit(1)
-
-    def _write_state(self, state_data):
-        try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
-                json.dump(state_data, f, indent=4)
-        except Exception as e:
-            self._log_error(f"Failed to persist state: {str(e)}")
-
-    def _clean_json_response(self, raw_text):
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
@@ -75,167 +23,197 @@ class UniversalVibeEnhancer:
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
+        return json.loads(cleaned)
 
-    def _build_universal_prompt(self, topic, content_format, vibe_tempo, dna_profile, frames):
-        """GOD-LEVEL UPGRADE 3: Limitless algorithmic aesthetic parameters based on architecture."""
-        
-        system_prompt = (
-            "You are the OmniMatrix Supreme Cinematic Editor and Vibe Director.\n"
-            "Your objective is to read storyboard frames and output synchronized visual aesthetic parameters for each frame.\n"
-            "Analyze the dynamically injected parameters and shape the aesthetics strictly to their visual and acoustic intent.\n\n"
-            f"Visual DNA Architecture: {dna_profile}\n"
-            f"Audio/Acoustic Signature: {vibe_tempo}\n"
-            f"Content Format/Style/Pacing: {content_format}\n\n"
-            "Instructions:\n"
-            "1. Internalize the specific 'DNA', 'Vibe', and 'Format'. If it's dark/phonk, inject extreme contrasts and toxic neon accents. If it's clean/casual, use inviting soft grading. Adapt universally to WHATEVER the inputs dictate.\n"
-            "2. Output must STRICTLY be a raw JSON object containing a list named 'phonk_frames'.\n"
-            "3. Each frame object must contain these exact keys:\n"
-            "   - 'frame_index': matching integer representing the sequence flow.\n"
-            "   - 'visual_style_prompt': specific visual description (lighting, color grading, shadows) mapped to the injected DNA.\n"
-            "   - 'color_palette_hex': a list of exactly three HEX color codes representing the dominant grading theme for this frame.\n"
-            "   - 'camera_shake_intensity': float scaling from 0.0 (calm tripod) to 1.5 (maximum explosive shockwave).\n"
-            "   - 'bass_drop_sync': boolean (true if this frame represents a visual slam, impact, or key transition).\n"
-            "   - 'ambient_glitch_rate': float from 0.0 to 1.0 mapping screen distortions or aesthetic degradation.\n"
-            "Do not wrap the JSON in markdown code blocks."
-        )
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-        user_context = (
-            f"Target Subject: '{topic}'\n"
-            f"Number of Frames: {len(frames)}\n\n"
-            f"Input Frames Data:\n{json.dumps(frames, indent=2)}"
-        )
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        return system_prompt, user_context
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-    def _call_ai_engine(self, system_prompt, user_prompt):
-        # Tri-Core Routing
-        if self.gemini_api_key:
-            self._log_info("Routing to Priority 1: Google Gemini (1.5 Flash)")
-            try:
-                full_prompt = f"{system_prompt}\n\n{user_prompt}"
-                response = self.gemini_model.generate_content(full_prompt)
-                return json.loads(self._clean_json_response(response.text))
-            except Exception as e:
-                self._log_error(f"Gemini failed: {str(e)}. Switching to OpenAI...")
-
-        if self.openai_api_key:
-            self._log_info("Routing to Priority 2: OpenAI (GPT-4o-mini)")
-            try:
-                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-                payload = {
-                    "model": self.model_openai, 
-                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["choices"][0]["message"]["content"]))
-            except Exception as e:
-                self._log_error(f"OpenAI failed: {str(e)}. Switching to Ollama...")
-
-        self._log_info("Routing to Priority 3: Local Engine (Ollama)")
         try:
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")}
-            payload = {
-                "model": self.model_local, 
-                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
-                "stream": False, 
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=50) as response:
-                return json.loads(self._clean_json_response(json.loads(response.read().decode("utf-8"))["message"]["content"]))
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self._log_error(f"Ollama failed: {str(e)}.")
-            return None
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-    def _execute_procedural_fallback(self, content_format, vibe_tempo, dna_profile, frames):
-        """Mathematical universal fallback interpreting injected strings without hardcoded templates."""
-        self._log_info(f"Executing Universal Procedural Fallback Engine for vibe: {vibe_tempo}.")
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
+
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a cinematic editor and vibe director. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
         
-        phonk_frames = []
-        for idx, frame in enumerate(frames):
-            frame_idx = frame.get("frame_index", idx + 1)
-            
-            # Procedural dynamic scaling based on index progression
-            is_impact_frame = (idx % 3 == 0)
-            base_shake = 0.5 if is_impact_frame else 0.1
-            base_glitch = 0.3 if is_impact_frame else 0.05
-            
-            prompt = f"Procedural aesthetic mapping: architecture '{dna_profile}', acoustic resonance '{vibe_tempo}'. High contrast node."
-            # Universal fallback palette (Deep core, Mid-tone, High-energy accent)
-            palette = ["#0a0a0a", "#2a2a2a", "#ff003c"]
-            
-            phonk_frames.append({
-                "frame_index": frame_idx,
-                "visual_style_prompt": prompt,
-                "color_palette_hex": palette,
-                "camera_shake_intensity": base_shake,
-                "bass_drop_sync": is_impact_frame,
-                "ambient_glitch_rate": base_glitch
-            })
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
 
-        return {"phonk_frames": phonk_frames}
-
-    def execute(self):
-        state = self._read_state()
-        
-        # Pipeline Check
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "")
-        if target_agent not in ["Ai_Agent_07", "Agent_07"]:
-            self._log_info(f"Pipeline queue targeted to '{target_agent}'. Execution suspended.")
+    def _validate_vibe_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "vibe_enhanced_frames" not in data:
+            return False
+        frames = data["vibe_enhanced_frames"]
+        if not isinstance(frames, list) or len(frames) == 0:
             return False
 
-        # GOD-LEVEL UPGRADE 2: Idempotency Sweep
-        if "agent_07_vibe_enhancer" in state.get("runtime_data", {}).get("module_a_scripting", {}):
-            del state["runtime_data"]["module_a_scripting"]["agent_07_vibe_enhancer"]
-            self._log_info("Idempotency Sweep: Cleared legacy vibe aesthetics from previous session.")
+        required_keys = [
+            "frame_index",
+            "visual_style_prompt",
+            "color_palette_hex",
+            "kinetic_shake_intensity",
+            "audio_impact_sync",
+            "aesthetic_distortion_rate"
+        ]
 
-        topic = state.get("runtime_data", {}).get("core_topic", "Unknown Target")
-        content_format = state.get("global_config", {}).get("content_format", "Fluid_Narrative")
-        vibe_tempo = state.get("global_config", {}).get("vibe_tempo", "Adaptive_Resonance")
-        dna_profile = state.get("global_config", {}).get("animation_dna", "Omni_Procedural")
-        
-        # Pull audited frames safely
-        frames = state.get("runtime_data", {}).get("module_a_scripting", {}).get("agent_03_storyboard", {}).get("storyboard_frames", [])
-
-        if not frames:
-            self._log_error("Critical Error: No frames found to apply vibe aesthetics.")
-            return False
-
-        self._log_info(f"Applying Universal Vibe Aesthetics. Architecture: {content_format.upper()}")
-
-        system_prompt, user_prompt = self._build_universal_prompt(topic, content_format, vibe_tempo, dna_profile, frames)
-        
-        generated_data = None
-        for attempt in range(1, self.max_retries + 1):
-            parsed_json = self._call_ai_engine(system_prompt, user_prompt)
-            if parsed_json and "phonk_frames" in parsed_json:
-                generated_data = parsed_json
-                self._log_info(f"Success! Universal Vibe applied to {len(generated_data['phonk_frames'])} frames.")
-                break
-            else:
-                self._log_error("Invalid format. Retrying...")
-                time.sleep(self.retry_delay)
-
-        if not generated_data:
-            self._log_error("All AI nodes failed. Applying Universal Math Fallback.")
-            generated_data = self._execute_procedural_fallback(content_format, vibe_tempo, dna_profile, frames)
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_07_Fallback"
-        else:
-            state["pipeline_status"]["last_active_agent"] = "Ai_Agent_07"
-
-        # Update State
-        state["runtime_data"]["module_a_scripting"]["agent_07_vibe_enhancer"] = generated_data
-        
-        # STRICT HANDSHAKE TO LAST AGENT IN MODULE A
-        state["pipeline_status"]["next_agent"] = "Ai_Agent_08"
-        self._write_state(state)
-        
-        self._log_info("Aesthetics Locked! Pipeline handed to Ai_Agent_08: script_file_formatter.")
+        for frame in frames:
+            if not isinstance(frame, dict):
+                return False
+            for key in required_keys:
+                if key not in frame:
+                    return False
         return True
 
-if __name__ == "__main__":
-    enhancer = UniversalVibeEnhancer()
-    enhancer.execute()
+    def execute(self, state: dict) -> dict:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_07")
+        if target_agent != "Ai_Agent_07":
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
+            return state
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_scripting = runtime_data.setdefault("module_a_scripting", {})
+
+        if "agent_07_vibe_enhancer" in module_scripting:
+            del module_scripting["agent_07_vibe_enhancer"]
+            print(f"[{self.agent_name}] Idempotency sweep executed.", flush=True)
+
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
+        global_config = state.get("global_config", {})
+        
+        medium = global_config.get("medium", "Dynamic/Unbound")
+        rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
+        color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
+        kinetic_framing = global_config.get("kinetic_framing", "Dynamic/Unbound")
+        
+        agent_03_data = module_scripting.get("agent_03_storyboard", {})
+        frames = agent_03_data if isinstance(agent_03_data, list) else agent_03_data.get("storyboard_frames", [])
+
+        if not frames:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: No frames found to apply vibe aesthetics.")
+
+        print(f"[{self.agent_name}] Applying True 4-Axis Vibe Aesthetics to {len(frames)} frames...", flush=True)
+
+        prompt = (
+            f"You are the OmniMatrix Supreme Cinematic Editor and Vibe Director.\n"
+            f"Your objective is to read storyboard frames and output synchronized visual aesthetic parameters for each frame strictly matching the provided 4-Axis Profile.\n\n"
+            f"4-Axis Visual DNA Context:\n"
+            f"- Medium: '{medium}'\n"
+            f"- Rendering Engine: '{rendering_engine}'\n"
+            f"- Color & Lighting: '{color_lighting}'\n"
+            f"- Kinetic Framing: '{kinetic_framing}'\n\n"
+            f"Target Subject: '{core_topic}'\n"
+            f"Number of Frames: {len(frames)}\n\n"
+            f"Input Frames Data:\n{json.dumps(frames)}\n\n"
+            f"Instructions:\n"
+            f"1. Generate universal aesthetic data for EVERY frame. Do NOT hardcode 'phonk' or 'dark' styles unless the 4-Axis parameters explicitly demand it.\n"
+            f"2. Return an array of exact same length as the input frames.\n"
+            f"3. Return ONLY valid JSON with this exact schema:\n"
+            f"{{\n"
+            f"  \"vibe_enhanced_frames\": [\n"
+            f"    {{\n"
+            f"      \"frame_index\": 1,\n"
+            f"      \"visual_style_prompt\": \"Specific visual description mapped to the DNA\",\n"
+            f"      \"color_palette_hex\": [\"#FFFFFF\", \"#000000\", \"#FF0000\"],\n"
+            f"      \"kinetic_shake_intensity\": 0.5,\n"
+            f"      \"audio_impact_sync\": true,\n"
+            f"      \"aesthetic_distortion_rate\": 0.1\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
+
+        generated_data = None
+        last_error = ""
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_vibe_schema(parsed_json) and len(parsed_json["vibe_enhanced_frames"]) == len(frames):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully.", flush=True)
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed (missing keys or frame count mismatch).")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{self.agent_name}] Primary Gemini API attempt {attempt} failed: {last_error}", flush=True)
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay)
+
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI gpt-4o-mini)...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_vibe_schema(parsed_json) and len(parsed_json["vibe_enhanced_frames"]) == len(frames):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.", flush=True)
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}", flush=True)
+
+        if not generated_data:
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
+
+        module_scripting["agent_07_vibe_enhancer"] = generated_data["vibe_enhanced_frames"]
+
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_07"
+        pipeline_status["Ai_Agent_07"] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed! Vibe Aesthetics Locked.", flush=True)
+        return state
