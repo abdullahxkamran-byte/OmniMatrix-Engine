@@ -6,9 +6,9 @@ import time
 import urllib.request
 import urllib.error
 
-class Ai_Agent_02_Core_Script_Engine:
+class Ai_Agent_03_Visual_Sync_Storyboarder:
     def __init__(self):
-        self.agent_name = "Ai_Agent_02_Core_Script_Engine"
+        self.agent_name = "Ai_Agent_03_Visual_Sync_Storyboarder"
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.max_retries = 3
@@ -71,7 +71,7 @@ class Ai_Agent_02_Core_Script_Engine:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a core script design engine. Generate strict raw JSON matching the requested schema."
+                    "content": "You are an expert cinematic storyboarder. Generate strict raw JSON matching the requested schema."
                 },
                 {"role": "user", "content": prompt}
             ],
@@ -83,7 +83,7 @@ class Ai_Agent_02_Core_Script_Engine:
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=20) as response:
                 res_body = response.read().decode("utf-8")
                 res_json = json.loads(res_body)
                 content = res_json["choices"][0]["message"]["content"]
@@ -94,40 +94,42 @@ class Ai_Agent_02_Core_Script_Engine:
         except Exception as e:
             raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Exception: {str(e)}")
 
-    def _validate_script_schema(self, data: dict) -> bool:
-        if not isinstance(data, dict) or "core_script_sequence" not in data:
+    def _validate_storyboard_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "storyboard_frames" not in data:
             return False
-        sequence = data["core_script_sequence"]
-        if not isinstance(sequence, list) or len(sequence) == 0:
+        frames = data["storyboard_frames"]
+        if not isinstance(frames, list) or len(frames) == 0:
             return False
 
         required_keys = [
-            "scene_id",
-            "visual_action",
-            "foley_audio",
-            "verbal_dialogue",
-            "pacing_duration"
+            "frame_index",
+            "timestamp_start",
+            "timestamp_end",
+            "spoken_audio",
+            "scenic_art_prompt",
+            "camera_movement_mode",
+            "audio_sync_trigger"
         ]
 
-        for scene in sequence:
-            if not isinstance(scene, dict):
+        for frame in frames:
+            if not isinstance(frame, dict):
                 return False
             for key in required_keys:
-                if key not in scene:
+                if key not in frame:
                     return False
         return True
 
     def execute(self, state: dict) -> dict:
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_02")
-        if target_agent != "Ai_Agent_02":
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_03")
+        if target_agent != "Ai_Agent_03":
             print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}")
             return state
 
         runtime_data = state.setdefault("runtime_data", {})
         module_scripting = runtime_data.setdefault("module_a_scripting", {})
 
-        if "agent_02_core_script" in module_scripting:
-            del module_scripting["agent_02_core_script"]
+        if "agent_03_storyboard" in module_scripting:
+            del module_scripting["agent_03_storyboard"]
             print(f"[{self.agent_name}] Idempotency sweep executed.")
 
         core_topic = runtime_data.get("core_topic", "")
@@ -145,7 +147,7 @@ class Ai_Agent_02_Core_Script_Engine:
 
         agent_01_hooks = module_scripting.get("agent_01_hooks", [])
         if not agent_01_hooks:
-            raise ValueError(f"[{self.agent_name}] ERROR: No hooks found from Agent 01. Pipeline synchronization broken.")
+            raise ValueError(f"[{self.agent_name}] ERROR: Agent 01 hooks not found. Pipeline broken.")
 
         selected_index = module_scripting.get("selected_hook_index", 0)
         if selected_index < 0 or selected_index >= len(agent_01_hooks):
@@ -153,39 +155,44 @@ class Ai_Agent_02_Core_Script_Engine:
             selected_index = 0
 
         selected_hook = agent_01_hooks[selected_index]
-        print(f"[{self.agent_name}] Continuing story based on Hook Index [{selected_index}]: {selected_hook.get('hook_approach', 'Primary Hook')}")
+        agent_02_script = module_scripting.get("agent_02_core_script", [])
+        if not agent_02_script:
+            raise ValueError(f"[{self.agent_name}] ERROR: Agent 02 core script not found. Pipeline broken.")
+
+        print(f"[{self.agent_name}] Processing universal storyboard sequence.")
 
         prompt = (
-            f"You are the OmniMatrix Core Script Engine.\n"
-            f"Your task is to take the selected opening hook and expand it into a continuous, highly engaging chronological sequence of narrative scenes.\n\n"
-            f"CRITICAL DIRECTIVES FOR SCRIPT GENERATION:\n"
-            f"1. DIALOGUE IS MANDATORY: Characters MUST speak. You must provide intense, cinematic voiceover or character dialogue for every scene. Use the format 'CharacterName: Their spoken words'. DO NOT leave it blank or use 'None'.\n"
-            f"2. PRECISE PACING: You MUST provide exact time duration in seconds for 'pacing_duration' (e.g., '3.5s', '2.0s').\n"
-            f"3. DETAILED CHOREOGRAPHY: 'visual_action' MUST include specific character body movements, facial expressions, and dynamic camera angles.\n\n"
-            f"SEMANTIC DIALOGUE PRESERVATION RULES (UNIVERSAL):\n"
-            f"1. NO INCOMPLETE FRAGMENTS: Never output cut-off, grammatically broken phrases (e.g., never output 'We must.' or 'The ultimate.').\n"
-            f"2. NON-NEGOTIABLE CORE PAYLOADS: Critical terminology, names, actions, or reveals (e.g., 'Quantum Drive Active!', 'The killer is John!', 'Initiate Override!') MUST NEVER be chopped or mutilated.\n"
-            f"3. SMART COMPRESSION: If dialogue needs shortening for pacing, remove filler words only. Meaning and core keywords MUST remain 100% intact (e.g., compress 'I am initiating the sequence for the Quantum Drive now!' to 'Initiating Quantum Drive!').\n\n"
+            f"You are the OmniMatrix Supreme Cinematic Director and Visual Architect.\n"
+            f"Your task is to take the opening hook and core script sequence, breaking them down into a dynamic, second-by-second storyboard sequence.\n\n"
+            f"STORYBOARD DIALOGUE PRESERVATION RULES (UNIVERSAL):\n"
+            f"1. STRICT NO CHOPPING: Do not chop Agent 02 dialogues into broken single-word fragments. Preserve the core sentence meaning completely.\n"
+            f"2. DYNAMIC DURATION EXPANSION: If a character's dialogue naturally takes 2 seconds to speak, EXPAND the frame duration (e.g., set duration from 1.5s to 2.5s) INSTEAD of cutting the dialogue short.\n"
+            f"3. FULL PAYLOAD INTEGRITY: Essential subject matter keywords (names, technical terms, product names, emotional payloads) must strictly appear in full within 'spoken_audio'.\n\n"
             f"4-Axis Style Matrix & Context Parameters:\n"
             f"- Topic: '{core_topic}'\n"
             f"- Master Theme: '{master_theme}'\n"
             f"- Medium: '{medium}'\n"
             f"- Rendering Engine: '{rendering_engine}'\n"
             f"- Color & Lighting: '{color_lighting}'\n"
-            f"- Kinetic Framing: '{kinetic_framing}'\n"
-            f"- Selected Hook Directive: {json.dumps(selected_hook)}\n\n"
+            f"- Kinetic Framing: '{kinetic_framing}'\n\n"
+            f"Input Narrative:\n"
+            f"1. Opening Hook: {json.dumps(selected_hook)}\n"
+            f"2. Core Script Sequence: {json.dumps(agent_02_script)}\n\n"
             f"Instructions:\n"
-            f"1. Do not repeat the opening hook. Start narrative continuation from the exact frame where the hook ends.\n"
-            f"2. Generate a logical, seamless chronological sequence of 8 to 9 scenes matching the requested 4-Axis profile.\n\n"
+            f"1. Adapt frame durations and cuts dynamically to match the 4-Axis profile.\n"
+            f"2. DO NOT limit yourself to a specific number of frames. Generate as many frames as required to fully cover the hook AND core script.\n"
+            f"3. Ensure 'timestamp_start' and 'timestamp_end' flow sequentially starting from 0.0 seconds.\n\n"
             f"Return ONLY valid JSON with this exact schema:\n"
             f"{{\n"
-            f"  \"core_script_sequence\": [\n"
+            f"  \"storyboard_frames\": [\n"
             f"    {{\n"
-            f"      \"scene_id\": \"scene_01_continuation\",\n"
-            f"      \"visual_action\": \"Detailed character movement, poses, camera tracking, and spatial framing\",\n"
-            f"      \"foley_audio\": \"Exact audio frequency drop, ambient sounds, music pacing, or impact SFX\",\n"
-            f"      \"verbal_dialogue\": \"CharacterName: Spoken line or Narrator: Voiceover text\",\n"
-            f"      \"pacing_duration\": \"Exact time like '3.0s'\"\n"
+            f"      \"frame_index\": 1,\n"
+            f"      \"timestamp_start\": 0.0,\n"
+            f"      \"timestamp_end\": 2.5,\n"
+            f"      \"spoken_audio\": \"Exact dialogue or None\",\n"
+            f"      \"scenic_art_prompt\": \"Ultra-detailed visual description for generation\",\n"
+            f"      \"camera_movement_mode\": \"Kinetic direction\",\n"
+            f"      \"audio_sync_trigger\": \"Specific audio environment or SFX\"\n"
             f"    }}\n"
             f"  ]\n"
             f"}}"
@@ -198,7 +205,7 @@ class Ai_Agent_02_Core_Script_Engine:
             try:
                 print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...")
                 parsed_json = self._call_gemini_rest(prompt)
-                if self._validate_script_schema(parsed_json):
+                if self._validate_storyboard_schema(parsed_json):
                     generated_data = parsed_json
                     print(f"[{self.agent_name}] Primary Gemini REST API payload validated successfully.")
                     break
@@ -214,7 +221,7 @@ class Ai_Agent_02_Core_Script_Engine:
             print(f"[{self.agent_name}] Primary API failed. Activating Rule 14 Dual API Failsafe (OpenAI gpt-4o-mini)...")
             try:
                 parsed_json = self._call_openai_failsafe(prompt)
-                if self._validate_script_schema(parsed_json):
+                if self._validate_storyboard_schema(parsed_json):
                     generated_data = parsed_json
                     print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.")
             except Exception as e:
@@ -224,16 +231,16 @@ class Ai_Agent_02_Core_Script_Engine:
         if not generated_data:
             raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
-        module_scripting["agent_02_core_script"] = generated_data["core_script_sequence"]
+        module_scripting["agent_03_storyboard"] = generated_data["storyboard_frames"]
 
         pipeline_status = state.setdefault("pipeline_status", {})
-        pipeline_status["last_active_agent"] = "Ai_Agent_02"
-        pipeline_status["Ai_Agent_02"] = "COMPLETED"
+        pipeline_status["last_active_agent"] = "Ai_Agent_03"
+        pipeline_status["Ai_Agent_03"] = "COMPLETED"
 
         state_file_path = state.get("state_file_path")
         if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
             with open(state_file_path, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=4)
 
-        print(f"[{self.agent_name}] Execution completed successfully. Core script sequence written.")
+        print(f"[{self.agent_name}] Execution completed successfully. Storyboard Sequence Locked!")
         return state
