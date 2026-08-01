@@ -43,7 +43,7 @@ class Ai_Agent_01_Universal_Hook_Designer:
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=40) as response:
                 res_body = response.read().decode("utf-8")
                 res_json = json.loads(res_body)
                 try:
