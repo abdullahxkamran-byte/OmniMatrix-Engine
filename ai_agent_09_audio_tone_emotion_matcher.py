@@ -77,7 +77,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
         data_bytes = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
-        
+
         try:
             with urllib.request.urlopen(req, timeout=60) as response:
                 res_body = response.read().decode("utf-8")
@@ -116,8 +116,10 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
         return True
 
     def execute(self, state: dict) -> dict:
-        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_09")
-        if target_agent != "Ai_Agent_09":
+        pipeline_status = state.get("pipeline_status", {})
+        target_agent = pipeline_status.get("next_agent", "")
+
+        if target_agent and not target_agent.startswith("Ai_Agent_09"):
             print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
             return state
 
@@ -135,7 +137,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
         core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
         global_config = state.get("global_config", {})
-        
+
         medium = global_config.get("medium", "Dynamic/Unbound")
         rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
         color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
@@ -208,9 +210,8 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
         module_audio["agent_09_audio_emotions"] = generated_data["audio_emotion_matrix"]
 
-        pipeline_status = state.setdefault("pipeline_status", {})
-        pipeline_status["last_active_agent"] = "Ai_Agent_09"
-        pipeline_status["Ai_Agent_09"] = "COMPLETED"
+        pipeline_status["last_active_agent"] = self.agent_name
+        pipeline_status[self.agent_name] = "COMPLETED"
 
         state_file_path = state.get("state_file_path")
         if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
