@@ -29,7 +29,7 @@ class Ai_Agent_02_Core_Script_Engine:
         if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
             raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
         headers = {
             "Content-Type": "application/json",
             "X-goog-api-key": self.gemini_api_key
@@ -43,7 +43,7 @@ class Ai_Agent_02_Core_Script_Engine:
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=60) as response:
                 res_body = response.read().decode("utf-8")
                 res_json = json.loads(res_body)
                 try:
@@ -61,7 +61,7 @@ class Ai_Agent_02_Core_Script_Engine:
         if not self.openai_api_key:
             raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe execution.")
 
-        url = "https://api.openai.com/v1/chat/completions"
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
             "Content-Type": "application/json"
@@ -83,7 +83,7 @@ class Ai_Agent_02_Core_Script_Engine:
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=20) as response:
+            with urllib.request.urlopen(req, timeout=60) as response:
                 res_body = response.read().decode("utf-8")
                 res_json = json.loads(res_body)
                 content = res_json["choices"][0]["message"]["content"]
@@ -158,6 +158,10 @@ class Ai_Agent_02_Core_Script_Engine:
         prompt = (
             f"You are the OmniMatrix Core Script Engine.\n"
             f"Your task is to take the selected opening hook and expand it into a continuous, highly engaging chronological sequence of narrative scenes.\n\n"
+            f"CRITICAL DIRECTIVES FOR SCRIPT GENERATION:\n"
+            f"1. DIALOGUE IS MANDATORY: Characters MUST speak. You must provide intense, cinematic voiceover or character dialogue for every scene. Use the format 'CharacterName: Their spoken words'. DO NOT leave it blank or use 'None'.\n"
+            f"2. PRECISE PACING: You MUST provide exact time duration in seconds for 'pacing_duration' (e.g., '3.5s', '2.0s').\n"
+            f"3. DETAILED CHOREOGRAPHY: 'visual_action' MUST include specific character body movements, facial expressions, and dynamic camera angles.\n\n"
             f"4-Axis Style Matrix & Context Parameters:\n"
             f"- Topic: '{core_topic}'\n"
             f"- Master Theme: '{master_theme}'\n"
@@ -168,17 +172,16 @@ class Ai_Agent_02_Core_Script_Engine:
             f"- Selected Hook Directive: {json.dumps(selected_hook)}\n\n"
             f"Instructions:\n"
             f"1. Do not repeat the opening hook. Start narrative continuation from the exact frame where the hook ends.\n"
-            f"2. Generate a logical, seamless chronological sequence of 3 to 5 scenes matching the requested 4-Axis profile.\n"
-            f"3. Maintain precise 3D visual directions, atmospheric Foley SFX, and pacing for every scene beat.\n\n"
+            f"2. Generate a logical, seamless chronological sequence of 8 to 9 scenes matching the requested 4-Axis profile.\n\n"
             f"Return ONLY valid JSON with this exact schema:\n"
             f"{{\n"
             f"  \"core_script_sequence\": [\n"
             f"    {{\n"
             f"      \"scene_id\": \"scene_01_continuation\",\n"
-            f"      \"visual_action\": \"Detailed camera movement, lighting, subject motion, and spatial framing\",\n"
+            f"      \"visual_action\": \"Detailed character movement, poses, camera tracking, and spatial framing\",\n"
             f"      \"foley_audio\": \"Exact audio frequency drop, ambient sounds, music pacing, or impact SFX\",\n"
-            f"      \"verbal_dialogue\": \"Spoken lines or onscreen text overlay (Use 'None' if purely visual/audio)\",\n"
-            f"      \"pacing_duration\": \"Duration directive (e.g., '2.5 seconds', 'Hyper-Kinetic Snap')\"\n"
+            f"      \"verbal_dialogue\": \"CharacterName: Spoken line or Narrator: Voiceover text\",\n"
+            f"      \"pacing_duration\": \"Exact time like '3.0s'\"\n"
             f"    }}\n"
             f"  ]\n"
             f"}}"
