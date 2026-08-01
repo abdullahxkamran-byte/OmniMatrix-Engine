@@ -29,7 +29,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
         if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
             raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         headers = {
             "Content-Type": "application/json",
             "X-goog-api-key": self.gemini_api_key
@@ -60,7 +60,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
         if not self.openai_api_key:
             raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        url = "https://api.openai.com/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
             "Content-Type": "application/json"
@@ -131,7 +131,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
         master_playbook = module_scripting.get("final_master_playbook", [])
         if not master_playbook:
-            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: 'final_master_playbook' not found in state. Module A must complete first.")
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: Incomplete pipeline data (Master Playbook missing).")
 
         core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
         global_config = state.get("global_config", {})
@@ -151,9 +151,9 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
             f"- Rendering Engine: '{rendering_engine}'\n"
             f"- Color & Lighting: '{color_lighting}'\n"
             f"- Kinetic Framing: '{kinetic_framing}'\n\n"
-            f"Final Master Playbook:\n{json.dumps(master_playbook)}\n\n"
+            f"Final Master Playbook Data:\n{json.dumps(master_playbook)}\n\n"
             f"CRITICAL DIRECTIVES:\n"
-            f"1. Tagged Voiceover: Inject natural expressive tags into 'tagged_voiceover' (e.g., '[gasps] Reversal: Red!' or '[laughs] Open.').\n"
+            f"1. Tagged Voiceover: Inject natural expressive tags into 'tagged_voiceover' (e.g., '[gasps] Reversal: Red!' or '[laughs] Open.'). Do not drop any core terminology.\n"
             f"2. Mathematical Audio Precision: Provide exact 'pitch_shift_semitones' (-4 to +4) and 'delivery_speed_multiplier' (0.80 to 1.30).\n"
             f"3. Acoustic Matching: Match 'reverb_mix' (0.0 to 1.0) and 'acoustic_environment' (e.g., 'Open Shibuya Street', 'Cosmic Void') based on the visual context of the scene.\n\n"
             f"Return ONLY valid JSON with this exact schema:\n"
@@ -161,13 +161,13 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
             f"  \"audio_emotion_matrix\": [\n"
             f"    {{\n"
             f"      \"frame_index\": 1,\n"
-            f"      \"character_voice\": \"Gojo\",\n"
-            f"      \"tagged_voiceover\": \"[smirks] Within reach, Sukuna.\",\n"
-            f"      \"tone_category\": \"cocky\",\n"
+            f"      \"character_voice\": \"Character Name\",\n"
+            f"      \"tagged_voiceover\": \"[emotion] Exact dialogue here\",\n"
+            f"      \"tone_category\": \"aggressive/cocky/sadistic/neutral\",\n"
             f"      \"pitch_shift_semitones\": 0,\n"
             f"      \"delivery_speed_multiplier\": 1.05,\n"
             f"      \"reverb_mix\": 0.25,\n"
-            f"      \"acoustic_environment\": \"Heavy rain open intersection\"\n"
+            f"      \"acoustic_environment\": \"Environment description\"\n"
             f"    }}\n"
             f"  ]\n"
             f"}}"
@@ -185,7 +185,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
                     print(f"[{self.agent_name}] Primary Gemini API payload validated successfully.", flush=True)
                     break
                 else:
-                    raise ValueError("JSON payload schema validation failed.")
+                    raise ValueError("JSON payload schema validation failed or array length mismatch.")
             except Exception as e:
                 last_error = str(e)
                 print(f"[{self.agent_name}] Primary API attempt {attempt} failed: {last_error}", flush=True)
@@ -193,25 +193,23 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
                     time.sleep(self.retry_delay)
 
         if not generated_data and self.openai_api_key:
-            print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI)...", flush=True)
+            print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI gpt-4o-mini)...", flush=True)
             try:
                 parsed_json = self._call_openai_failsafe(prompt)
                 if self._validate_schema(parsed_json) and len(parsed_json["audio_emotion_matrix"]) == len(master_playbook):
                     generated_data = parsed_json
-                    print(f"[{self.agent_name}] Failsafe OpenAI payload validated successfully.", flush=True)
+                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.", flush=True)
             except Exception as e:
-                last_error = f"Gemini Error: {last_error} | OpenAI Error: {str(e)}"
-                print(f"[{self.agent_name}] Failsafe API execution failed: {str(e)}", flush=True)
+                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}", flush=True)
 
         if not generated_data:
-            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All APIs failed. Traceback: {last_error}")
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
         module_audio["agent_09_audio_emotions"] = generated_data["audio_emotion_matrix"]
 
         pipeline_status = state.setdefault("pipeline_status", {})
         pipeline_status["last_active_agent"] = "Ai_Agent_09"
-        pipeline_status["current_module"] = "Module_B_Audio"
-        pipeline_status["next_agent"] = "Ai_Agent_10"
         pipeline_status["Ai_Agent_09"] = "COMPLETED"
 
         state_file_path = state.get("state_file_path")
