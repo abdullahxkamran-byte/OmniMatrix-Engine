@@ -1,261 +1,223 @@
 import os
+import re
 import sys
 import json
-import re
+import time
 import urllib.request
 import urllib.error
 
-def load_env_file(filepath=".env"):
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
-
-load_env_file()
-
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-class AiAgent09AudioToneEmotionMatcher:
+class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
     def __init__(self):
-        self.agent_name = "Ai_Agent_09"
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        self.ollama_url = "http://localhost:11434/api/generate"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        self.agent_name = "Ai_Agent_09_Audio_Tone_Emotion_Matcher"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.max_retries = 3
+        self.retry_delay = 2
 
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-
-    def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
-
-    def _load_matrix_state(self):
-        if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Pipeline must initiate from Module A.", "FATAL")
-            sys.exit(1)
-        with open(self.state_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    def _save_matrix_state(self, state_data):
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4)
-        self.log("Matrix state successfully synchronized.", "SUCCESS")
-
-    def _clean_json_response(self, raw_text):
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-        
         start_idx = cleaned.find('{')
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
-            return cleaned[start_idx:end_idx + 1]
-        
-        start_idx_arr = cleaned.find('[')
-        end_idx_arr = cleaned.rfind(']')
-        if start_idx_arr != -1 and end_idx_arr != -1:
-            return cleaned[start_idx_arr:end_idx_arr + 1]
-            
-        return cleaned
+            cleaned = cleaned[start_idx:end_idx + 1]
+        return json.loads(cleaned)
 
-    def fetch_ai_mappings(self, tracks, global_config):
-        dna_profile = global_config.get("dna_profile", "cinematic narrative")
-        vibe_tempo = global_config.get("vibe_tempo", "dynamic")
-        content_format = global_config.get("content_format", "standard video")
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-        system_prompt = (
-            f"You are an expert NLP audio director for a {content_format} project. "
-            f"The project DNA is '{dna_profile}' and the overall vibe is '{vibe_tempo}'.\n"
-            "Your task is to analyze the 'spoken_voiceover' and inject TTS emotion tags based on pacing and tension.\n"
-            "Rules:\n"
-            "1. Inject tags like [gasps], [sigh], [laughs], [whispers] naturally where required by the scene context.\n"
-            "2. Stretch vowels in moments of high shock or rage (e.g., 'no' -> 'nooooo').\n"
-            "3. Keep text normal if the tension is low.\n"
-            "Return STRICTLY a JSON object containing a list named 'emotion_mappings'.\n"
-            "Parameters required per frame:\n"
-            "- 'frame_index': integer.\n"
-            "- 'character': string.\n"
-            "- 'tagged_voiceover': string (The modified script).\n"
-            "- 'tone_category': string (e.g., 'whisper', 'rage', 'neutral', 'hype', 'cold').\n"
-            "- 'pitch_shift_semitones': integer (-4 to +4).\n"
-            "- 'delivery_speed_multiplier': float (0.80 to 1.25).\n"
-            "- 'reverb_mix': float (0.0 to 0.60)."
-        )
-        
-        user_prompt = "Audio Tracks Metadata:\n" + json.dumps(tracks, indent=2)
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        # Core 1: Gemini
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Querying Core 1 (Gemini) for emotion extraction...")
-            try:
-                model = genai.GenerativeModel("gemini-flash-latest")
-                response = model.generate_content(
-                    system_prompt + "\n\n" + user_prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                return json.loads(response.text.strip()).get("emotion_mappings", [])
-            except Exception as e:
-                self.log(f"Core 1 Failed: {e}", "WARNING")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        # Core 2: OpenAI
-        if self.openai_api_key:
-            self.log(f"Querying Core 2 (OpenAI - {self.model_cloud})...")
-            try:
-                headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-                payload = {
-                    "model": self.model_cloud,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                req = urllib.request.Request(self.openai_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    res_data = json.loads(response.read().decode("utf-8"))
-                    raw_text = res_data["choices"][0]["message"]["content"]
-                    return json.loads(self._clean_json_response(raw_text)).get("emotion_mappings", [])
-            except Exception as e:
-                self.log(f"Core 2 Failed: {e}", "WARNING")
-
-        # Core 3: Ollama (Local AI)
-        self.log(f"Querying Core 3 (Ollama Local - {self.model_local})...")
         try:
-            payload = {
-                "model": self.model_local,
-                "prompt": system_prompt + "\n\n" + user_prompt + "\n\nProvide the JSON output now:",
-                "stream": False,
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
-            with urllib.request.urlopen(req, timeout=120) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                raw_text = res_data.get("response", "{}")
-                parsed_json = json.loads(self._clean_json_response(raw_text))
-                if "emotion_mappings" in parsed_json:
-                    return parsed_json["emotion_mappings"]
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self.log(f"Core 3 Failed: {e}", "WARNING")
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-        # Core 4: Procedural Fallback
-        self.log("All Neural Cores Failed. Engaging Procedural Audio Logic.", "STATUS")
-        return self._execute_procedural_fallback(tracks, vibe_tempo)
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-    def _execute_procedural_fallback(self, tracks, vibe_tempo):
-        mappings = []
-        total = len(tracks) if tracks else 1
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a master audio director. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
 
-        for idx, track in enumerate(tracks):
-            frame_idx = track.get("frame_index", idx + 1)
-            original_text = track.get("spoken_voiceover", "")
-            progression = (idx + 1) / total
-
-            tagged_text = original_text
-            
-            # Fluid math-based emotional arc injection
-            if progression < 0.3:
-                tone, pitch, speed, reverb = "neutral", 0, 1.0, 0.10
-            elif progression >= 0.3 and progression < 0.7:
-                if "dark" in vibe_tempo.lower() or "intense" in vibe_tempo.lower():
-                    tone, pitch, speed, reverb = "cold", -1, 0.95, 0.20
-                    tagged_text = f"[sigh] {original_text}"
-                else:
-                    tone, pitch, speed, reverb = "upbeat", +1, 1.05, 0.15
-            else:
-                tone, pitch, speed, reverb = "hype", +2, 1.15, 0.30
-                if "!" in original_text:
-                    tagged_text = f"[gasps] {original_text}"
-
-            mappings.append({
-                "frame_index": frame_idx,
-                "character": track.get("character", "Unknown"),
-                "tagged_voiceover": tagged_text,
-                "tone_category": tone,
-                "pitch_shift_semitones": pitch,
-                "delivery_speed_multiplier": speed,
-                "reverb_mix": reverb
-            })
-
-        return mappings
-
-    def process_emotions(self):
-        state = self._load_matrix_state()
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
         
-        # 1. Atomic Handshake Protocol
-        orchestrator = state.get("orchestrator_matrix", {})
-        if orchestrator.get("next_agent") != self.agent_name:
-            self.log(f"Execution suspended. Orchestrator requested '{orchestrator.get('next_agent')}', not {self.agent_name}.", "WARNING")
-            sys.exit(0)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
 
-        # 2. Extract Global Configuration
+    def _validate_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "audio_emotion_matrix" not in data:
+            return False
+        frames = data["audio_emotion_matrix"]
+        if not isinstance(frames, list) or len(frames) == 0:
+            return False
+
+        required_keys = [
+            "frame_index",
+            "character_voice",
+            "tagged_voiceover",
+            "tone_category",
+            "pitch_shift_semitones",
+            "delivery_speed_multiplier",
+            "reverb_mix",
+            "acoustic_environment"
+        ]
+
+        for frame in frames:
+            if not isinstance(frame, dict):
+                return False
+            for key in required_keys:
+                if key not in frame:
+                    return False
+        return True
+
+    def execute(self, state: dict) -> dict:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_09")
+        if target_agent != "Ai_Agent_09":
+            print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
+            return state
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_scripting = runtime_data.get("module_a_scripting", {})
+        module_audio = runtime_data.setdefault("module_b_audio", {})
+
+        if "agent_09_audio_emotions" in module_audio:
+            del module_audio["agent_09_audio_emotions"]
+            print(f"[{self.agent_name}] Idempotency sweep executed.", flush=True)
+
+        master_playbook = module_scripting.get("final_master_playbook", [])
+        if not master_playbook:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: 'final_master_playbook' not found in state. Module A must complete first.")
+
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
         global_config = state.get("global_config", {})
-
-        # 3. Retrieve or Initialize Audio Timeline
-        if "module_b_audio" not in state:
-            state["module_b_audio"] = {}
-
-        audio_timeline = state["module_b_audio"].get("audio_timeline", [])
         
-        if not audio_timeline:
-            self.log("No audio timeline found. Importing base storyboard from Module A...", "STATUS")
-            storyboard = state.get("module_a_concept", {}).get("storyboard", [])
-            if not storyboard:
-                self.log("Critical Error: No storyboard found in Module A. Cannot proceed.", "FATAL")
-                sys.exit(1)
-            
-            audio_timeline = []
-            for frame in storyboard:
-                audio_timeline.append({
-                    "frame_index": frame.get("frame_index"),
-                    "character": frame.get("character", "Narrator"),
-                    "spoken_voiceover": frame.get("spoken_voiceover", "")
-                })
+        medium = global_config.get("medium", "Dynamic/Unbound")
+        rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
+        color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
+        kinetic_framing = global_config.get("kinetic_framing", "Dynamic/Unbound")
 
-        # 4. Idempotency Sweep (Clear Ghost Data)
-        for frame in audio_timeline:
-            frame.pop("tagged_voiceover", None)
-            frame.pop("audio_effects_processing", None)
-        self.log("Idempotency sweep complete. Legacy emotion data purged.")
+        print(f"[{self.agent_name}] Analyzing Tone and Emotion for {len(master_playbook)} frames...", flush=True)
 
-        # 5. Core Execution
-        self.log(f"Analyzing tone matrix for {len(audio_timeline)} audio tracks...")
-        ai_mappings = self.fetch_ai_mappings(audio_timeline, global_config)
+        prompt = (
+            f"You are the OmniMatrix Audio & Emotional Tone Director.\n"
+            f"Your objective is to analyze the Final Master Playbook and assign exact emotional delivery vectors, pitch shifts, speeds, and acoustic environments for every spoken line.\n\n"
+            f"4-Axis Visual DNA Context:\n"
+            f"- Medium: '{medium}'\n"
+            f"- Rendering Engine: '{rendering_engine}'\n"
+            f"- Color & Lighting: '{color_lighting}'\n"
+            f"- Kinetic Framing: '{kinetic_framing}'\n\n"
+            f"Final Master Playbook:\n{json.dumps(master_playbook)}\n\n"
+            f"CRITICAL DIRECTIVES:\n"
+            f"1. Tagged Voiceover: Inject natural expressive tags into 'tagged_voiceover' (e.g., '[gasps] Reversal: Red!' or '[laughs] Open.').\n"
+            f"2. Mathematical Audio Precision: Provide exact 'pitch_shift_semitones' (-4 to +4) and 'delivery_speed_multiplier' (0.80 to 1.30).\n"
+            f"3. Acoustic Matching: Match 'reverb_mix' (0.0 to 1.0) and 'acoustic_environment' (e.g., 'Open Shibuya Street', 'Cosmic Void') based on the visual context of the scene.\n\n"
+            f"Return ONLY valid JSON with this exact schema:\n"
+            f"{{\n"
+            f"  \"audio_emotion_matrix\": [\n"
+            f"    {{\n"
+            f"      \"frame_index\": 1,\n"
+            f"      \"character_voice\": \"Gojo\",\n"
+            f"      \"tagged_voiceover\": \"[smirks] Within reach, Sukuna.\",\n"
+            f"      \"tone_category\": \"cocky\",\n"
+            f"      \"pitch_shift_semitones\": 0,\n"
+            f"      \"delivery_speed_multiplier\": 1.05,\n"
+            f"      \"reverb_mix\": 0.25,\n"
+            f"      \"acoustic_environment\": \"Heavy rain open intersection\"\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
 
-        for frame in audio_timeline:
-            for mapping in ai_mappings:
-                if frame.get("frame_index") == mapping.get("frame_index"):
-                    frame["tagged_voiceover"] = mapping.get("tagged_voiceover", frame.get("spoken_voiceover"))
-                    frame["audio_effects_processing"] = {
-                        "tone_category": mapping.get("tone_category", "neutral"),
-                        "pitch_shift_semitones": mapping.get("pitch_shift_semitones", 0),
-                        "delivery_speed_multiplier": mapping.get("delivery_speed_multiplier", 1.0),
-                        "reverb_mix": mapping.get("reverb_mix", 0.0)
-                    }
+        generated_data = None
+        last_error = ""
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_schema(parsed_json) and len(parsed_json["audio_emotion_matrix"]) == len(master_playbook):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Primary Gemini API payload validated successfully.", flush=True)
                     break
-        
-        # 6. Save State and Update Handshake
-        state["module_b_audio"]["emotions_mapped"] = True
-        state["module_b_audio"]["audio_timeline"] = audio_timeline
-        
-        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
-        state["orchestrator_matrix"]["next_agent"] = "Ai_Agent_10"  # Passing control to Voice Synthesizer
-        
-        self._save_matrix_state(state)
-        self.log(f"Agent {self.agent_name} complete. Tagged scripts ready for Voice Generator (Ai_Agent_10).")
+                else:
+                    raise ValueError("JSON payload schema validation failed.")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{self.agent_name}] Primary API attempt {attempt} failed: {last_error}", flush=True)
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay)
 
-if __name__ == "__main__":
-    matcher = AiAgent09AudioToneEmotionMatcher()
-    matcher.process_emotions()
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI)...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_schema(parsed_json) and len(parsed_json["audio_emotion_matrix"]) == len(master_playbook):
+                    generated_data = parsed_json
+                    print(f"[{self.agent_name}] Failsafe OpenAI payload validated successfully.", flush=True)
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Error: {str(e)}"
+                print(f"[{self.agent_name}] Failsafe API execution failed: {str(e)}", flush=True)
+
+        if not generated_data:
+            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All APIs failed. Traceback: {last_error}")
+
+        module_audio["agent_09_audio_emotions"] = generated_data["audio_emotion_matrix"]
+
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_09"
+        pipeline_status["current_module"] = "Module_B_Audio"
+        pipeline_status["next_agent"] = "Ai_Agent_10"
+        pipeline_status["Ai_Agent_09"] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed successfully. Emotional Audio Matrix locked.", flush=True)
+        return state
