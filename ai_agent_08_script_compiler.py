@@ -29,7 +29,7 @@ class Ai_Agent_08_Script_Compiler:
         if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
             raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
         headers = {
             "Content-Type": "application/json",
             "X-goog-api-key": self.gemini_api_key
@@ -43,7 +43,7 @@ class Ai_Agent_08_Script_Compiler:
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=60) as response:
                 res_body = response.read().decode("utf-8")
                 res_json = json.loads(res_body)
                 try:
@@ -60,7 +60,7 @@ class Ai_Agent_08_Script_Compiler:
         if not self.openai_api_key:
             raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-        url = "https://api.openai.com/v1/chat/completions"
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
             "Content-Type": "application/json"
@@ -79,7 +79,7 @@ class Ai_Agent_08_Script_Compiler:
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
         
         try:
-            with urllib.request.urlopen(req, timeout=20) as response:
+            with urllib.request.urlopen(req, timeout=60) as response:
                 res_body = response.read().decode("utf-8")
                 res_json = json.loads(res_body)
                 content = res_json["choices"][0]["message"]["content"]
@@ -100,6 +100,7 @@ class Ai_Agent_08_Script_Compiler:
             "frame_index",
             "character_voice",
             "spoken_audio",
+            "pacing_duration",
             "visual_style_prompt",
             "kinetic_shake_intensity",
             "audio_impact_sync",
@@ -125,6 +126,7 @@ class Ai_Agent_08_Script_Compiler:
                 
                 for frame in timeline:
                     f.write(f"FRAME {frame['frame_index']} | CHARACTER: {frame['character_voice']}\n")
+                    f.write(f"DURATION: {frame['pacing_duration']}\n")
                     f.write(f"AUDIO: \"{frame['spoken_audio']}\"\n")
                     f.write(f"VISUALS: {frame['visual_style_prompt']}\n")
                     f.write(f"VFX SETTINGS: Shake {frame['kinetic_shake_intensity']} | Impact Sync {frame['audio_impact_sync']} | Palette {', '.join(frame['color_palette_hex'])}\n\n")
@@ -141,8 +143,8 @@ class Ai_Agent_08_Script_Compiler:
         runtime_data = state.setdefault("runtime_data", {})
         module_scripting = runtime_data.setdefault("module_a_scripting", {})
 
-        if "FINAL_MASTER_PLAYBOOK" in module_scripting:
-            del module_scripting["FINAL_MASTER_PLAYBOOK"]
+        if "final_master_playbook" in module_scripting:
+            del module_scripting["final_master_playbook"]
             print(f"[{self.agent_name}] Idempotency sweep executed.", flush=True)
 
         core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
@@ -170,10 +172,15 @@ class Ai_Agent_08_Script_Compiler:
         for frame in storyboard_frames:
             f_idx = frame.get("frame_index", 1)
             v_meta = vibe_map.get(f_idx, {})
+            
+            spoken_text = frame.get("spoken_audio", frame.get("verbal_dialogue", frame.get("verbal_text_overlay", "None")))
+            pacing_time = frame.get("pacing_duration", frame.get("frame_duration", "3.0s"))
+            
             raw_merged.append({
                 "frame_index": f_idx,
-                "spoken_audio": frame.get("spoken_audio", ""),
-                "visual_style_prompt": v_meta.get("visual_style_prompt", ""),
+                "spoken_audio": spoken_text,
+                "pacing_duration": pacing_time,
+                "visual_style_prompt": v_meta.get("visual_style_prompt", frame.get("visual_action", "")),
                 "kinetic_shake_intensity": v_meta.get("kinetic_shake_intensity", 0.0),
                 "audio_impact_sync": v_meta.get("audio_impact_sync", False),
                 "color_palette_hex": v_meta.get("color_palette_hex", [])
@@ -182,23 +189,23 @@ class Ai_Agent_08_Script_Compiler:
         prompt = (
             f"You are the OmniMatrix Final Video Continuity Director.\n"
             f"Your objective is to compile and perfectly align the raw timeline data into a finalized Master Playbook matching the 4-Axis Profile.\n\n"
+            f"CRITICAL RULES FOR THIS GENERATION:\n"
+            f"1. DO NOT STRIP DIALOGUES: You must strictly preserve the 'spoken_audio' for characters. If a character is speaking, give them a 'character_voice' name (e.g. 'Gojo', 'Narrator').\n"
+            f"2. PRESERVE TIMING: Every frame must have a 'pacing_duration' (e.g. '2.5s'). Do not omit this.\n\n"
             f"4-Axis Visual DNA Context:\n"
             f"- Medium: '{medium}'\n"
             f"- Rendering Engine: '{rendering_engine}'\n"
             f"- Color & Lighting: '{color_lighting}'\n"
             f"- Kinetic Framing: '{kinetic_framing}'\n\n"
             f"Raw Unaligned Timeline Data:\n{json.dumps(raw_merged)}\n\n"
-            f"Instructions:\n"
-            f"1. Analyze the voiceover and aesthetic data for EVERY frame.\n"
-            f"2. Assign a specific 'character_voice' profile (e.g., 'Omniscient Narrator', 'Casual Host') matching the 4-Axis vibe.\n"
-            f"3. Return the array precisely matching the input frame count.\n"
             f"Return ONLY valid JSON with this exact schema:\n"
             f"{{\n"
             f"  \"master_timeline\": [\n"
             f"    {{\n"
             f"      \"frame_index\": 1,\n"
-            f"      \"character_voice\": \"Determined Profile\",\n"
-            f"      \"spoken_audio\": \"Confirmed voiceover\",\n"
+            f"      \"character_voice\": \"Gojo / Narrator / System\",\n"
+            f"      \"spoken_audio\": \"Exact spoken text here\",\n"
+            f"      \"pacing_duration\": \"3.0s\",\n"
             f"      \"visual_style_prompt\": \"Visual description\",\n"
             f"      \"kinetic_shake_intensity\": 0.5,\n"
             f"      \"audio_impact_sync\": true,\n"
@@ -241,7 +248,7 @@ class Ai_Agent_08_Script_Compiler:
         if not generated_data:
             raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
 
-        module_scripting["FINAL_MASTER_PLAYBOOK"] = generated_data["master_timeline"]
+        module_scripting["final_master_playbook"] = generated_data["master_timeline"]
 
         workspace_dir = state.get("workspace_dir", os.path.dirname(state.get("state_file_path", "")))
         export_dir = os.path.join(workspace_dir, "exports")
