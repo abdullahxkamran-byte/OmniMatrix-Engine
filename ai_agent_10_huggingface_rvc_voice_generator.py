@@ -13,7 +13,7 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "")
-        self.hf_api_key = os.getenv("HF_API_KEY", os.getenv("HF_TOKEN", ""))
+        self.hf_api_key = os.getenv("HF_API_KEY", os.getenv("HF_TOKEN", "")
         self.max_retries = 3
         self.retry_delay = 2
 
@@ -104,7 +104,8 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
         if not self.elevenlabs_api_key:
             return False
             
-        url =  f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        clean_vid = str(voice_id).strip()
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{clean_vid}"
         headers = {
             "Accept": "audio/mpeg",
             "Content-Type": "application/json",
@@ -133,7 +134,8 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
             print(f"[{self.agent_name}] HF_API_KEY missing. Skipping Hugging Face REST.", flush=True)
             return False
             
-        url = f"https://api-inference.huggingface.co/models/{model_id}"
+        clean_model = str(model_id).strip()
+        url = f"https://api-inference.huggingface.co/models/{clean_model}"
         headers = {
             "Authorization": f"Bearer {self.hf_api_key}",
             "Content-Type": "application/json"
@@ -149,13 +151,14 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
                     f.write(response.read())
             return True
         except Exception as e:
-            print(f"[{self.agent_name}] HuggingFace API Failed: {str(e)}", flush=True)
+            print(f"[{self.agent_name}] HuggingFace API Failed for model {clean_model}: {str(e)}", flush=True)
             return False
 
     def _generate_edge_tts_cli(self, text: str, voice_id: str, output_path: str) -> bool:
         try:
+            clean_vid = str(voice_id).strip()
             subprocess.run(
-                ["edge-tts", "--voice", voice_id, "--text", text, "--write-media", output_path],
+                ["edge-tts", "--voice", clean_vid, "--text", text, "--write-media", output_path],
                 check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             return True
@@ -177,13 +180,17 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
         pipeline_status = state.get("pipeline_status", {})
         target_agent = pipeline_status.get("next_agent", "")
         
-        if target_agent and target_agent != self.agent_name:
+        if target_agent and "Ai_Agent_10" not in target_agent and target_agent != self.agent_name:
             print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
             return state
 
         workspace_dir = state.get("workspace_dir", "")
         if not workspace_dir:
-            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing. Agent 00 initialization required.")
+            workspace_dir = state.get("state_file_path", "")
+            if workspace_dir:
+                workspace_dir = os.path.dirname(workspace_dir)
+            else:
+                raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing.")
 
         runtime_data = state.setdefault("runtime_data", {})
         module_audio = runtime_data.setdefault("module_b_audio", {})
@@ -298,8 +305,9 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
 
         module_audio["agent_10_audio_files"] = final_audio_entries
 
+        pipeline_status = state.setdefault("pipeline_status", {})
         pipeline_status["last_active_agent"] = self.agent_name
-        pipeline_status["Ai_Agent_10"] = "COMPLETED"
+        pipeline_status[self.agent_name] = "COMPLETED"
 
         state_file_path = state.get("state_file_path", "")
         if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
