@@ -30,7 +30,7 @@ class Ai_Agent_19_Audio_Mastering_Final_Mixer:
         if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
             raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
 
-        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         headers = {
             "Content-Type": "application/json",
             "X-goog-api-key": self.gemini_api_key
@@ -61,7 +61,7 @@ class Ai_Agent_19_Audio_Mastering_Final_Mixer:
         if not self.openai_api_key:
             raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        url = "https://api.openai.com/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
             "Content-Type": "application/json"
@@ -333,5 +333,4 @@ class Ai_Agent_19_Audio_Mastering_Final_Mixer:
                 json.dump(state, f, indent=4)
 
         print(f"[{self.agent_name}] Master Audio Console Execution Complete.", flush=True)
-        
         return state
