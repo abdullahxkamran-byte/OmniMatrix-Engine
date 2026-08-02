@@ -13,7 +13,7 @@ class Ai_Agent_10_HuggingFace_RVC_Voice_Generator:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "")
-        self.hf_api_key = os.getenv("HF_API_KEY", os.getenv("HF_TOKEN", "")
+        self.hf_api_key = os.getenv("HF_API_KEY", "")
         self.max_retries = 3
         self.retry_delay = 2
 
