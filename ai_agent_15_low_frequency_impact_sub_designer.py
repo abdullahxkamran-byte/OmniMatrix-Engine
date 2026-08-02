@@ -1,188 +1,122 @@
 import os
+import re
 import sys
 import json
-import re
+import time
 import urllib.request
+import urllib.error
 
-# Manual .env loader utility
-def load_env_file(filepath=".env"):
-    if os.path.exists(filepath):
-        with open(filepath, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
-
-load_env_file()
-
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-
-class AiAgent15LowFrequencySubDesigner:
+class Ai_Agent_15_Low_Frequency_Impact_Sub_Designer:
     def __init__(self):
-        self.agent_name = "Ai_Agent_15"
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.agent_name = "Ai_Agent_15_Low_Frequency_Impact_Sub_Designer"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.max_retries = 3
+        self.retry_delay = 2
 
-        self.ollama_url = "http://localhost:11434/api/generate"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-
-    def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
-
-    def _load_matrix_state(self):
-        """Loads the central OmniMatrix state securely."""
-        if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run upstream modules first.", "FATAL")
-            sys.exit(1)
-        try:
-            with open(self.state_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            self.log(f"JSON Corruption detected: {e}", "FATAL")
-            sys.exit(1)
-
-    def _save_matrix_state(self, state_data):
-        """Saves the synchronized sub-bass blueprint back to the central state."""
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4, ensure_ascii=False)
-        self.log("OmniMatrix state successfully updated with Sub-Bass synthesis profiles.", "SUCCESS")
-
-    def _clean_json_response(self, raw_text):
-        """Strips markdown and LLM wrappers to isolate raw JSON."""
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-        
         start_idx = cleaned.find('{')
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+        return json.loads(cleaned)
 
-    def fetch_sub_design_ai(self, target_bpm, heavy_events, video_format):
-        """
-        UNIVERSAL AI LOGIC CORE:
-        Adapts the DSP frequencies based on Short-Form (Phonk) vs Long-Form (Cinematic).
-        """
-        
-        if video_format == "long_form":
-            style_guide = "Design deep, subtle, Hans Zimmer-style cinematic rumbles. Long reverb, low gain, pure-sine waveforms."
-            freq_range = "start: 50-60Hz, end: 20-30Hz"
-            gain_range = "-12.0 to -6.0 dB"
-            waveform_options = "'pure-sine', 'deep-pulse'"
-        else:
-            style_guide = "Design aggressive, punchy, distortion-heavy 808 bass drops suitable for Drift Phonk or TikTok/Shorts."
-            freq_range = "start: 80-100Hz, end: 30-40Hz"
-            gain_range = "-4.0 to 0.0 dB"
-            waveform_options = "'saturated-triangle', 'glitch-square', 'hard-saw'"
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
 
-        system_prompt = (
-            f"You are an expert audio DSP engineer. {style_guide}\n"
-            "Analyze the impact points and design low-frequency sub-bass sweeps/booms.\n"
-            "Return STRICTLY a JSON object containing a list named 'sub_profiles'.\n"
-            "Each profile must contain:\n"
-            "- 'timestamp_sec': float (must exactly match the input trigger timestamp).\n"
-            f"- 'start_frequency_hz': integer ({freq_range}).\n"
-            f"- 'end_frequency_hz': integer ({freq_range}).\n"
-            "- 'sweep_duration_seconds': float (0.8 to 3.0 seconds).\n"
-            f"- 'waveform_type': string (choose from: {waveform_options}).\n"
-            f"- 'target_gain_db': float ({gain_range}).\n"
-            "- 'rumble_reverb_decay': float (0.0 to 1.0 seconds).\n"
-        )
-        
-        user_prompt = f"Format: {video_format.upper()}\nTarget Tempo: {target_bpm} BPM\nHeavy Impact Points:\n{json.dumps(heavy_events, indent=2)}"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        # CORE 1: Gemini
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Routing to Core 1: Gemini AI for DSP audio modeling...")
-            try:
-                model = genai.GenerativeModel("gemini-flash-latest")
-                response = model.generate_content(
-                    system_prompt + "\n\n" + user_prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                return json.loads(response.text.strip()).get("sub_profiles", [])
-            except Exception as e:
-                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        # CORE 2: OpenAI
-        if self.openai_api_key:
-            self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
-            url = self.openai_url
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            try:
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    res_data = json.loads(response.read().decode("utf-8"))
-                    raw_text = res_data["choices"][0]["message"]["content"]
-                    return json.loads(self._clean_json_response(raw_text)).get("sub_profiles", [])
-            except Exception as e:
-                self.log(f"OpenAI Engine failed: {e}. Switching to Ollama Fallback.", "WARNING")
-
-        # CORE 3: Ollama (Local Fallback)
-        self.log(f"Routing to Core 3: Local Ollama [{self.model_local}]...", "STATUS")
         try:
-            payload = {
-                "model": self.model_local,
-                "prompt": system_prompt + "\n\n" + user_prompt,
-                "stream": False,
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=60) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                raw_text = res_data.get("response", "")
-                return json.loads(self._clean_json_response(raw_text)).get("sub_profiles", [])
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"[{self.agent_name}] Invalid Gemini REST payload structure.")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self.log(f"Ollama Engine failed: {e}. Switching to DSP Mathematical Fallback.", "WARNING")
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-        # CORE 4: Procedural Math Engine
-        self.log("All AI Cores failed. Engaging Offline DSP Synthesizer Math.", "STATUS")
-        return self._execute_procedural_fallback(heavy_events, video_format)
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-    def _execute_procedural_fallback(self, heavy_events, video_format):
-        """UNIVERSAL MATH ENGINE for sub-bass DSP calculation."""
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a master Audio DSP Architect. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
+
+    def _validate_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "sub_profiles" not in data:
+            return False
+        for prof in data["sub_profiles"]:
+            if not all(k in prof for k in ["timestamp_sec", "start_frequency_hz", "end_frequency_hz", "sweep_duration_seconds", "waveform_type", "ffmpeg_aevalsrc"]):
+                return False
+        return True
+
+    def _execute_procedural_fallback(self, heavy_events: list, kinetic_framing: str) -> list:
         profiles = []
+        is_aggressive = any(k in kinetic_framing.lower() for k in ["fast", "action", "hyper", "phonk"])
+        
         for trig in heavy_events:
             ts = float(trig.get("timestamp_sec", 0.0))
             intensity = float(trig.get("impact_intensity", 0.8))
 
-            if video_format == "long_form":
+            if not is_aggressive:
                 start_freq = int(50 + (intensity * 10))
                 end_freq = int(20 + ((1.0 - intensity) * 5))
                 decay = round(1.5 + (intensity * 1.5), 2)
-                gain = round(-12.0 + (intensity * 6.0), 1)
-                waveform, reverb = "pure-sine", 0.80
+                waveform = "pure-sine"
+                aeval_str = f"aevalsrc='sin(2*PI*({start_freq}-({start_freq}-{end_freq})*t/{decay})*t)':d={decay}"
             else:
-                start_freq = int(75 + (intensity * 25))
+                start_freq = int(80 + (intensity * 20))
                 end_freq = int(30 + ((1.0 - intensity) * 10))
-                decay = round(0.5 + (intensity * 0.8), 2)
-                gain = round(-4.0 + (intensity * 4.0), 1)
-                waveform, reverb = "saturated-triangle", 0.20
+                decay = round(0.5 + (intensity * 0.5), 2)
+                waveform = "hard-saw"
+                aeval_str = f"aevalsrc='(2/PI)*asin(sin(2*PI*({start_freq}-({start_freq}-{end_freq})*t/{decay})*t))':d={decay}"
 
             profiles.append({
                 "timestamp_sec": ts,
@@ -190,67 +124,124 @@ class AiAgent15LowFrequencySubDesigner:
                 "end_frequency_hz": end_freq,
                 "sweep_duration_seconds": decay,
                 "waveform_type": waveform,
-                "target_gain_db": gain,
-                "rumble_reverb_decay": reverb
+                "ffmpeg_aevalsrc": aeval_str
             })
         return profiles
 
-    def process_sub_frequencies(self):
-        state = self._load_matrix_state()
-        
-        # 1. Atomic Handshake Protocol
-        orchestrator = state.get("orchestrator_matrix", {})
-        if orchestrator.get("next_agent") != self.agent_name:
-            self.log(f"Execution suspended. Orchestrator expected '{orchestrator.get('next_agent')}'.", "WARNING")
-            sys.exit(0)
+    def execute(self, state: dict) -> dict:
+        pipeline_status = state.get("pipeline_status", {})
+        target_agent = pipeline_status.get("next_agent", "")
 
-        # Extract Universal Config
-        global_config = state.get("global_config", {})
-        video_format = global_config.get("video_format", "short_form").lower()
+        if target_agent and "15" not in target_agent and target_agent != self.agent_name:
+            print(f"[{self.agent_name}] Execution skipped. Queue targeted to: {target_agent}", flush=True)
+            return state
 
-        audio_module = state.get("module_b_audio", {})
-        beat_map_data = audio_module.get("phonk_beat_map", {})
-        
+        workspace_dir = state.get("workspace_dir", "")
+        if not workspace_dir:
+            workspace_dir = state.get("state_file_path", "")
+            if workspace_dir:
+                workspace_dir = os.path.dirname(workspace_dir)
+            else:
+                raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing.")
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_audio = runtime_data.setdefault("module_b_audio", {})
+
+        beat_map_data = module_audio.get("agent_14_beat_map", {})
         if not beat_map_data:
-            self.log("Beat Drop Map is missing. Run Ai_Agent_14 first.", "FATAL")
-            sys.exit(1)
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: 'agent_14_beat_map' missing.")
 
-        bpm = beat_map_data.get("target_bpm", 130)
         all_events = beat_map_data.get("beat_sync_events", [])
+        heavy_events = [ev for ev in all_events if ev.get("impact_intensity", 0.0) >= 0.7]
 
-        # Idempotency: Scrub existing DSP blueprints
+        if not heavy_events and all_events:
+            heavy_events = [all_events[0]]
+
+        if not heavy_events:
+            print(f"[{self.agent_name}] No heavy impact points found to design sub-bass for.", flush=True)
+            pipeline_status["last_active_agent"] = self.agent_name
+            pipeline_status[self.agent_name] = "COMPLETED"
+            return state
+
+        global_config = state.get("global_config", {})
+        kinetic_framing = global_config.get("kinetic_framing", "Dynamic/Unbound")
+
+        print(f"[{self.agent_name}] Designing mathematical sub-bass architecture for {len(heavy_events)} impact points...", flush=True)
+
+        prompt = (
+            f"You are an expert Audio DSP Synthesizer Engineer for OmniMatrix.\n"
+            f"Your task is to design low-frequency sub-bass sweeps/drops based on these heavy visual impact points.\n\n"
+            f"Kinetic Framing Context: '{kinetic_framing}'\n"
+            f"If context is 'Cinematic/Dramatic', design deep pure-sine rumbles (50Hz -> 20Hz, 1.5s+).\n"
+            f"If context is 'Phonk/Action', design aggressive short-burst distorted/saw waveforms (80Hz -> 30Hz, 0.5s).\n\n"
+            f"Impact Points to Synthesize:\n{json.dumps(heavy_events, indent=2)}\n\n"
+            f"CRITICAL DIRECTIVES:\n"
+            f"1. Generate an exact 'ffmpeg_aevalsrc' string that can natively synthesize this sound without any audio files.\n"
+            f"   - For Pure-Sine sweep: \"aevalsrc='sin(2*PI*(START_FREQ-(START_FREQ-END_FREQ)*t/DUR)*t)':d=DUR\"\n"
+            f"   - For Saw/Distorted sweep: \"aevalsrc='(2/PI)*asin(sin(2*PI*(START_FREQ-(START_FREQ-END_FREQ)*t/DUR)*t))':d=DUR\"\n"
+            f"2. Return ONLY valid JSON matching this exact schema:\n"
+            f"{{\n"
+            f"  \"sub_profiles\": [\n"
+            f"    {{\n"
+            f"      \"timestamp_sec\": 2.50,\n"
+            f"      \"start_frequency_hz\": 60,\n"
+            f"      \"end_frequency_hz\": 25,\n"
+            f"      \"sweep_duration_seconds\": 1.5,\n"
+            f"      \"waveform_type\": \"pure-sine\",\n"
+            f"      \"ffmpeg_aevalsrc\": \"aevalsrc='sin(2*PI*(60-(60-25)*t/1.5)*t)':d=1.5\"\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
+
+        generated_data = None
+        last_error = ""
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"[{self.agent_name}] Prompting DSP Architect AI (Attempt {attempt})...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed.")
+            except Exception as e:
+                last_error = str(e)
+                time.sleep(self.retry_delay)
+
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Fallback to OpenAI Dual Failsafe...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Error: {str(e)}"
+
+        if not generated_data:
+            print(f"[{self.agent_name}] ALL AI CORES FAILED. Engaging Procedural DSP Math Engine. Traceback: {last_error}", flush=True)
+            procedural_profiles = self._execute_procedural_fallback(heavy_events, kinetic_framing)
+            generated_data = {"sub_profiles": procedural_profiles}
+
         for event in all_events:
             event.pop("sub_bass_dsp_blueprint", None)
 
-        # Filter heavy drops for sub-bass assignment (intensity >= 0.7)
-        heavy_events = [ev for ev in all_events if ev.get("impact_intensity", 0.0) >= 0.7]
-        
-        if not heavy_events and all_events:
-            heavy_events = [all_events[0]]  # Fallback to at least one impact
-
-        self.log(f"Designing {video_format.upper()} low-frequency architecture for {len(heavy_events)} impact points at {bpm} BPM...", "STATUS")
-        
-        sub_profiles = self.fetch_sub_design_ai(bpm, heavy_events, video_format)
-
-        # Merge the generated DSP profiles directly back into the Beat Map events in the state
         for event in all_events:
-            for sub in sub_profiles:
-                # Match timestamps to link the visual drop with the audio bass
+            for sub in generated_data["sub_profiles"]:
                 if round(event.get("timestamp_sec", 0.0), 3) == round(sub.get("timestamp_sec", 0.0), 3):
                     event["sub_bass_dsp_blueprint"] = sub
                     break
-        
-        state["module_b_audio"]["phonk_beat_map"]["beat_sync_events"] = all_events
-        state["module_b_audio"]["sub_frequencies_mapped"] = True
-        
-        # 3. OmniMatrix Pipeline Handshake
-        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
-        # Handoff to next module (Agent 16)
-        state["orchestrator_matrix"]["next_agent"] = "Agent_16"
-        
-        self._save_matrix_state(state)
-        self.log("Success! Deep frequency logic merged into OmniMatrix. Handoff to Agent_16.", "SUCCESS")
 
-if __name__ == "__main__":
-    designer = AiAgent15LowFrequencySubDesigner()
-    designer.process_sub_frequencies()
+        module_audio["agent_14_beat_map"]["beat_sync_events"] = all_events
+
+        pipeline_status["last_active_agent"] = self.agent_name
+        pipeline_status[self.agent_name] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path", "")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed. Sub-bass DSP synthesis nodes locked.", flush=True)
+        return state
