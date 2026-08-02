@@ -1,286 +1,240 @@
 import os
+import re
 import sys
 import json
-import re
+import time
 import urllib.request
+import urllib.error
 
-# Manual .env loader utility
-def load_env_file(filepath=".env"):
-    if os.path.exists(filepath):
-        with open(filepath, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
-
-load_env_file()
-
-# Standardize Gemini Integration
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-
-class AiAgent14PhonkBeatDropAnalyzer:
+class Ai_Agent_14_Phonk_Beat_Drop_Analyzer:
     def __init__(self):
-        self.agent_name = "Ai_Agent_14"
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
-        
-        self.ollama_url = "http://localhost:11434/api/generate"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
+        self.agent_name = "Ai_Agent_14_Phonk_Beat_Drop_Analyzer"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.max_retries = 3
+        self.retry_delay = 2
 
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-
-    def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
-
-    def _load_matrix_state(self):
-        """Loads the central OmniMatrix state safely."""
-        if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run upstream modules first.", "FATAL")
-            sys.exit(1)
-        try:
-            with open(self.state_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            self.log(f"JSON Corruption detected: {e}", "FATAL")
-            sys.exit(1)
-
-    def _save_matrix_state(self, state_data):
-        """Saves the synchronized beat map back to the state file idempotently."""
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4, ensure_ascii=False)
-        self.log("OmniMatrix state successfully updated with Cinematic/Phonk Beat-Drop topology.", "SUCCESS")
-
-    def _clean_json_response(self, raw_text):
-        """Sanitizes AI model outputs to extract raw JSON data safely."""
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-        
         start_idx = cleaned.find('{')
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+        return json.loads(cleaned)
 
-    def analyze_beats_ai(self, master_duration, timeline_data, video_format, target_bpm):
-        """
-        UNIVERSAL AI LOGIC CORE:
-        Adapts completely whether the format is a fast-paced Short or a cinematic Long-Form video.
-        """
-        
-        # Adaptive Prompting based on Universal Format
-        if video_format == "long_form":
-            editing_style = "Cinematic, Lo-fi, and Documentary style."
-            event_types = "'scene-fade-transition', 'soft-sub-bass-zoom', 'emotional-chapter-marker'"
-            frequency_rule = "Generate impactful visual triggers sparingly (every 10-15 seconds) aligning with scene changes or long pauses in voiceover."
-        else:
-            editing_style = "Aggressive Drift Phonk, House, and Dark Synth music (Short-Form / Reels)."
-            event_types = "'bass-drop-flash', 'cowbell-roll-glitch', 'sub-bass-zoom', 'snare-shake'"
-            frequency_rule = "Generate high-frequency visual FX cues constantly (every 2-4 seconds) to retain short-attention-span viewers."
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
 
-        system_prompt = (
-            f"You are an elite video editing AI director specialized in {editing_style} "
-            f"Generate visual FX cues based on the video timing boundaries and a baseline of {target_bpm} BPM.\n"
-            f"RULE: {frequency_rule}\n"
-            "Return STRICTLY a JSON object containing a list named 'beat_sync_events'.\n"
-            "Every event must have these exact parameters:\n"
-            "- 'timestamp_sec': float (must be strictly between 0.0 and total duration).\n"
-            f"- 'event_type': string (choose from: {event_types}).\n"
-            "- 'impact_intensity': float (0.1 to 1.0).\n"
-            "- 'editor_action_note': string instruction detailing the VFX.\n"
-        )
-        
-        user_prompt = (
-            f"Format: {video_format.upper()}\n"
-            f"Target BPM: {target_bpm}\n"
-            f"Total Video Duration: {master_duration} seconds.\n"
-            f"Core Audio/Visual Timeline Details:\n{json.dumps(timeline_data, indent=2)}"
-        )
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        # CORE 1: Gemini (Highest Speed & Context)
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Routing to Core 1: Gemini AI for beat sync mapping...")
-            try:
-                model = genai.GenerativeModel("gemini-flash-latest")
-                response = model.generate_content(
-                    system_prompt + "\n\n" + user_prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                return json.loads(response.text.strip()).get("beat_sync_events", [])
-            except Exception as e:
-                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        # CORE 2: OpenAI (gpt-4o-mini)
-        if self.openai_api_key:
-            self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
-            url = self.openai_url
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            try:
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    res_data = json.loads(response.read().decode("utf-8"))
-                    raw_text = res_data["choices"][0]["message"]["content"]
-                    return json.loads(self._clean_json_response(raw_text)).get("beat_sync_events", [])
-            except Exception as e:
-                self.log(f"OpenAI Engine failed: {e}. Switching to Ollama Local Fallback.", "WARNING")
-
-        # CORE 3: Ollama (Local LLM Fallback)
-        self.log(f"Routing to Core 3: Local Ollama [{self.model_local}]...", "STATUS")
         try:
-            payload = {
-                "model": self.model_local,
-                "prompt": system_prompt + "\n\n" + user_prompt,
-                "stream": False,
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=60) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                raw_text = res_data.get("response", "")
-                return json.loads(self._clean_json_response(raw_text)).get("beat_sync_events", [])
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"[{self.agent_name}] Invalid Gemini REST payload structure.")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self.log(f"Ollama Engine failed: {e}. Switching to Procedural Math Engine.", "WARNING")
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-        # CORE 4: Procedural Math Engine (Ultimate Fallback)
-        self.log("All AI Cores failed. Engaging Offline Mathematical Beat-Drop Generator.", "STATUS")
-        return self._execute_procedural_fallback(master_duration, video_format, target_bpm)
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-    def _execute_procedural_fallback(self, master_duration, video_format, target_bpm):
-        """
-        UNIVERSAL MATH ENGINE: Calculates structural beats mathematically.
-        Adapts density of visual effects based on whether it's Long-Form or Short-Form.
-        """
-        beat_interval = 60.0 / target_bpm
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a master VFX choreography director. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
+
+    def _validate_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "beat_sync_events" not in data:
+            return False
+        if not isinstance(data["beat_sync_events"], list):
+            return False
+        for event in data["beat_sync_events"]:
+            if not all(k in event for k in ["timestamp_sec", "event_type", "impact_intensity"]):
+                return False
+        return True
+
+    def _execute_procedural_fallback(self, total_duration: float, kinetic_framing: str) -> list:
         events = []
         current_time = 0.0
-        beat_counter = 1
-
-        # Configuration for format intensity
-        if video_format == "long_form":
-            peak_bar = 32  # Major transition every 32 beats
-            mid_bar = 16   # Minor zoom every 16 beats
+        
+        framing_lower = kinetic_framing.lower()
+        if any(keyword in framing_lower for keyword in ["fast", "action", "combat", "hyper"]):
+            interval = 2.0
+            event_type = "bass-drop-flash"
         else:
-            peak_bar = 8   # Screen-shatter every 8 beats
-            mid_bar = 4    # Glitch every 4 beats
+            interval = 5.0
+            event_type = "soft-sub-bass-zoom"
 
-        while current_time < master_duration:
-            is_peak = (beat_counter % peak_bar == 0)
-            is_mid = (beat_counter % mid_bar == 0)
-
-            if is_peak:
-                if video_format == "long_form":
-                    event_type, intensity, note = "scene-fade-transition", 0.80, "Smooth crossfade or slow zoom-in on subject."
-                else:
-                    event_type, intensity, note = "bass-drop-flash", 0.95, "Extreme screen-shattering flash + heavy zoom out."
-                
+        while current_time < total_duration:
+            if current_time > 0:
                 events.append({
                     "timestamp_sec": round(current_time, 3),
                     "event_type": event_type,
-                    "impact_intensity": intensity,
-                    "editor_action_note": note
+                    "impact_intensity": 0.75,
+                    "editor_action_note": "Procedural fallback sync point."
                 })
-
-            elif is_mid:
-                if video_format == "long_form":
-                    event_type, intensity, note = "soft-sub-bass-zoom", 0.40, "Subtle 105% scale punch-in for focus."
-                else:
-                    event_type, intensity, note = "cowbell-roll-glitch", 0.75, "Triple-split glitch effect + rapid color shake."
-                
-                events.append({
-                    "timestamp_sec": round(current_time, 3),
-                    "event_type": event_type,
-                    "impact_intensity": intensity,
-                    "editor_action_note": note
-                })
+            current_time += interval
             
-            current_time += beat_interval
-            beat_counter += 1
-
         return events
 
-    def generate_beat_map(self):
-        state = self._load_matrix_state()
-        
-        # 1. Atomic Handshake Protocol
-        orchestrator = state.get("orchestrator_matrix", {})
-        if orchestrator.get("next_agent") != self.agent_name:
-            self.log(f"Execution suspended. Orchestrator expected '{orchestrator.get('next_agent')}'.", "WARNING")
-            sys.exit(0)
+    def execute(self, state: dict) -> dict:
+        pipeline_status = state.get("pipeline_status", {})
+        target_agent = pipeline_status.get("next_agent", "")
 
-        # 2. Extract Universal Configuration
+        if target_agent and "14" not in target_agent and target_agent != self.agent_name:
+            print(f"[{self.agent_name}] Execution skipped. Queue targeted to: {target_agent}", flush=True)
+            return state
+
+        workspace_dir = state.get("workspace_dir", "")
+        if not workspace_dir:
+            workspace_dir = state.get("state_file_path", "")
+            if workspace_dir:
+                workspace_dir = os.path.dirname(workspace_dir)
+            else:
+                raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing.")
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_audio = runtime_data.setdefault("module_b_audio", {})
+
+        if "agent_14_beat_map" in module_audio:
+            del module_audio["agent_14_beat_map"]
+            print(f"[{self.agent_name}] Idempotency sweep executed. Legacy beat map purged.", flush=True)
+
+        global_timeline = module_audio.get("agent_12_global_timestamps", [])
+        if not global_timeline:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: 'agent_12_global_timestamps' missing.")
+
+        total_duration = 0.0
+        if global_timeline:
+            total_duration = global_timeline[-1].get("global_frame_end_sec", 0.0)
+
         global_config = state.get("global_config", {})
-        video_format = global_config.get("video_format", "short_form").lower() # 'long_form' or 'short_form'
-        
-        # Determine BPM based on format
-        if video_format == "long_form":
-            target_bpm = global_config.get("audio_settings", {}).get("long_form_bpm", 100)
-            self.log(f"Long-Form mode detected. Setting Cinematic Tempo: {target_bpm} BPM.")
-        else:
-            target_bpm = global_config.get("audio_settings", {}).get("short_form_bpm", 130)
-            self.log(f"Short-Form mode detected. Setting Phonk/Drift Tempo: {target_bpm} BPM.")
+        medium = global_config.get("medium", "Dynamic/Unbound")
+        rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
+        color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
+        kinetic_framing = global_config.get("kinetic_framing", "Dynamic/Unbound")
 
-        audio_module = state.get("module_b_audio", {})
-        master_metrics = audio_module.get("master_timeline_metrics", {})
-        total_duration = master_metrics.get("total_video_duration_sec", 0.0)
-        
-        if total_duration == 0.0:
-            self.log("Master video duration missing. Ensure Agent 12 (Timestamps) ran successfully.", "FATAL")
-            sys.exit(1)
+        lightweight_timeline = []
+        for f in global_timeline:
+            lightweight_timeline.append({
+                "frame": f.get("frame_index"),
+                "start": f.get("global_frame_start_sec"),
+                "end": f.get("global_frame_end_sec")
+            })
 
-        # Idempotency Scrubbing
-        if "phonk_beat_map" in audio_module:
-            del audio_module["phonk_beat_map"]
+        print(f"[{self.agent_name}] Analyzing beat/impact topology for {total_duration}s timeline...", flush=True)
 
-        audio_timeline = audio_module.get("audio_timeline", [])
-        
-        # Prepare lightweight data for the LLM to save tokens and prevent context-overflow
-        lightweight_timeline = [
-            {"frame": f.get("frame_index"), "timing": f.get("global_timing")}
-            for f in audio_timeline
-        ]
+        prompt = (
+            f"You are the OmniMatrix Visual-Audio Sync Director.\n"
+            f"Analyze this video timeline and map exact timestamps for visual FX impacts (screen shakes, flashes, heavy bass drops, dramatic zooms).\n\n"
+            f"4-Axis Visual DNA Context:\n"
+            f"- Medium: '{medium}'\n"
+            f"- Rendering Engine: '{rendering_engine}'\n"
+            f"- Color & Lighting: '{color_lighting}'\n"
+            f"- Kinetic Framing/Vibe: '{kinetic_framing}'\n\n"
+            f"Total Duration: {total_duration} seconds.\n"
+            f"Key Scene Boundaries:\n{json.dumps(lightweight_timeline)}\n\n"
+            f"CRITICAL DIRECTIVES:\n"
+            f"1. Pace the events based on the 'Kinetic Framing' vibe. If it's fast/combat, place events frequently. If sad/dramatic, place them sparingly on scene transitions.\n"
+            f"2. Use event types like: 'bass-drop-flash', 'cowbell-glitch', 'sub-bass-zoom', 'snare-shake', 'scene-fade-transition'.\n"
+            f"3. Return ONLY valid JSON matching this exact schema:\n"
+            f"{{\n"
+            f"  \"beat_sync_events\": [\n"
+            f"    {{\n"
+            f"      \"timestamp_sec\": 2.50,\n"
+            f"      \"event_type\": \"bass-drop-flash\",\n"
+            f"      \"impact_intensity\": 0.95,\n"
+            f"      \"editor_action_note\": \"Heavy screen shake on word impact.\"\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
 
-        self.log(f"Designing Adaptive visual choreography for {total_duration}s video timeline...", "STATUS")
-        
-        ai_beat_events = self.analyze_beats_ai(total_duration, lightweight_timeline, video_format, target_bpm)
+        generated_data = None
+        last_error = ""
 
-        # Inject beat mapping data into OmniMatrix
-        state["module_b_audio"]["phonk_beat_map"] = {
-            "video_format": video_format,
-            "target_bpm": target_bpm,
-            "total_beat_events": len(ai_beat_events),
-            "beat_sync_events": ai_beat_events
-        }
-        
-        # 3. OmniMatrix Pipeline Handshake
-        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
-        # Heading towards VFX or Final Compositing module
-        state["orchestrator_matrix"]["next_agent"] = "Ai_Agent_15" 
-        
-        self._save_matrix_state(state)
-        self.log(f"Success! {len(ai_beat_events)} adaptive visual impact triggers mapped. Ready for handoff to Agent 15.")
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"[{self.agent_name}] Prompting Sync Director AI (Attempt {attempt})...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+                    break
+                else:
+                    raise ValueError("JSON payload schema validation failed.")
+            except Exception as e:
+                last_error = str(e)
+                time.sleep(self.retry_delay)
 
-if __name__ == "__main__":
-    analyzer = AiAgent14PhonkBeatDropAnalyzer()
-    analyzer.generate_beat_map()
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Fallback to OpenAI Dual Failsafe...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+            except Exception as e:
+                last_error = f"Gemini Error: {last_error} | OpenAI Error: {str(e)}"
+
+        if not generated_data:
+            print(f"[{self.agent_name}] ALL AI CORES FAILED. Engaging Procedural Math Fallback Engine. Traceback: {last_error}", flush=True)
+            procedural_events = self._execute_procedural_fallback(total_duration, kinetic_framing)
+            generated_data = {"beat_sync_events": procedural_events}
+
+        module_audio["agent_14_beat_map"] = generated_data
+
+        pipeline_status["last_active_agent"] = self.agent_name
+        pipeline_status[self.agent_name] = "COMPLETED"
+
+        state_file_path = state.get("state_file_path", "")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
+
+        print(f"[{self.agent_name}] Execution completed. {len(generated_data['beat_sync_events'])} beat events mapped and locked.", flush=True)
+        return state
