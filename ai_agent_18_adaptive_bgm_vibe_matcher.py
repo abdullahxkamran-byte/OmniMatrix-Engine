@@ -1,259 +1,244 @@
 import os
+import re
 import sys
 import json
-import re
+import time
 import urllib.request
-import urllib.parse
+import urllib.error
 
-def load_env_file(filepath=".env"):
-    if os.path.exists(filepath):
-        with open(filepath, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
-
-load_env_file()
-
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-
-class AiAgent18AdaptiveBgmVibeMatcher:
+class Ai_Agent_18_Adaptive_BGM_Vibe_Matcher:
     def __init__(self):
-        self.agent_name = "Ai_Agent_18"
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.agent_name = "Ai_Agent_18_Adaptive_BGM_Vibe_Matcher"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.max_retries = 3
+        self.retry_delay = 2
 
-        self.ollama_url = "http://localhost:11434/api/generate"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-
-    def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
-
-    def _load_matrix_state(self):
-        if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run upstream modules first.", "FATAL")
-            sys.exit(1)
-        try:
-            with open(self.state_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            self.log(f"JSON Corruption detected: {e}", "FATAL")
-            sys.exit(1)
-
-    def _save_matrix_state(self, state_data):
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4, ensure_ascii=False)
-        self.log("OmniMatrix state successfully updated with Limitless BGM Automation Curves.", "SUCCESS")
-
-    def _clean_json_response(self, raw_text):
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-        
         start_idx = cleaned.find('{')
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-            
-        return cleaned
+        return json.loads(cleaned)
 
-    def fetch_bgm_automation_ai(self, narrative_cues, video_format, global_theme):
-        """
-        LIMITLESS AI LOGIC CORE:
-        No hardcoded genres. The AI invents the exact BGM style needed based on the theme and format.
-        """
-        system_prompt = (
-            "You are a limitless cinematic music supervisor and audio automation engineer. "
-            f"The current project format is '{video_format}' and the overall theme is '{global_theme}'.\n"
-            "Analyze the narrative emotional curves and build dynamic volume/genre automation parameters for the Background Music (BGM).\n"
-            "DO NOT RESTRICT YOURSELF TO PRESETS. Invent the perfect music sub-genre descriptor for each segment.\n"
-            "Return STRICTLY a JSON object containing a list named 'bgm_automation_segments'.\n"
-            "Each segment must contain:\n"
-            "- 'start_sec': float matching the narration block start.\n"
-            "- 'end_sec': float matching the narration block end.\n"
-            "- 'bgm_vibe_style': string (Invent a highly descriptive hyphenated genre, e.g., 'dark-synthwave-pulse', 'acoustic-nostalgic-strum', 'orchestral-combat-choir').\n"
-            "- 'target_bgm_volume_db': float (-30.0 dB for heavy dialogue, up to -5.0 dB for pure musical montage/silence).\n"
-            "- 'filter_cutoff_hz': integer (Range 300 to 20000 Hz. Use low-pass ~800Hz to muffle BGM during talking, 20000Hz for full clarity).\n"
-            "- 'tempo_multiplier': float (0.5 to 2.0. Base is 1.0).\n"
-            "- 'vibe_shift_note': string explaining why this specific musical shift is happening.\n"
-        )
-        
-        user_prompt = f"Vocal Narrative & Action Flow:\n{json.dumps(narrative_cues, indent=2)}"
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
 
-        # CORE 1: Gemini
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Routing to Core 1: Gemini AI for Limitless BGM mapping...")
-            try:
-                model = genai.GenerativeModel("gemini-flash-latest")
-                response = model.generate_content(
-                    system_prompt + "\n\n" + user_prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                return json.loads(response.text.strip()).get("bgm_automation_segments", [])
-            except Exception as e:
-                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        # CORE 2: OpenAI
-        if self.openai_api_key:
-            self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
-            url = self.openai_url
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            try:
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    res_data = json.loads(response.read().decode("utf-8"))
-                    raw_text = res_data["choices"][0]["message"]["content"]
-                    return json.loads(self._clean_json_response(raw_text)).get("bgm_automation_segments", [])
-            except Exception as e:
-                self.log(f"OpenAI Engine failed: {e}. Engaging Ollama Local Core.", "WARNING")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        # CORE 3: Ollama (Local Limitless Engine)
-        self.log(f"Routing to Core 3: Local Ollama [{self.model_local}]...", "STATUS")
         try:
-            payload = {
-                "model": self.model_local,
-                "prompt": system_prompt + "\n\n" + user_prompt,
-                "stream": False,
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=60) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                raw_text = res_data.get("response", "")
-                return json.loads(self._clean_json_response(raw_text)).get("bgm_automation_segments", [])
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"[{self.agent_name}] Invalid Gemini REST payload structure.")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self.log(f"Ollama Engine failed: {e}. Engaging Procedural Math Fallback.", "WARNING")
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-        # CORE 4: Procedural Limitless Fallback
-        self.log("All AI API Cores failed. Engaging Offline Procedural Limitless Mapper.", "STATUS")
-        return self._execute_procedural_fallback(narrative_cues, video_format, global_theme)
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-    def _execute_procedural_fallback(self, cues, video_format, global_theme):
-        """Mathematical fallback that still attempts to be limitless by using the text cues."""
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a master cinematic music supervisor. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.8
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
+
+    def _validate_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "bgm_automation_segments" not in data:
+            return False
+        for seg in data["bgm_automation_segments"]:
+            if not all(k in seg for k in ["start_sec", "end_sec", "bgm_vibe_style", "target_bgm_volume_db", "ffmpeg_audio_filter"]):
+                return False
+        return True
+
+    def _execute_procedural_fallback(self, narrative_cues: list, kinetic_framing: str) -> list:
         segments = []
-        for cue in cues:
+        is_action = any(k in kinetic_framing.lower() for k in ["fast", "action", "hyper", "phonk"])
+        
+        for cue in narrative_cues:
             start = float(cue.get("start_sec", 0.0))
-            end = float(cue.get("end_sec", 3.0))
-            tone = str(cue.get("emotional_tone", "neutral")).lower()
-            context = str(cue.get("text_context", "")).lower()
-
-            # Dynamic naming instead of hardcoded lists
-            clean_tone = re.sub(r'[^a-z]+', '-', tone)
-            clean_theme = re.sub(r'[^a-z]+', '-', str(global_theme).lower()[:10])
+            end = float(cue.get("end_sec", 5.0))
             
-            style = f"{clean_theme}-{clean_tone}-background"
-            
-            # Procedural DSP rules
-            if any(x in tone or x in context for x in ["sad", "dark", "quiet", "tense"]):
-                vol, cutoff, mult, note = -24.0, 800, 0.8, "Muffled low-pass for tension/sadness."
-            elif any(x in tone or x in context for x in ["hype", "action", "epic", "fight"]):
-                vol, cutoff, mult, note = -8.0, 20000, 1.2, "Unfiltered high energy spike."
-                style = f"aggressive-{style}"
+            if is_action:
+                style = "aggressive-drift-phonk-bass"
+                vol = -10.0
+                filter_str = f"volume={vol}dB,highpass=f=100"
             else:
-                vol, cutoff, mult, note = -18.0, 10000, 1.0, "Standard dialogue backing track."
+                style = "cinematic-orchestral-ambient-drone"
+                vol = -18.0
+                filter_str = f"volume={vol}dB,lowpass=f=8000"
 
             segments.append({
                 "start_sec": start,
                 "end_sec": end,
                 "bgm_vibe_style": style,
                 "target_bgm_volume_db": vol,
-                "filter_cutoff_hz": cutoff,
-                "tempo_multiplier": mult,
-                "vibe_shift_note": note
+                "ffmpeg_audio_filter": filter_str,
+                "vibe_shift_note": "Procedural fallback BGM mapping."
             })
         return segments
 
-    def process_bgm_vibe_automation(self):
-        state = self._load_matrix_state()
+    def execute(self, state: dict) -> dict:
+        pipeline_status = state.get("pipeline_status", {})
+        target_agent = pipeline_status.get("next_agent", "")
+
+        if target_agent and "18" not in target_agent and target_agent != self.agent_name:
+            print(f"[{self.agent_name}] Execution skipped. Queue targeted to: {target_agent}", flush=True)
+            return state
+
+        workspace_dir = state.get("workspace_dir", "")
+        if not workspace_dir:
+            workspace_dir = state.get("state_file_path", "")
+            if workspace_dir:
+                workspace_dir = os.path.dirname(workspace_dir)
+            else:
+                raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing.")
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_audio = runtime_data.setdefault("module_b_audio", {})
+
+        if "agent_18_bgm_automation_map" in module_audio:
+            del module_audio["agent_18_bgm_automation_map"]
+            print(f"[{self.agent_name}] Idempotency sweep executed. Legacy BGM map purged.", flush=True)
+
+        global_timeline = module_audio.get("agent_12_global_timestamps", [])
         
-        # 1. Atomic Handshake Protocol
-        orchestrator = state.get("orchestrator_matrix", {})
-        if orchestrator.get("next_agent") != self.agent_name:
-            self.log(f"Execution suspended. Orchestrator expected '{orchestrator.get('next_agent')}'.", "WARNING")
-            sys.exit(0)
-
-        # 2. Extract Limitless Configuration Parameters
-        global_config = state.get("global_config", {})
-        video_format = global_config.get("video_format", "undefined_format")
-        global_theme = global_config.get("theme", "neutral_unspecified")
-
-        # Idempotency: Scrub old BGM map
-        audio_module = state.get("module_b_audio", {})
-        if "bgm_automation_map" in audio_module:
-            del audio_module["bgm_automation_map"]
-
-        voiceover_timeline = audio_module.get("audio_timeline", [])
         narrative_cues = []
-        
-        # Method 1: Extract from active audio timeline
-        if voiceover_timeline:
-            for block in voiceover_timeline:
+        if global_timeline:
+            for frame in global_timeline:
                 narrative_cues.append({
-                    "start_sec": block.get("global_timing", {}).get("start_sec", 0.0),
-                    "end_sec": block.get("global_timing", {}).get("end_sec", 3.0),
-                    "emotional_tone": block.get("emotion", "neutral"),
-                    "text_context": block.get("dialogue_text", "instrumental/pause")
+                    "start_sec": frame.get("global_frame_start_sec", 0.0),
+                    "end_sec": frame.get("global_frame_end_sec", 5.0),
+                    "text_context": " ".join([w.get("word_raw", "") for w in frame.get("words_global_alignment", [])])
                 })
         else:
-            self.log("Voiceover timeline not found. Searching for Module A Storyboard cues...", "WARNING")
-            storyboard = state.get("module_a_scripting", {}).get("storyboard_mapping", {})
-            if storyboard:
-                for idx, panel in enumerate(storyboard.get("panels", [])):
-                    narrative_cues.append({
-                        "start_sec": panel.get("timestamp_sec", float(idx * 3.0)),
-                        "end_sec": panel.get("timestamp_sec", float(idx * 3.0)) + 3.0,
-                        "emotional_tone": "high_intensity" if "fight" in panel.get("prompt", "").lower() else "neutral",
-                        "text_context": panel.get("prompt", "visual action")
-                    })
+            narrative_cues.append({"start_sec": 0.0, "end_sec": 60.0, "text_context": "Dynamic visual montage sequence."})
 
-        if not narrative_cues:
-            self.log("No upstream data found. Generating fallback limitless baseline.", "WARNING")
-            narrative_cues = [
-                {"start_sec": 0.0, "end_sec": 10.0, "emotional_tone": "introductory", "text_context": "Introduction"}
-            ]
+        global_config = state.get("global_config", {})
+        medium = global_config.get("medium", "Dynamic")
+        rendering = global_config.get("rendering_engine", "Dynamic")
+        color = global_config.get("color_lighting", "Dynamic")
+        kinetic = global_config.get("kinetic_framing", "Dynamic")
 
-        self.log(f"Limitless Vibe Engine active. Generating BGM automation for {video_format} ({global_theme})...", "STATUS")
+        print(f"[{self.agent_name}] AI Limitless Music Supervisor analyzing {len(narrative_cues)} narrative blocks...", flush=True)
+
+        prompt = (
+            f"You are the OmniMatrix Cinematic Music Supervisor.\n"
+            f"Invent dynamic background music (BGM) vibe parameters based on the narrative tension and 4-Axis DNA.\n\n"
+            f"4-Axis Visual DNA Context:\n"
+            f"- Medium: '{medium}'\n"
+            f"- Rendering: '{rendering}'\n"
+            f"- Color: '{color}'\n"
+            f"- Kinetic Framing: '{kinetic}'\n\n"
+            f"Narrative Cues / Dialogues:\n{json.dumps(narrative_cues, indent=2)}\n\n"
+            f"CRITICAL DIRECTIVES:\n"
+            f"1. Do not use generic genres like 'Sad' or 'Happy'. Invent detailed hybrid sub-genres in 'bgm_vibe_style' (e.g., 'cyberpunk-synth-pulse', 'ethereal-orchestral-drone').\n"
+            f"2. Provide target volumes (e.g., -25.0dB for heavy dialogue, -8.0dB for action drops).\n"
+            f"3. Generate a pure 'ffmpeg_audio_filter' string for this track section (e.g., 'volume=-15dB,lowpass=f=6000').\n"
+            f"4. Group the timeline into logical musical chapters (don't create 50 segments, group them into 3 to 5 main thematic blocks based on the time).\n"
+            f"5. Return ONLY valid JSON matching this schema:\n"
+            f"{{\n"
+            f"  \"bgm_automation_segments\": [\n"
+            f"    {{\n"
+            f"      \"start_sec\": 0.0,\n"
+            f"      \"end_sec\": 12.5,\n"
+            f"      \"bgm_vibe_style\": \"dark-synthwave-tension-build\",\n"
+            f"      \"target_bgm_volume_db\": -18.5,\n"
+            f"      \"ffmpeg_audio_filter\": \"volume=-18.5dB,highpass=f=200\",\n"
+            f"      \"vibe_shift_note\": \"Introduction building tension before action.\"\n"
+            f"    }}\n"
+            f"  ]\n"
+            f"}}"
+        )
+
+        generated_data = None
+        last_error = ""
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"[{self.agent_name}] Prompting Music AI (Attempt {attempt})...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+                    break
+                else:
+                    raise ValueError("JSON schema validation failed.")
+            except Exception as e:
+                last_error = str(e)
+                time.sleep(self.retry_delay)
+
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Fallback to OpenAI Dual Failsafe...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+            except Exception as e:
+                last_error = f"Gemini: {last_error} | OpenAI: {str(e)}"
+
+        if not generated_data:
+            print(f"[{self.agent_name}] ALL AI CORES FAILED. Engaging Math DSP Fallback. Traceback: {last_error}", flush=True)
+            procedural_blueprints = self._execute_procedural_fallback(narrative_cues, kinetic)
+            generated_data = {"bgm_automation_segments": procedural_blueprints}
+
+        module_audio["agent_18_bgm_automation_map"] = generated_data
+
+        pipeline_status["last_active_agent"] = self.agent_name
         
-        bgm_automation_map = self.fetch_bgm_automation_ai(narrative_cues, video_format, global_theme)
+        target_agent = "Ai_Agent_18b"
+        pipeline_status["next_agent"] = target_agent
+        pipeline_status[self.agent_name] = "COMPLETED"
 
-        state["module_b_audio"]["bgm_automation_map"] = {
-            "total_segments": len(bgm_automation_map),
-            "video_format": video_format,
-            "global_theme": global_theme,
-            "automation_curves": bgm_automation_map
-        }
-        
-        # 3. OmniMatrix Pipeline Handshake
-        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
-        # Heading towards the Final Audio Compiler/Mixer
-        state["orchestrator_matrix"]["next_agent"] = "Ai_Agent_19"
-        
-        self._save_matrix_state(state)
-        self.log(f"Success! {len(bgm_automation_map)} limitless BGM parameters mapped into OmniMatrix. Handoff to Ai_Agent_19.", "SUCCESS")
+        state_file_path = state.get("state_file_path", "")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
 
-if __name__ == "__main__":
-    matcher = AiAgent18AdaptiveBgmVibeMatcher()
-    matcher.process_bgm_vibe_automation()
+        print(f"[{self.agent_name}] Execution complete. {len(generated_data['bgm_automation_segments'])} limitles BGM automation curves locked.", flush=True)
+        return state
