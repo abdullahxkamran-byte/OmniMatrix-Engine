@@ -27,7 +27,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
     def _call_gemini_rest(self, prompt: str) -> dict:
         if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
-            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing or invalid.")
 
         url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         headers = {
@@ -49,7 +49,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
                 try:
                     text_content = res_json['candidates'][0]['content']['parts'][0]['text']
                 except (KeyError, IndexError):
-                    raise RuntimeError(f"[{self.agent_name}] Invalid Gemini REST payload structure.")
+                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
                 return self._clean_json_response(text_content)
         except urllib.error.HTTPError as http_err:
             raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
@@ -77,7 +77,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
         data_bytes = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
-
+        
         try:
             with urllib.request.urlopen(req, timeout=60) as response:
                 res_body = response.read().decode("utf-8")
@@ -116,16 +116,10 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
         return True
 
     def execute(self, state: dict) -> dict:
-        pipeline_status = state.get("pipeline_status", {})
-        target_agent = pipeline_status.get("next_agent", "")
-
-        if target_agent and "Ai_Agent_09" not in target_agent and target_agent != self.agent_name:
+        target_agent = state.get("pipeline_status", {}).get("next_agent", "Ai_Agent_09")
+        if target_agent != "Ai_Agent_09":
             print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
             return state
-
-        workspace_dir = state.get("workspace_dir", "")
-        if not workspace_dir:
-            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing. Agent 00 initialization required.")
 
         runtime_data = state.setdefault("runtime_data", {})
         module_scripting = runtime_data.get("module_a_scripting", {})
@@ -139,8 +133,9 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
         if not master_playbook:
             raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: Incomplete pipeline data (Master Playbook missing).")
 
+        core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
         global_config = state.get("global_config", {})
-
+        
         medium = global_config.get("medium", "Dynamic/Unbound")
         rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
         color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
@@ -213,8 +208,9 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
 
         module_audio["agent_09_audio_emotions"] = generated_data["audio_emotion_matrix"]
 
-        pipeline_status["last_active_agent"] = self.agent_name
-        pipeline_status[self.agent_name] = "COMPLETED"
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = "Ai_Agent_09"
+        pipeline_status["Ai_Agent_09"] = "COMPLETED"
 
         state_file_path = state.get("state_file_path")
         if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
