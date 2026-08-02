@@ -1,277 +1,337 @@
 import os
+import re
 import sys
 import json
-import re
+import time
+import subprocess
 import urllib.request
-import urllib.parse
+import urllib.error
 
-def load_env_file(filepath=".env"):
-    if os.path.exists(filepath):
-        with open(filepath, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ[key.strip()] = val.strip()
-
-load_env_file()
-
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-
-class AiAgent19AudioMasteringFinalMixer:
+class Ai_Agent_19_Audio_Mastering_Final_Mixer:
     def __init__(self):
-        self.agent_name = "Ai_Agent_19"
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.agent_name = "Ai_Agent_19_Audio_Mastering_Final_Mixer"
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.max_retries = 3
+        self.retry_delay = 2
 
-        self.ollama_url = "http://localhost:11434/api/generate"
-        self.openai_url = "https://api.openai.com/v1/chat/completions"
-        self.model_local = "llama3"
-        self.model_cloud = "gpt-4o-mini"
-        
-        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", None)
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY", None)
-
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            genai.configure(api_key=self.gemini_api_key)
-
-    def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
-
-    def _load_matrix_state(self):
-        if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run upstream modules first.", "FATAL")
-            sys.exit(1)
-        try:
-            with open(self.state_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            self.log(f"JSON Corruption detected: {e}", "FATAL")
-            sys.exit(1)
-
-    def _save_matrix_state(self, state_data):
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4, ensure_ascii=False)
-        self.log("OmniMatrix state successfully updated with AI Audio Mastering Blueprint.", "SUCCESS")
-
-    def _clean_json_response(self, raw_text):
+    def _clean_json_response(self, raw_text: str) -> dict:
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"^```\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-        
         start_idx = cleaned.find('{')
         end_idx = cleaned.rfind('}')
         if start_idx != -1 and end_idx != -1:
             cleaned = cleaned[start_idx:end_idx + 1]
-        return cleaned
+        return json.loads(cleaned)
 
-    def _scrub_old_mastering(self, state):
-        """Idempotency Rule: Cleans previous mastering data."""
-        if "final_mastering_blueprint" in state.get("module_b_audio", {}):
-            del state["module_b_audio"]["final_mastering_blueprint"]
-        return state
+    def _call_gemini_rest(self, prompt: str) -> dict:
+        if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
+            raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
 
-    def fetch_mastering_ai(self, audio_signals_summary, video_format, global_theme):
-        """
-        LIMITLESS AI CORE: 
-        Analyzes the theme and format to creatively design a mixing console blueprint.
-        An AI understands that an 'Epic Battle' needs heavy compression, while 'Sad Lore' needs dynamic breathing room.
-        """
-        
-        # Give the AI technical boundaries based on the limitless format
-        if "short" in video_format.lower() or "tiktok" in video_format.lower() or "reel" in video_format.lower():
-            lufs_guide = "-10.0 to -8.0 LUFS (Maximum punch, competitive loudness for phones)"
-            widening_guide = "1.1 to 1.25 (Slight width, but must maintain mono-compatibility)"
-        elif "cinema" in video_format.lower() or "documentary" in video_format.lower():
-            lufs_guide = "-23.0 to -18.0 LUFS (High dynamic range, theatrical standard)"
-            widening_guide = "1.3 to 1.5 (Very wide theatrical stereo spread)"
-        else:
-            lufs_guide = "-15.0 to -13.0 LUFS (Standard streaming/YouTube sweet spot)"
-            widening_guide = "1.1 to 1.3 (Balanced stereo image)"
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent)"
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self.gemini_api_key
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
 
-        system_prompt = (
-            "You are an elite, AI-driven audio mastering engineer. "
-            f"The video format is '{video_format}' and the emotional theme is '{global_theme}'.\n"
-            "Analyze the active audio elements and design a professional mastering chain that perfectly fits the emotional tone and platform standard.\n"
-            "Return STRICTLY a JSON object containing the mastering parameters with these exact keys:\n"
-            f"- 'target_loudness_lufs': float (Platform guide: {lufs_guide}).\n"
-            "- 'master_true_peak_limiter_db': float (-2.0 to -0.1 dB to prevent digital clipping).\n"
-            f"- 'stereo_widening_factor': float ({widening_guide}).\n"
-            "- 'low_cut_filter_hz': integer (20 to 50 Hz. Cut more if it's mobile to remove muddy rumble, cut less for cinema to keep sub-bass).\n"
-            "- 'vocal_presence_boost_db': float (0.5 to 4.0 dB boost in the 3kHz range. Boost higher if BGM/SFX layers are dense).\n"
-            "- 'glue_compressor_settings': object containing 'threshold_db' (float, e.g. -6.0 to -2.0), 'ratio' (float, e.g. 1.5, 2.0, 3.0), and 'makeup_gain_db' (float).\n"
-            "- 'ai_mastering_notes': string (Briefly explain your creative mastering choices for this specific theme).\n"
-        )
-        
-        user_prompt = f"Active Audio Elements in Mix:\n{json.dumps(audio_signals_summary, indent=2)}"
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        # CORE 1: Gemini
-        if GEMINI_AVAILABLE and self.gemini_api_key:
-            self.log("Routing to Core 1: Gemini AI for Creative Mastering Console Logic...")
-            try:
-                model = genai.GenerativeModel("gemini-flash-latest")
-                response = model.generate_content(
-                    system_prompt + "\n\n" + user_prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                return json.loads(response.text.strip())
-            except Exception as e:
-                self.log(f"Gemini Engine failed: {e}. Switching to OpenAI fallback.", "WARNING")
-
-        # CORE 2: OpenAI
-        if self.openai_api_key:
-            self.log(f"Routing to Core 2: OpenAI API [{self.model_cloud}]...")
-            url = self.openai_url
-            headers = {"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", ""), "Authorization": f"Bearer {self.openai_api_key}"}
-            payload = {
-                "model": self.model_cloud,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            try:
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    res_data = json.loads(response.read().decode("utf-8"))
-                    raw_text = res_data["choices"][0]["message"]["content"]
-                    return json.loads(self._clean_json_response(raw_text))
-            except Exception as e:
-                self.log(f"OpenAI Engine failed: {e}. Engaging Ollama Local Core.", "WARNING")
-
-        # CORE 3: Ollama
-        self.log(f"Routing to Core 3: Local Ollama [{self.model_local}]...", "STATUS")
         try:
-            payload = {
-                "model": self.model_local,
-                "prompt": system_prompt + "\n\n" + user_prompt,
-                "stream": False,
-                "format": "json"
-            }
-            req = urllib.request.Request(self.ollama_url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "X-goog-api-key": os.getenv("GEMINI_API_KEY", "")})
             with urllib.request.urlopen(req, timeout=60) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                raw_text = res_data.get("response", "")
-                return json.loads(self._clean_json_response(raw_text))
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                try:
+                    text_content = res_json['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError):
+                    raise RuntimeError(f"[{self.agent_name}] Invalid Gemini REST payload structure.")
+                return self._clean_json_response(text_content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
         except Exception as e:
-            self.log(f"Ollama Engine failed: {e}. Engaging Procedural Math Mastering.", "WARNING")
+            raise RuntimeError(f"[{self.agent_name}] Gemini Connection Exception: {str(e)}")
 
-        # CORE 4: Procedural Fallback
-        self.log("All AI API Cores failed. Engaging Procedural Fallback Mastering.", "STATUS")
-        return self._execute_procedural_fallback(video_format)
+    def _call_openai_failsafe(self, prompt: str) -> dict:
+        if not self.openai_api_key:
+            raise ValueError(f"[{self.agent_name}] OPENAI_API_KEY missing for Dual API Failsafe.")
 
-    def _execute_procedural_fallback(self, video_format):
-        """Mathematical fallback if AI is completely unavailable."""
-        if "short" in video_format.lower() or "tiktok" in video_format.lower():
-            lufs, peak, low_cut, widen = -9.0, -0.2, 35, 1.15
-        elif "cinema" in video_format.lower():
-            lufs, peak, low_cut, widen = -23.0, -2.0, 20, 1.4
+        url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are an elite Audio Mastering Console Architect. Generate strict raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.7
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                content = res_json["choices"][0]["message"]["content"]
+                return self._clean_json_response(content)
+        except urllib.error.HTTPError as http_err:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI API Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
+        except Exception as e:
+            raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
+
+    def _validate_schema(self, data: dict) -> bool:
+        if not isinstance(data, dict) or "mastering_console_parameters" not in data:
+            return False
+        params = data["mastering_console_parameters"]
+        required_keys = ["target_loudness_lufs", "master_true_peak_limiter_db", "stereo_widening_factor", "low_cut_filter_hz", "vocal_presence_boost_db", "glue_compressor"]
+        if not all(k in params for k in required_keys):
+            return False
+        return True
+
+    def _execute_procedural_fallback(self, kinetic_framing: str) -> dict:
+        is_aggressive = any(k in kinetic_framing.lower() for k in ["fast", "action", "hyper", "phonk", "short"])
+        
+        if is_aggressive:
+            lufs, peak, low_cut, widen, vocal = -9.0, -0.2, 35, 1.15, 3.0
+            glue = {"threshold_db": -6.0, "ratio": 3.0, "makeup_gain_db": 2.0}
         else:
-            lufs, peak, low_cut, widen = -14.0, -1.0, 30, 1.1
+            lufs, peak, low_cut, widen, vocal = -14.0, -1.0, 25, 1.3, 1.5
+            glue = {"threshold_db": -4.0, "ratio": 2.0, "makeup_gain_db": 1.0}
 
         return {
-            "target_loudness_lufs": lufs,
-            "master_true_peak_limiter_db": peak,
-            "stereo_widening_factor": widen,
-            "low_cut_filter_hz": low_cut,
-            "vocal_presence_boost_db": 2.0,
-            "glue_compressor_settings": {
-                "threshold_db": -4.0,
-                "ratio": 2.0,
-                "makeup_gain_db": 1.5
-            },
-            "ai_mastering_notes": "Procedural fallback applied. Standard mathematical limits used."
+            "mastering_console_parameters": {
+                "target_loudness_lufs": lufs,
+                "master_true_peak_limiter_db": peak,
+                "stereo_widening_factor": widen,
+                "low_cut_filter_hz": low_cut,
+                "vocal_presence_boost_db": vocal,
+                "glue_compressor": glue,
+                "mastering_notes": "Procedural mathematical DSP fallback applied."
+            }
         }
 
-    def _generate_ffmpeg_mastering_chain(self, params):
-        """
-        Converts the AI's creative mastering parameters into a highly actionable
-        FFmpeg audio filter string (afilter).
-        """
-        hz = int(params.get("low_cut_filter_hz", 30))
-        widen = float(params.get("stereo_widening_factor", 1.0))
-        vocal_boost = float(params.get("vocal_presence_boost_db", 0.0))
-        
-        comp = params.get("glue_compressor_settings", {})
-        c_thresh = float(comp.get("threshold_db", -5.0))
-        c_ratio = float(comp.get("ratio", 2.0))
-        c_makeup = float(comp.get("makeup_gain_db", 0.0))
-        
-        lufs = float(params.get("target_loudness_lufs", -14.0))
-        peak = float(params.get("master_true_peak_limiter_db", -1.0))
+    def _build_master_ffmpeg_command(self, audio_manifest: dict, params: dict, output_path: str) -> dict:
+        p = params.get("mastering_console_parameters", {})
+        lufs = float(p.get("target_loudness_lufs", -14.0))
+        peak = float(p.get("master_true_peak_limiter_db", -1.0))
+        widen = float(p.get("stereo_widening_factor", 1.2))
+        low_cut = int(p.get("low_cut_filter_hz", 30))
+        vocal_boost = float(p.get("vocal_presence_boost_db", 2.0))
 
-        # Build FFmpeg audio filter chain
-        af_highpass = f"highpass=f={hz}"
-        af_eq = f"equalizer=f=3000:width_type=h:width=200:g={vocal_boost}"
-        af_stereo = f"extrastereo=m={widen}"
-        af_comp = f"acompressor=threshold={c_thresh}dB:ratio={c_ratio}:makeup={c_makeup}dB:attack=5:release=50"
-        af_loudnorm = f"loudnorm=I={lufs}:TP={peak}:LRA=11"
+        glue = p.get("glue_compressor", {})
+        c_thresh = float(glue.get("threshold_db", -5.0))
+        c_ratio = float(glue.get("ratio", 2.0))
+        c_makeup = float(glue.get("makeup_gain_db", 1.0))
 
-        return f"{af_highpass},{af_eq},{af_stereo},{af_comp},{af_loudnorm}"
+        dialogues = audio_manifest.get("dialogue_tracks", [])
+        sfx_files = audio_manifest.get("sfx_tracks", [])
+        ost_files = audio_manifest.get("ost_tracks", [])
 
-    def process_final_mix(self):
-        state = self._load_matrix_state()
-        
-        # 1. Atomic Handshake Protocol
-        orchestrator = state.get("orchestrator_matrix", {})
-        if orchestrator.get("next_agent") != self.agent_name:
-            self.log(f"Execution suspended. Orchestrator expected '{orchestrator.get('next_agent')}'.", "WARNING")
-            sys.exit(0)
+        input_args = []
+        filter_parts = []
+        mix_inputs = []
+        input_count = 0
 
-        # 2. Extract Context
+        for diag in dialogues:
+            f_path = diag.get("file_path", "")
+            if os.path.exists(f_path):
+                input_args.extend(["-i", f_path])
+                filter_parts.append(f"[{input_count}:a]volume=1.2,equalizer=f=3000:width_type=h:width=200:g={vocal_boost}[a_diag_{input_count}];")
+                mix_inputs.append(f"[a_diag_{input_count}]")
+                input_count += 1
+
+        for sfx in sfx_files:
+            f_path = sfx.get("synthesized_file_path", "")
+            if os.path.exists(f_path):
+                input_args.extend(["-i", f_path])
+                filter_parts.append(f"[{input_count}:a]volume=0.8[a_sfx_{input_count}];")
+                mix_inputs.append(f"[a_sfx_{input_count}]")
+                input_count += 1
+
+        for ost in ost_files:
+            f_path = ost.get("generated_audio_path", "")
+            if os.path.exists(f_path):
+                input_args.extend(["-i", f_path])
+                filter_parts.append(f"[{input_count}:a]volume=0.6[a_ost_{input_count}];")
+                mix_inputs.append(f"[a_ost_{input_count}]")
+                input_count += 1
+
+        if not mix_inputs:
+            input_args = ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
+            filter_chain = f"highpass=f={low_cut},extrastereo=m={widen},loudnorm=I={lufs}:TP={peak}:LRA=11"
+            full_cmd = ["ffmpeg", "-y"] + input_args + ["-af", filter_chain, output_path]
+            return {"command_list": full_cmd, "filter_complex_string": filter_chain}
+
+        mix_count = len(mix_inputs)
+        mix_concat = "".join(mix_inputs)
+        filter_parts.append(f"{mix_concat}amix=inputs={mix_count}:duration=longest:dropout_transition=2[a_mix];")
+
+        master_chain = (
+            f"[a_mix]highpass=f={low_cut},"
+            f"extrastereo=m={widen},"
+            f"acompressor=threshold={c_thresh}dB:ratio={c_ratio}:makeup={c_makeup}dB:attack=10:release=100,"
+            f"loudnorm=I={lufs}:TP={peak}:LRA=11[a_master]"
+        )
+        filter_parts.append(master_chain)
+
+        filter_complex_str = "".join(filter_parts)
+
+        full_cmd = ["ffmpeg", "-y"] + input_args + ["-filter_complex", filter_complex_str, "-map", "[a_master]", "-b:a", "320k", output_path]
+
+        return {
+            "command_list": full_cmd,
+            "filter_complex_string": filter_complex_str
+        }
+
+    def execute(self, state: dict) -> dict:
+        pipeline_status = state.get("pipeline_status", {})
+        target_agent = pipeline_status.get("next_agent", "")
+
+        if target_agent and "19" not in target_agent and target_agent != self.agent_name:
+            print(f"[{self.agent_name}] Execution skipped. Queue targeted to: {target_agent}", flush=True)
+            return state
+
+        workspace_dir = state.get("workspace_dir", "")
+        if not workspace_dir:
+            workspace_dir = state.get("state_file_path", "")
+            if workspace_dir:
+                workspace_dir = os.path.dirname(workspace_dir)
+            else:
+                raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing.")
+
+        master_export_dir = os.path.join(workspace_dir, "exports", "master_audio")
+        os.makedirs(master_export_dir, exist_ok=True)
+
+        for filename in os.listdir(master_export_dir):
+            file_path = os.path.join(master_export_dir, filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        print(f"[{self.agent_name}] Idempotency sweep executed. Legacy master audio purged.", flush=True)
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_audio = runtime_data.setdefault("module_b_audio", {})
+
+        audio_manifest = {
+            "dialogue_tracks": module_audio.get("agent_10_audio_files", []),
+            "beat_events": module_audio.get("agent_14_beat_map", {}).get("beat_sync_events", []),
+            "sfx_tracks": module_audio.get("agent_17_synthesized_sfx", []),
+            "ost_tracks": module_audio.get("agent_18b_custom_ost_tracks", [])
+        }
+
         global_config = state.get("global_config", {})
-        video_format = global_config.get("video_format", "undefined_format")
-        global_theme = global_config.get("theme", "neutral_unspecified")
+        medium = global_config.get("medium", "Dynamic")
+        rendering = global_config.get("rendering_engine", "Dynamic")
+        color = global_config.get("color_lighting", "Dynamic")
+        kinetic = global_config.get("kinetic_framing", "Dynamic")
 
-        # Idempotency
-        state = self._scrub_old_mastering(state)
-        
-        audio_module = state.get("module_b_audio", {})
-        
-        # Contextual summary for the AI
-        audio_signals_summary = {
-            "has_sidechain_ducking": audio_module.get("sidechain_compression_applied", False),
-            "total_sfx_layers": len(audio_module.get("sfx_synthesizer_blueprints", [])),
-            "bgm_automation_active": "bgm_automation_map" in audio_module,
-            "custom_ost_tracks_count": len(audio_module.get("custom_neural_ost_tracks", [])),
-            "voiceover_tracks_count": len(audio_module.get("audio_timeline", [])),
-            "beat_drops_count": len(audio_module.get("phonk_beat_map", {}).get("beat_sync_events", []))
+        print(f"[{self.agent_name}] AI Audio Mastering Engineer designing 4K Master Console parameters...", flush=True)
+
+        prompt = (
+            f"You are the OmniMatrix Supreme Audio Mastering Engineer.\n"
+            f"Design professional audio console parameters based on the 4-Axis Visual DNA and active audio manifest.\n\n"
+            f"4-Axis Visual DNA Context:\n"
+            f"- Medium: '{medium}'\n"
+            f"- Rendering: '{rendering}'\n"
+            f"- Color: '{color}'\n"
+            f"- Kinetic Framing: '{kinetic}'\n\n"
+            f"Active Audio Manifest Summary:\n"
+            f"- Dialogues: {len(audio_manifest['dialogue_tracks'])}\n"
+            f"- Beat/Sub-Bass Drops: {len(audio_manifest['beat_events'])}\n"
+            f"- SFX Tracks: {len(audio_manifest['sfx_tracks'])}\n"
+            f"- OST Music Tracks: {len(audio_manifest['ost_tracks'])}\n\n"
+            f"CRITICAL DIRECTIVES:\n"
+            f"1. Choose loudness 'target_loudness_lufs' (-9.0 LUFS for Fast Action/Shorts, -14.0 LUFS for YouTube, -23.0 LUFS for Cinema).\n"
+            f"2. Set 'master_true_peak_limiter_db' between -0.1 and -2.0 dB.\n"
+            f"3. Set 'stereo_widening_factor' between 1.0 and 1.5.\n"
+            f"4. Set 'low_cut_filter_hz' between 20 and 50 Hz.\n"
+            f"5. Set 'vocal_presence_boost_db' between 0.5 and 4.0 dB.\n"
+            f"6. Return ONLY valid JSON matching this schema:\n"
+            f"{{\n"
+            f"  \"mastering_console_parameters\": {{\n"
+            f"    \"target_loudness_lufs\": -10.5,\n"
+            f"    \"master_true_peak_limiter_db\": -0.5,\n"
+            f"    \"stereo_widening_factor\": 1.25,\n"
+            f"    \"low_cut_filter_hz\": 30,\n"
+            f"    \"vocal_presence_boost_db\": 2.5,\n"
+            f"    \"glue_compressor\": {{\n"
+            f"      \"threshold_db\": -5.0,\n"
+            f"      \"ratio\": 2.5,\n"
+            f"      \"makeup_gain_db\": 1.5\n"
+            f"    }},\n"
+            f"    \"mastering_notes\": \"High punchiness with clean 3kHz vocal presence for mobile speakers.\"\n"
+            f"  }}\n"
+            f"}}"
+        )
+
+        generated_data = None
+        last_error = ""
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"[{self.agent_name}] Prompting Mastering Console AI (Attempt {attempt})...", flush=True)
+                parsed_json = self._call_gemini_rest(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+                    break
+                else:
+                    raise ValueError("JSON schema validation failed.")
+            except Exception as e:
+                last_error = str(e)
+                time.sleep(self.retry_delay)
+
+        if not generated_data and self.openai_api_key:
+            print(f"[{self.agent_name}] Fallback to OpenAI Dual Failsafe...", flush=True)
+            try:
+                parsed_json = self._call_openai_failsafe(prompt)
+                if self._validate_schema(parsed_json):
+                    generated_data = parsed_json
+            except Exception as e:
+                last_error = f"Gemini: {last_error} | OpenAI: {str(e)}"
+
+        if not generated_data:
+            print(f"[{self.agent_name}] ALL AI CORES FAILED. Engaging Procedural Fallback. Traceback: {last_error}", flush=True)
+            generated_data = self._execute_procedural_fallback(kinetic)
+
+        output_master_file = os.path.join(master_export_dir, "final_master_mix.mp3")
+        ffmpeg_blueprint = self._build_master_ffmpeg_command(audio_manifest, generated_data, output_master_file)
+
+        render_success = False
+        try:
+            print(f"[{self.agent_name}] Executing Master FFmpeg Audio Render...", flush=True)
+            subprocess.run(ffmpeg_blueprint["command_list"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            render_success = True
+            print(f"[{self.agent_name}] MASTER AUDIO MIX SUCCESSFULLY RENDERED: {output_master_file}", flush=True)
+        except Exception as e:
+            print(f"[{self.agent_name}] FFmpeg Native Render warning: {str(e)}. Filter graph string secured for Module E.", flush=True)
+
+        module_audio["agent_19_final_master_mix"] = {
+            "master_file_path": output_master_file if render_success else "PENDING_MODULE_E_COMPOSITING",
+            "render_success": render_success,
+            "mastering_parameters": generated_data["mastering_console_parameters"],
+            "executable_ffmpeg_command": " ".join(ffmpeg_blueprint["command_list"]),
+            "ffmpeg_filter_complex": ffmpeg_blueprint["filter_complex_string"]
         }
 
-        self.log(f"AI Mastering Console active. Designing DSP blueprint for '{global_theme}' in '{video_format}' format...", "STATUS")
-        
-        # Call the AI Engine
-        mastering_parameters = self.fetch_mastering_ai(audio_signals_summary, video_format, global_theme)
-        
-        if "ai_mastering_notes" in mastering_parameters:
-            self.log(f"AI Note: {mastering_parameters['ai_mastering_notes']}", "SUCCESS")
+        pipeline_status["last_active_agent"] = self.agent_name
+        pipeline_status["Ai_Agent_19"] = "COMPLETED"
+        pipeline_status["MODULE_B_AUDIO"] = "COMPLETED_GOD_LEVEL"
 
-        self.log("Converting AI parameters into FFmpeg executable string...")
-        actionable_ffmpeg_filter = self._generate_ffmpeg_mastering_chain(mastering_parameters)
+        state_file_path = state.get("state_file_path", "")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
 
-        state["module_b_audio"]["final_mastering_blueprint"] = {
-            "signal_summary_used": audio_signals_summary,
-            "mastering_parameters": mastering_parameters,
-            "executable_ffmpeg_afilter": actionable_ffmpeg_filter
-        }
+        print(f"[{self.agent_name}] Master Audio Console Execution Complete.", flush=True)
         
-        # 3. OmniMatrix Pipeline Handshake
-        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
-        
-        # Since the list is outdated, we route to a generic "Pending Agent 20" until you define it
-        state["orchestrator_matrix"]["next_agent"] = "Agent_20_Pending"
-        
-        self._save_matrix_state(state)
-        self.log(f"Ready FFmpeg Command: {actionable_ffmpeg_filter}")
-        self.log("--- MODULE B (AUDIO) IS 100% COMPLETE. READY FOR NEXT MODULE ---", "SUCCESS")
-
-if __name__ == "__main__":
-    mixer = AiAgent19AudioMasteringFinalMixer()
-    mixer.process_final_mix()
+        return state
