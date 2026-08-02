@@ -2,41 +2,12 @@ import os
 import sys
 import json
 
-class AiAgent12PrecisionTimestampGenerator:
+class Agent_12_Precision_Timestamp_Generator:
     def __init__(self):
-        self.agent_name = "Ai_Agent_12"
-        self.workspace_dir = os.path.join(os.getcwd(), "OmniMatrix_Workspace")
-        self.state_file = os.path.join(self.workspace_dir, "matrix_state.json")
+        self.agent_name = "Agent_12_Precision_Timestamp_Generator"
 
-    def log(self, message, level="INFO"):
-        print(f"[{level}] [{self.agent_name}] {message}")
-
-    def _load_matrix_state(self):
-        """Loads the central OmniMatrix state safely with strict JSON validation."""
-        if not os.path.exists(self.state_file):
-            self.log("matrix_state.json not found. Run upstream modules first.", "FATAL")
-            sys.exit(1)
-        try:
-            with open(self.state_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            self.log(f"JSON Corruption detected: {e}", "FATAL")
-            sys.exit(1)
-
-    def _save_matrix_state(self, state_data):
-        """Saves the synchronized global timeline back to the state file idempotently."""
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4, ensure_ascii=False)
-        self.log("OmniMatrix state successfully updated with global precision timestamps.", "SUCCESS")
-
-    def _format_time_srt(self, seconds_val):
-        """
-        Converts raw seconds float into standard subtitle/video editing format (HH:MM:SS,mmm).
-        Essential for seamless import into advanced editing suites.
-        """
-        # Ensure time doesn't go negative
+    def _format_time_srt(self, seconds_val: float) -> str:
         seconds_val = max(0.0, seconds_val)
-        
         hours = int(seconds_val // 3600)
         minutes = int((seconds_val % 3600) // 60)
         seconds = int(seconds_val % 60)
@@ -54,109 +25,116 @@ class AiAgent12PrecisionTimestampGenerator:
 
         return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
-    def build_precision_timeline(self):
-        state = self._load_matrix_state()
-        
-        # 1. Atomic Handshake Protocol
-        orchestrator = state.get("orchestrator_matrix", {})
-        if orchestrator.get("next_agent") != self.agent_name:
-            self.log(f"Execution suspended. Orchestrator expected '{orchestrator.get('next_agent')}'.", "WARNING")
-            sys.exit(0)
+    def _calculate_kinetic_gap(self, kinetic_framing: str) -> float:
+        framing_lower = kinetic_framing.lower()
+        if any(keyword in framing_lower for keyword in ["fast", "action", "combat", "rapid", "hyper"]):
+            return 0.05
+        elif any(keyword in framing_lower for keyword in ["slow", "dramatic", "cinematic", "sad", "tension"]):
+            return 0.60
+        else:
+            return 0.25
 
-        # 2. Extract Global Configuration for Fluidity
-        global_config = state.get("global_config", {})
-        # Optional padding between frames for natural transitions (default 0.0)
-        frame_gap_padding = global_config.get("timeline_settings", {}).get("inter_frame_gap_sec", 0.0)
-        # Enable anti-overlap micro-adjustment for NLE software compatibility
-        enable_anti_overlap = global_config.get("timeline_settings", {}).get("srt_anti_overlap", True)
+    def execute(self, state: dict) -> dict:
+        pipeline_status = state.get("pipeline_status", {})
+        target_agent = pipeline_status.get("next_agent", "")
 
-        audio_module = state.get("module_b_audio", {})
-        if not audio_module.get("words_aligned", False):
-            self.log("Word alignment data is missing. Please run Agent 11 first.", "FATAL")
-            sys.exit(1)
+        if target_agent and "12" not in target_agent and target_agent != self.agent_name:
+            print(f"[{self.agent_name}] Execution skipped. Target: {target_agent}", flush=True)
+            return state
 
-        audio_timeline = audio_module.get("audio_timeline", [])
-        
-        if not audio_timeline:
-            self.log("Audio timeline is empty.", "FATAL")
-            sys.exit(1)
-
-        self.log(f"Synchronizing absolute global timeline for {len(audio_timeline)} frames...", "STATUS")
-
-        # 3. Idempotency Sweep & Timeline Processing
-        global_cumulative_offset = 0.0
-
-        for frame in audio_timeline:
-            f_idx = frame.get("frame_index", 0)
-            words_align = frame.get("words_alignment", [])
-            
-            # Scrub previous ghost data
-            if "global_timing" in frame:
-                del frame["global_timing"]
-                
-            for word_meta in words_align:
-                word_meta.pop("global_start_sec", None)
-                word_meta.pop("global_end_sec", None)
-                word_meta.pop("srt_start", None)
-                word_meta.pop("srt_end", None)
-
-            # Recalculate frame duration
-            if words_align:
-                frame_duration = words_align[-1].get("end_time", 0.0)
+        workspace_dir = state.get("workspace_dir", "")
+        if not workspace_dir:
+            workspace_dir = state.get("state_file_path", "")
+            if workspace_dir:
+                workspace_dir = os.path.dirname(workspace_dir)
             else:
-                frame_duration = float(frame.get("audio_duration_seconds", 0.0))
+                raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: workspace_dir missing.")
+
+        runtime_data = state.setdefault("runtime_data", {})
+        module_audio = runtime_data.setdefault("module_b_audio", {})
+
+        aligned_frames = module_audio.get("agent_11_word_alignment", [])
+        if not aligned_frames:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: 'agent_11_word_alignment' missing. Agent 11 must run first.")
+
+        if "agent_12_global_timestamps" in module_audio:
+            del module_audio["agent_12_global_timestamps"]
+            print(f"[{self.agent_name}] Idempotency sweep executed. Legacy timestamps purged.", flush=True)
+
+        global_config = state.get("global_config", {})
+        kinetic_framing = global_config.get("kinetic_framing", "Normal")
+        inter_frame_gap = self._calculate_kinetic_gap(kinetic_framing)
+
+        print(f"[{self.agent_name}] Base Kinetic Framing detected: '{kinetic_framing}'. Inter-frame gap set to {inter_frame_gap}s.", flush=True)
+
+        global_cumulative_offset = 0.0
+        global_timeline = []
+        ffmpeg_concat_lines = []
+
+        print(f"[{self.agent_name}] Mapping absolute global timeline for {len(aligned_frames)} frames...", flush=True)
+
+        for frame in aligned_frames:
+            idx = frame.get("frame_index", 1)
+            char = frame.get("character_voice", "Narrator")
+            file_path = frame.get("audio_file_path", "")
+            duration = float(frame.get("total_duration_seconds", 0.0))
+            words = frame.get("word_alignments", [])
 
             global_start = global_cumulative_offset
-            global_end = global_cumulative_offset + frame_duration
+            global_end = global_cumulative_offset + duration
 
-            # Inject global frame boundaries
-            frame["global_timing"] = {
-                "frame_start_sec": round(global_start, 3),
-                "frame_end_sec": round(global_end, 3),
+            ffmpeg_concat_lines.append(f"file '{file_path}'")
+            ffmpeg_concat_lines.append(f"outpoint {duration}")
+            
+            if inter_frame_gap > 0.0:
+                ffmpeg_concat_lines.append(f"file 'anullsrc=r=44100:cl=stereo'")
+                ffmpeg_concat_lines.append(f"outpoint {inter_frame_gap}")
+
+            global_words = []
+            for w_meta in words:
+                local_start = float(w_meta.get("start_time", 0.0))
+                local_end = float(w_meta.get("end_time", 0.0))
+
+                glob_w_start = global_start + local_start
+                glob_w_end = global_start + local_end
+
+                global_words.append({
+                    "word_index": w_meta.get("word_index", 0),
+                    "word_raw": w_meta.get("word_raw", ""),
+                    "word_clean": w_meta.get("word_clean", ""),
+                    "is_tag": w_meta.get("is_tag", False),
+                    "local_start_sec": local_start,
+                    "local_end_sec": local_end,
+                    "global_start_sec": round(glob_w_start, 3),
+                    "global_end_sec": round(glob_w_end, 3),
+                    "srt_start": self._format_time_srt(glob_w_start),
+                    "srt_end": self._format_time_srt(glob_w_end)
+                })
+
+            global_timeline.append({
+                "frame_index": idx,
+                "character_voice": char,
+                "audio_file_path": file_path,
+                "global_frame_start_sec": round(global_start, 3),
+                "global_frame_end_sec": round(global_end, 3),
                 "srt_frame_start": self._format_time_srt(global_start),
-                "srt_frame_end": self._format_time_srt(global_end)
-            }
+                "srt_frame_end": self._format_time_srt(global_end),
+                "words_global_alignment": global_words
+            })
 
-            # Map local word timings onto the global absolute timeline
-            for i, word_meta in enumerate(words_align):
-                local_w_start = float(word_meta.get("start_time", 0.0))
-                local_w_end = float(word_meta.get("end_time", 0.0))
+            global_cumulative_offset = global_end + inter_frame_gap
 
-                glob_w_start = global_start + local_w_start
-                glob_w_end = global_start + local_w_end
+        module_audio["agent_12_global_timestamps"] = global_timeline
+        module_audio["agent_12_ffmpeg_concat_string"] = "\n".join(ffmpeg_concat_lines)
 
-                # Anti-Overlap Logic: Subtract 1 millisecond from end time to prevent software rendering flicker
-                if enable_anti_overlap and i < len(words_align) - 1:
-                    glob_w_end -= 0.001
+        pipeline_status = state.setdefault("pipeline_status", {})
+        pipeline_status["last_active_agent"] = self.agent_name
+        pipeline_status[self.agent_name] = "COMPLETED"
 
-                word_meta["global_start_sec"] = round(glob_w_start, 3)
-                word_meta["global_end_sec"] = round(glob_w_end, 3)
-                word_meta["srt_start"] = self._format_time_srt(glob_w_start)
-                word_meta["srt_end"] = self._format_time_srt(glob_w_end)
+        state_file_path = state.get("state_file_path", "")
+        if state_file_path and os.path.exists(os.path.dirname(state_file_path)):
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=4)
 
-            # Advance the global clock for the next frame, adding any requested padding
-            global_cumulative_offset = global_end + frame_gap_padding
-            self.log(f"Frame {f_idx} globally mapped: {self._format_time_srt(global_start)} --> {self._format_time_srt(global_end)}")
-
-        # 4. Update Master Metrics
-        master_metrics = {
-            "total_video_duration_sec": round(global_cumulative_offset, 3),
-            "total_video_duration_srt": self._format_time_srt(global_cumulative_offset),
-            "timestamps_generated": True
-        }
-        
-        state["module_b_audio"]["master_timeline_metrics"] = master_metrics
-        state["module_b_audio"]["audio_timeline"] = audio_timeline
-        
-        # 5. Handshake Routing
-        state["orchestrator_matrix"]["last_active_agent"] = self.agent_name
-        state["orchestrator_matrix"]["next_agent"] = "Ai_Agent_13" # Passing to SRT Subtitle Compiler
-        
-        self._save_matrix_state(state)
-        
-        self.log(f"Timeline limits synchronized: 0.000s -> {round(global_cumulative_offset, 3)}s", "INFO")
-        self.log(f"Agent {self.agent_name} complete! Handoff to Agent 13 (SRT Compiler).")
-
-if __name__ == "__main__":
-    generator = AiAgent12PrecisionTimestampGenerator()
-    generator.build_precision_timeline()
+        print(f"[{self.agent_name}] Global precision timeline locked! Total Video Audio Length: {self._format_time_srt(global_cumulative_offset)}", flush=True)
+        return state
