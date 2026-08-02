@@ -29,7 +29,7 @@ class Ai_Agent_14_Phonk_Beat_Drop_Analyzer:
         if not self.gemini_api_key or self.gemini_api_key.startswith("YOUR_"):
             raise ValueError(f"[{self.agent_name}] CRITICAL: GEMINI_API_KEY missing.")
 
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         headers = {
             "Content-Type": "application/json",
             "X-goog-api-key": self.gemini_api_key
