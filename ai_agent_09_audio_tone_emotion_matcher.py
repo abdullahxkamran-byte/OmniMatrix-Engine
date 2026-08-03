@@ -49,7 +49,7 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
                 try:
                     text_content = res_json['candidates'][0]['content']['parts'][0]['text']
                 except (KeyError, IndexError):
-                    raise RuntimeError(f"Invalid Gemini REST payload structure: {json.dumps(res_json)}")
+                    raise RuntimeError(f"[{self.agent_name}] Invalid Gemini REST payload structure.")
                 return self._clean_json_response(text_content)
         except urllib.error.HTTPError as http_err:
             raise RuntimeError(f"[{self.agent_name}] Gemini API HTTP Error [{http_err.code}]: {http_err.read().decode('utf-8')}")
@@ -89,11 +89,11 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
         except Exception as e:
             raise RuntimeError(f"[{self.agent_name}] OpenAI Failsafe Error: {str(e)}")
 
-    def _validate_schema(self, data: dict) -> bool:
+    def _validate_schema(self, data: dict, expected_length: int) -> bool:
         if not isinstance(data, dict) or "audio_emotion_matrix" not in data:
             return False
         frames = data["audio_emotion_matrix"]
-        if not isinstance(frames, list) or len(frames) == 0:
+        if not isinstance(frames, list) or len(frames) != expected_length:
             return False
 
         required_keys = [
@@ -115,11 +115,28 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
                     return False
         return True
 
+    def _execute_procedural_fallback(self, scenes: list) -> dict:
+        fallback_matrix = []
+        for idx, scene in enumerate(scenes):
+            raw_text = scene.get("dialogue_text", scene.get("spoken_voiceover", ""))
+            char_voice = scene.get("character_voice", "Narrator")
+            fallback_matrix.append({
+                "frame_index": scene.get("frame_index", idx + 1),
+                "character_voice": char_voice,
+                "tagged_voiceover": f"[neutral] {raw_text}",
+                "tone_category": "neutral",
+                "pitch_shift_semitones": 0,
+                "delivery_speed_multiplier": 1.0,
+                "reverb_mix": 0.1,
+                "acoustic_environment": "Standard Studio Room"
+            })
+        return {"audio_emotion_matrix": fallback_matrix}
+
     def execute(self, state: dict) -> dict:
         pipeline_status = state.get("pipeline_status", {})
         target_agent = pipeline_status.get("next_agent", "")
 
-        if target_agent and "Ai_Agent_09" not in target_agent and target_agent != self.agent_name:
+        if target_agent and "09" not in target_agent and target_agent != self.agent_name:
             print(f"[{self.agent_name}] Execution skipped. Pipeline queue targeted to: {target_agent}", flush=True)
             return state
 
@@ -130,36 +147,45 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
                 workspace_dir = os.path.dirname(workspace_dir)
 
         runtime_data = state.setdefault("runtime_data", {})
-        module_scripting = runtime_data.get("module_a_scripting", {})
+        module_scripting = runtime_data.setdefault("module_a_scripting", {})
         module_audio = runtime_data.setdefault("module_b_audio", {})
 
         if "agent_09_audio_emotions" in module_audio:
             del module_audio["agent_09_audio_emotions"]
             print(f"[{self.agent_name}] Idempotency sweep executed.", flush=True)
 
-        master_playbook = module_scripting.get("final_master_playbook", [])
-        if not master_playbook:
-            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: Incomplete pipeline data (Master Playbook missing).")
+        scenes = []
+        if isinstance(module_scripting.get("final_master_playbook"), list) and module_scripting["final_master_playbook"]:
+            scenes = module_scripting["final_master_playbook"]
+        elif isinstance(module_scripting.get("master_playbook", {}).get("scenes"), list):
+            scenes = module_scripting["master_playbook"]["scenes"]
+        elif isinstance(module_scripting.get("compiled_script", {}).get("scenes"), list):
+            scenes = module_scripting["compiled_script"]["scenes"]
+        elif isinstance(state.get("master_playbook", {}).get("scenes"), list):
+            scenes = state["master_playbook"]["scenes"]
+        elif isinstance(state.get("module_a_scripting", {}).get("master_playbook", {}).get("scenes"), list):
+            scenes = state["module_a_scripting"]["master_playbook"]["scenes"]
 
-        core_topic = runtime_data.get("core_topic", state.get("user_prompt", "Unknown Target"))
+        if not scenes:
+            raise ValueError(f"[{self.agent_name}] CRITICAL ERROR: Incomplete pipeline data (Master Playbook / Scenes missing).")
+
         global_config = state.get("global_config", {})
-
         medium = global_config.get("medium", "Dynamic/Unbound")
         rendering_engine = global_config.get("rendering_engine", "Dynamic/Unbound")
         color_lighting = global_config.get("color_lighting", "Dynamic/Unbound")
         kinetic_framing = global_config.get("kinetic_framing", "Dynamic/Unbound")
 
-        print(f"[{self.agent_name}] Analyzing Tone and Emotion for {len(master_playbook)} frames...", flush=True)
+        print(f"[{self.agent_name}] Analyzing Tone and Emotion for {len(scenes)} frames...", flush=True)
 
         prompt = (
             f"You are the OmniMatrix Audio & Emotional Tone Director.\n"
-            f"Your objective is to analyze the Final Master Playbook and assign exact emotional delivery vectors, pitch shifts, speeds, and acoustic environments for every spoken line.\n\n"
+            f"Your objective is to analyze the Script Scenes and assign exact emotional delivery vectors, pitch shifts, speeds, and acoustic environments for every spoken line.\n\n"
             f"4-Axis Visual DNA Context:\n"
             f"- Medium: '{medium}'\n"
             f"- Rendering Engine: '{rendering_engine}'\n"
             f"- Color & Lighting: '{color_lighting}'\n"
             f"- Kinetic Framing: '{kinetic_framing}'\n\n"
-            f"Final Master Playbook Data:\n{json.dumps(master_playbook)}\n\n"
+            f"Scene Data:\n{json.dumps(scenes)}\n\n"
             f"CRITICAL DIRECTIVES:\n"
             f"1. Tagged Voiceover: Inject natural expressive tags into 'tagged_voiceover' (e.g., '[gasps] Reversal: Red!' or '[laughs] Open.'). Do not drop any core terminology.\n"
             f"2. Mathematical Audio Precision: Provide exact 'pitch_shift_semitones' (-4 to +4) and 'delivery_speed_multiplier' (0.80 to 1.30).\n"
@@ -188,31 +214,27 @@ class Ai_Agent_09_Audio_Tone_Emotion_Matcher:
             try:
                 print(f"[{self.agent_name}] Attempt {attempt}/{self.max_retries}: Triggering Primary Gemini REST API...", flush=True)
                 parsed_json = self._call_gemini_rest(prompt)
-                if self._validate_schema(parsed_json) and len(parsed_json["audio_emotion_matrix"]) == len(master_playbook):
+                if self._validate_schema(parsed_json, len(scenes)):
                     generated_data = parsed_json
-                    print(f"[{self.agent_name}] Primary Gemini API payload validated successfully.", flush=True)
                     break
                 else:
-                    raise ValueError("JSON payload schema validation failed or array length mismatch.")
+                    raise ValueError("JSON schema validation failed or array length mismatch.")
             except Exception as e:
                 last_error = str(e)
-                print(f"[{self.agent_name}] Primary API attempt {attempt} failed: {last_error}", flush=True)
-                if attempt < self.max_retries:
-                    time.sleep(self.retry_delay)
+                time.sleep(self.retry_delay)
 
         if not generated_data and self.openai_api_key:
             print(f"[{self.agent_name}] Primary API failed. Activating Dual API Failsafe (OpenAI gpt-4o-mini)...", flush=True)
             try:
                 parsed_json = self._call_openai_failsafe(prompt)
-                if self._validate_schema(parsed_json) and len(parsed_json["audio_emotion_matrix"]) == len(master_playbook):
+                if self._validate_schema(parsed_json, len(scenes)):
                     generated_data = parsed_json
-                    print(f"[{self.agent_name}] Failsafe OpenAI API payload validated successfully.", flush=True)
             except Exception as e:
-                last_error = f"Gemini Error: {last_error} | OpenAI Failsafe Error: {str(e)}"
-                print(f"[{self.agent_name}] Failsafe OpenAI API execution failed: {str(e)}", flush=True)
+                last_error = f"Gemini: {last_error} | OpenAI: {str(e)}"
 
         if not generated_data:
-            raise RuntimeError(f"[{self.agent_name}] CRITICAL EXECUTION FAILURE: All API channels failed. Traceback: {last_error}")
+            print(f"[{self.agent_name}] ALL AI CORES FAILED. Engaging Procedural Fallback Engine. Traceback: {last_error}", flush=True)
+            generated_data = self._execute_procedural_fallback(scenes)
 
         module_audio["agent_09_audio_emotions"] = generated_data["audio_emotion_matrix"]
 
